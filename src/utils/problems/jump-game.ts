@@ -39,14 +39,14 @@ export const jumpGame: Problem = {
 
 	examples: [
 		{
-			id: 0,
-			inputText: `nums = [2,3,1,1,4]`,
+			id: 1,
+			inputText: `2 3 1 1 4`,
 			outputText: `true`,
 			explanation: "Jump 1 step from index 0 to 1, then 3 steps to the last index.",
 		},
 		{
-			id: 1,
-			inputText: `nums = [3,2,1,0,4]`,
+			id: 2,
+			inputText: `3 2 1 0 4`,
 			outputText: `false`,
 			explanation:
 				"You will always arrive at index 3 no matter what. Its maximum jump length is 0, which makes it impossible to reach the last index.",
@@ -54,8 +54,8 @@ export const jumpGame: Problem = {
 	],
 	constraints: `<li class='mt-2'><code>1 <= nums.length <= 10^4</code></li>
     <li class='mt-2'><code>0 <= nums[i] <= 10^5</code></li>`,
-	starterCode: starterCodeJumpGameJS,
-	handlerFunction: jumpGameHandler,
-	starterFunctionName: "function canJump(",
+	starterCode: "",
+	handlerFunction: "() => true",
+	starterFunctionName: "",
 	order: 3,
 };

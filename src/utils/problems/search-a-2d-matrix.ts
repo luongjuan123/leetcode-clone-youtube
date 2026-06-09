@@ -44,34 +44,26 @@ export const search2DMatrix: Problem = {
 	title: "5. Search a 2D Matrix",
 	problemStatement: `
   <p class='mt-3'>Write an efficient algorithm that searches for a value in an <code>m x n</code> matrix. This matrix has the following properties:</p>
-    <li class="mt-3">Integers in each row are sorted from left to right.</li>
-    <li class="mt-3">The first integer of each row is greater than the last integer of the previous row.</li>
+  <li class="mt-3">Integers in each row are sorted from left to right.</li>
+  <li class="mt-3">The first integer of each row is greater than the last integer of the previous row.</li>
   <p class='mt-3'>Given <code>matrix</code>, an <code>m x n</code> matrix, and <code>target</code>, return <code>true</code> if <code>target</code> is in the matrix, and <code>false</code> otherwise.</p>
   `,
 	examples: [
 		{
-			id: 0,
-			inputText: `matrix = [
-  [1,3,5,7],
-  [10,11,16,20],
-  [23,30,34,60]
-], target = 3`,
+			id: 1,
+			inputText: `3 4 3\n1 3 5 7\n10 11 16 20\n23 30 34 60`,
 			outputText: `true`,
 			img: example1.src,
 		},
 		{
-			id: 1,
-			inputText: `matrix = [
-  [1,3,5,7],
-  [10,11,16,20],
-  [23,30,34,60]
-], target = 13`,
+			id: 2,
+			inputText: `3 4 13\n1 3 5 7\n10 11 16 20\n23 30 34 60`,
 			outputText: `false`,
 			img: example2.src,
 		},
 		{
-			id: 2,
-			inputText: `matrix = [[1]], target = 1`,
+			id: 3,
+			inputText: `1 1 1\n1`,
 			outputText: `true`,
 		},
 	],
@@ -81,8 +73,8 @@ export const search2DMatrix: Problem = {
   <li class='mt-2'><code>1 <= m, n <= 100</code></li>
   <li class='mt-2'><code>-10<sup>4</sup> <= matrix[i][j], target <= 10<sup>4</sup></code></li>
   `,
-	starterCode: starterCodeSearch2DMatrixJS,
-	handlerFunction: search2DMatrixHandler,
-	starterFunctionName: "function searchMatrix",
+	starterCode: "",
+	handlerFunction: "() => true",
+	starterFunctionName: "",
 	order: 5,
 };

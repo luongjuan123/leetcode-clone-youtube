@@ -28,30 +28,30 @@ export const validParentheses: Problem = {
 	</ul>`,
 	examples: [
 		{
-			id: 0,
-			inputText: 's = "()"',
-			outputText: "true",
-		},
-		{
 			id: 1,
-			inputText: 's = "()[]{}"',
+			inputText: '()',
 			outputText: "true",
 		},
 		{
 			id: 2,
-			inputText: 's = "(]"',
-			outputText: "false",
+			inputText: '()[]{}',
+			outputText: "true",
 		},
 		{
 			id: 3,
-			inputText: 's = "([)]"',
+			inputText: '(]',
+			outputText: "false",
+		},
+		{
+			id: 4,
+			inputText: '([)]',
 			outputText: "false",
 		},
 	],
 	constraints: `<li class='mt-2'><code>1 <= s.length <= 10<sup>4</sup></code></li>
 <li class='mt-2 '><code>s</code> consists of parentheses only <code class="text-md">'()[]{}'</code>.</li>`,
-	handlerFunction: validParenthesesHandler,
-	starterCode: starterCodeValidParenthesesJS,
-	starterFunctionName: "function validParentheses(",
+	starterCode: "",
+	handlerFunction: "() => true",
+	starterFunctionName: "",
 	order: 4,
 };
