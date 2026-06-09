@@ -4,6 +4,8 @@ export type Example = {
 	outputText: string;
 	explanation?: string;
 	img?: string;
+	isSample?: boolean;
+	isAdditional?: boolean;
 };
 
 // local problem data
@@ -17,6 +19,24 @@ export type Problem = {
 	starterCode: string;
 	handlerFunction: ((fn: any) => boolean) | string;
 	starterFunctionName: string;
+	inputFormat?: string;
+	outputFormat?: string;
+	tags?: string[];
+	description?: string;
+	language?: string;
+	category?: string;
+	difficulty?: string;
+	points?: number;
+	customChecker?: {
+		type: string;
+		epsilon?: number;
+		scriptLanguage?: string;
+		scriptCode?: string;
+	};
+	editorial?: {
+		markdown?: string;
+		videoUrl?: string;
+	};
 };
 
 export type DBProblem = {

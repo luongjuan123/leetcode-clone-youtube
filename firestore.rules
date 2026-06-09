@@ -1,0 +1,55 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to check if user has admin privileges
+    function isAdmin() {
+      return request.auth != null && (
+        request.auth.token.email in ["admin@leetcode.com", "juan@test.com", "admin@test.com", "dungpubgame@gmail.com"] ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin"))
+      );
+    }
+
+    // Rules for the users collection
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if (request.auth != null && request.auth.uid == userId) || isAdmin();
+    }
+
+    // Rules for the problems collection
+    match /problems/{problemId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Rules for the threads collection
+    match /threads/{threadId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // Rules for the submissions collection
+    match /submissions/{submissionId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Rules for the notifications collection
+    match /notifications/{notifId} {
+      allow read: if request.auth != null && resource.data.toUid == request.auth.uid;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null && (resource.data.toUid == request.auth.uid || resource.data.fromUid == request.auth.uid);
+    }
+
+    // Rules for the follows collection
+    match /follows/{followId} {
+      allow read: if true;
+      allow create, delete: if request.auth != null;
+    }
+
+    // Rules for the deleted_problems collection
+    match /deleted_problems/{problemId} {
+      allow read, write: if isAdmin();
+    }
+  }
+}
