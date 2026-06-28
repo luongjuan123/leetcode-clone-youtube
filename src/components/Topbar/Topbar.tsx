@@ -6,10 +6,12 @@ import Logout from "../Buttons/Logout";
 import { useSetRecoilState } from "recoil";
 import { authModalState } from "@/atoms/authModalAtom";
 import Image from "next/image";
+import Logo from "../Logo/Logo";
 import {
 	FaChevronLeft, FaChevronRight, FaUser, FaCog,
 	FaShieldAlt, FaBell, FaSearch, FaTrophy,
 	FaCode, FaStream, FaBars, FaTimes,
+	FaCoffee, FaCalendarAlt,
 } from "react-icons/fa";
 import { BsList } from "react-icons/bs";
 import Timer from "../Timer/Timer";
@@ -17,7 +19,8 @@ import { useRouter } from "next/router";
 import { problems } from "@/utils/problems";
 import { Problem } from "@/utils/types/problem";
 import { useAdmin } from "@/hooks/useAdmin";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot, collection, query, where, writeBatch, updateDoc } from "firebase/firestore";
+import { useNotifications } from "@/context/RealtimeNotificationProvider";
 
 type TopbarProps = {
 	problemPage?: boolean;
@@ -32,10 +35,10 @@ const THEMES = [
 
 // Primary nav tabs — shown in the center of the bar on non-problem pages
 const NAV_TABS = [
-	{ name: "Problems",  path: "/",          icon: <FaCode  size={11} />, exact: true  },
-	{ name: "Rankings",  path: "/rankings",  icon: <FaTrophy size={11} />, exact: false },
-	{ name: "Contests",  path: "/contests",  icon: null,                  exact: false },
-	{ name: "Threads",   path: "/threads",   icon: <FaStream size={11} />, exact: false },
+	{ name: "Problems",  path: "/",          icon: <FaCode  size={14} />, exact: true  },
+	{ name: "Rankings",  path: "/rankings",  icon: <FaTrophy size={14} />, exact: false },
+	{ name: "Contests",  path: "/contests",  icon: <FaCalendarAlt size={14} />, exact: false },
+	{ name: "Threads",   path: "/threads",   icon: <FaStream size={14} />, exact: false },
 ];
 
 const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
@@ -50,6 +53,12 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 	const [avatarUrl, setAvatarUrl]       = useState<string | null>(null);
 	const [activeTheme, setActiveTheme]   = useState("default");
 	const [scrolled, setScrolled]         = useState(false);
+	const [dbProblemIds, setDbProblemIds] = useState<string[]>([]);
+
+	// Notification dropdown states
+	const { notifications, markAllAsRead, markAsRead } = useNotifications();
+	const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
+	const notifDropdownRef = useRef<HTMLDivElement>(null);
 
 	/* ── avatar subscription ── */
 	useEffect(() => {
@@ -59,6 +68,23 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 		});
 		return () => unsub();
 	}, [user]);
+
+	/* ── database problems navigation sync ── */
+	useEffect(() => {
+		if (!problemPage) return;
+		const q = query(collection(firestore, "problems"));
+		const unsub = onSnapshot(q, (snap) => {
+			const list: { id: string; title: string }[] = [];
+			snap.forEach((d) => {
+				list.push({ id: d.id, title: d.data().title || d.id });
+			});
+			list.sort((a, b) => a.title.localeCompare(b.title));
+			setDbProblemIds(list.map((p) => p.id));
+		}, (err) => {
+			console.error("Error listening to db problems for nav:", err);
+		});
+		return () => unsub();
+	}, [problemPage]);
 
 	/* ── theme init ── */
 	useEffect(() => {
@@ -94,13 +120,22 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 				setDropdownOpen(false);
 			if (mobileRef.current && !mobileRef.current.contains(e.target as Node))
 				setMobileOpen(false);
+			if (notifDropdownRef.current && !notifDropdownRef.current.contains(e.target as Node))
+				setNotifDropdownOpen(false);
 		};
 		document.addEventListener("mousedown", handler);
 		return () => document.removeEventListener("mousedown", handler);
 	}, []);
 
-	/* ── close mobile on route change ── */
-	useEffect(() => { setMobileOpen(false); }, [router.pathname]);
+	/* ── close mobile/notif on route change ── */
+	useEffect(() => {
+		setMobileOpen(false);
+		setNotifDropdownOpen(false);
+	}, [router.pathname]);
+
+	const markAllNotifsRead = async () => {
+		await markAllAsRead();
+	};
 
 	const handleThemeChange = (t: string) => {
 		localStorage.setItem("theme", t);
@@ -112,17 +147,21 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 	};
 
 	const handleProblemChange = (isForward: boolean) => {
-		const { order } = problems[router.query.pid as string] as Problem;
-		const nextOrder = order + (isForward ? 1 : -1);
-		const nextKey   = Object.keys(problems).find((k) => problems[k].order === nextOrder);
-		if (!nextKey) {
-			const fallback = Object.keys(problems).find((k) =>
-				isForward ? problems[k].order === 1 : problems[k].order === Object.keys(problems).length
-			);
-			router.push(`/problems/${fallback}`);
-		} else {
-			router.push(`/problems/${nextKey}`);
+		const keys = dbProblemIds.length > 0 ? dbProblemIds : Object.keys(problems);
+		if (keys.length === 0) return;
+		const currentPid = router.query.pid as string;
+		const currentIndex = keys.indexOf(currentPid);
+		if (currentIndex === -1) {
+			router.push(`/problems/${keys[0]}`);
+			return;
 		}
+		let nextIndex = currentIndex + (isForward ? 1 : -1);
+		if (nextIndex >= keys.length) {
+			nextIndex = 0;
+		} else if (nextIndex < 0) {
+			nextIndex = keys.length - 1;
+		}
+		router.push(`/problems/${keys[nextIndex]}`);
 	};
 
 	const isTabActive = (tab: typeof NAV_TABS[number]) =>
@@ -142,11 +181,11 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 
 	/* ── shared tab style helper ── */
 	const tabCls = (active: boolean) =>
-		`relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 select-none`;
+		`relative flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-150 select-none`;
 
 	/* ── icon button style helper ── */
 	const iconBtnCls = (active?: boolean) =>
-		`flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-150 cursor-pointer ${
+		`flex items-center justify-center w-10 h-10 rounded-xl transition-all duration-150 cursor-pointer ${
 			active
 				? "text-brand-orange bg-brand-orange/10"
 				: "text-dark-gray-6 hover:text-dark-gray-8 hover:bg-dark-fill-3"
@@ -159,15 +198,15 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 		<>
 			{/* ════════════════════════════════ NAV BAR ════════════════════════════════ */}
 			<nav
-				className="sticky top-0 z-50 h-[52px] w-full flex shrink-0 items-center px-4"
+				className="sticky top-0 z-50 h-[68px] w-full flex shrink-0 items-center px-6"
 				style={navStyle}
 				aria-label="Main navigation"
 			>
-				<div className={`flex w-full items-center gap-2 ${!problemPage ? "max-w-[1200px] mx-auto" : ""}`}>
+				<div className={`flex w-full items-center gap-3 ${!problemPage ? "max-w-[1200px] mx-auto" : ""}`}>
 
 					{/* ── LOGO ── */}
-					<Link href="/" className="flex items-center shrink-0 mr-2" aria-label="BeastCode home">
-						<Image src="/logo-full.png" alt="BeastCode" height={24} width={90} className="h-6 w-auto object-contain" />
+					<Link href="/" className="flex items-center shrink-0 mr-4" aria-label="BeastCode home">
+						<Logo size={36} />
 					</Link>
 
 					{/* ── CENTER: PRIMARY TABS (non-problem pages, desktop) ── */}
@@ -179,15 +218,12 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 									<Link
 										key={tab.name}
 										href={tab.path}
-										className={tabCls(active)}
-										style={{ color: active ? "var(--brand-orange)" : "var(--text-secondary)", background: active ? "var(--brand-glow)" : "transparent" }}
-										onMouseEnter={(e) => { if (!active) { e.currentTarget.style.color = "var(--text-primary)"; e.currentTarget.style.background = "var(--bg-dark-fill-3)"; } }}
-										onMouseLeave={(e) => { if (!active) { e.currentTarget.style.color = "var(--text-secondary)"; e.currentTarget.style.background = "transparent"; } }}
+										className={`${tabCls(active)} border ${active ? "glow-active border-brand-orange text-brand-orange bg-brand-orange/5" : "border-transparent text-text-secondary hover:text-text-primary hover:bg-dark-fill-3"}`}
 										aria-current={active ? "page" : undefined}
 									>
 										{active && (
 											<span
-												className="absolute inset-x-2 bottom-0 h-[2px] rounded-full"
+												className="absolute inset-x-2 bottom-0 h-[2px] rounded-full glow-sm"
 												style={{ background: "var(--brand-orange)" }}
 											/>
 										)}
@@ -201,22 +237,22 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 
 					{/* ── CENTER: PROBLEM NAV (problem page only) ── */}
 					{problemPage && (
-						<div className="flex items-center gap-2 flex-1 justify-center">
+						<div className="flex items-center gap-2.5 flex-1 justify-center">
 							<button
 								onClick={() => handleProblemChange(false)}
 								className={iconBtnCls()}
 								aria-label="Previous problem"
 								style={{ border: "1px solid var(--border-subtle)" }}
 							>
-								<FaChevronLeft size={10} />
+								<FaChevronLeft size={12} />
 							</button>
 
 							<Link
 								href="/"
-								className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150"
+								className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-150"
 								style={{ background: "var(--bg-dark-fill-3)", border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}
 							>
-								<BsList size={13} />
+								<BsList size={16} />
 								Problem List
 							</Link>
 
@@ -226,13 +262,13 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 								aria-label="Next problem"
 								style={{ border: "1px solid var(--border-subtle)" }}
 							>
-								<FaChevronRight size={10} />
+								<FaChevronRight size={12} />
 							</button>
 						</div>
 					)}
 
 					{/* ── RIGHT UTILITIES ── */}
-					<div className="flex items-center gap-1 ml-auto shrink-0">
+					<div className="flex items-center gap-1.5 ml-auto shrink-0">
 
 						{/* Search icon */}
 						{!problemPage && (
@@ -242,20 +278,150 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 								aria-label="Search"
 								title="Search"
 							>
-								<FaSearch size={13} />
+								<FaSearch size={16} />
 							</Link>
 						)}
 
-						{/* Notifications icon */}
+						{/* Notifications icon with floating preview dropdown */}
 						{user && !problemPage && (
-							<Link
-								href="/notifications"
-								className={iconBtnCls(notifActive)}
-								aria-label="Notifications"
-								title="Notifications"
-							>
-								<FaBell size={13} />
-							</Link>
+							<div className="relative" ref={notifDropdownRef}>
+								<button
+									onClick={() => setNotifDropdownOpen(!notifDropdownOpen)}
+									className={`${iconBtnCls(notifDropdownOpen || notifActive)} relative flex items-center justify-center`}
+									aria-label="Notifications menu"
+									aria-expanded={notifDropdownOpen}
+									aria-haspopup="true"
+								>
+									<FaBell size={16} className={notifications.some((n) => !n.read) ? "animate-bounce text-brand-orange" : ""} />
+									{notifications.filter((n) => !n.read).length > 0 && (
+										<span className="absolute top-1.5 right-1.5 flex h-3 w-3">
+											<span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-orange opacity-75"></span>
+											<span className="relative inline-flex rounded-full h-3 w-3 bg-brand-orange text-[8px] font-black text-white items-center justify-center">
+												{notifications.filter((n) => !n.read).length}
+											</span>
+										</span>
+									)}
+								</button>
+
+								{/* ── NOTIFICATION PREVIEW DROPDOWN PANEL ── */}
+								{notifDropdownOpen && (
+									<div
+										className="absolute top-[calc(100%+8px)] right-0 w-80 rounded-xl overflow-hidden animate-fade-in z-[100]"
+										style={{
+											background: "var(--bg-elevated)",
+											border: "1px solid var(--border-default)",
+											boxShadow: "var(--shadow-lg)",
+										}}
+										role="menu"
+									>
+										{/* Header */}
+										<div
+											className="flex items-center justify-between px-4 py-3"
+											style={{ borderBottom: "1px solid var(--border-subtle)" }}
+										>
+											<div className="flex items-center gap-1.5">
+												<span className="text-xs font-bold" style={{ color: "var(--text-primary)" }}>
+													Notifications
+												</span>
+												{notifications.filter((n) => !n.read).length > 0 && (
+													<span className="px-1.5 py-0.5 rounded-full text-[9px] font-black bg-brand-orange text-white">
+														{notifications.filter((n) => !n.read).length}
+													</span>
+												)}
+											</div>
+											{notifications.some((n) => !n.read) && (
+												<button
+													onClick={markAllNotifsRead}
+													className="text-[10px] font-bold text-brand-orange hover:underline"
+												>
+													Mark all read
+												</button>
+											)}
+										</div>
+
+										{/* List of Recent 5 */}
+										<div className="max-h-64 overflow-y-auto divide-y divide-border-subtle">
+											{notifications.length === 0 ? (
+												<div className="px-4 py-8 text-center text-xs text-text-muted">
+													No new notifications
+												</div>
+											) : (
+												notifications.slice(0, 5).map((n) => {
+													const hasUnread = !n.read;
+													const getNotifTimeStr = (t: number) => {
+														const diff = Date.now() - t;
+														const secs = Math.floor(diff / 1000);
+														if (secs < 60) return "now";
+														const mins = Math.floor(secs / 60);
+														if (mins < 60) return `${mins}m`;
+														const hrs = Math.floor(mins / 60);
+														if (hrs < 24) return `${hrs}h`;
+														return `${Math.floor(hrs / 24)}d`;
+													};
+
+													const handleNotifClick = async () => {
+														if (hasUnread) {
+															await markAsRead(n.id);
+														}
+														setNotifDropdownOpen(false);
+														let target = n.ctaUrl || "";
+														if (!target) {
+															if (n.contestId) target = `/contests/${n.contestId}`;
+															else if (n.problemId) target = `/problems/${n.problemId}`;
+															else if (n.threadId) target = `/threads?threadId=${n.threadId}`;
+														}
+														if (target) {
+															router.push(target);
+														}
+													};
+
+													return (
+														<div
+															key={n.id}
+															onClick={handleNotifClick}
+															className={`px-4 py-3 text-xs transition-all duration-100 cursor-pointer hover:bg-dark-fill-3 flex items-start gap-3 ${
+																hasUnread ? "bg-brand-glow" : ""
+															}`}
+														>
+															{/* Unread indicator */}
+															{hasUnread && (
+																<span className="w-1.5 h-1.5 rounded-full bg-brand-orange mt-1.5 flex-shrink-0" />
+															)}
+															<div className="flex-1 min-w-0 space-y-0.5">
+																<div className="flex items-center justify-between gap-2">
+																	<span className="font-bold text-text-primary truncate">
+																		{n.title || "Platform Update"}
+																	</span>
+																	<span className="text-[9px] text-text-muted font-mono whitespace-nowrap">
+																		{getNotifTimeStr(n.createdAt)}
+																	</span>
+																</div>
+																<p className="text-[10px] text-text-muted truncate">
+																	{n.body || ""}
+																</p>
+															</div>
+														</div>
+													);
+												})
+											)}
+										</div>
+
+										{/* Footer */}
+										<div
+											className="bg-dark-fill-3 text-center"
+											style={{ borderTop: "1px solid var(--border-subtle)" }}
+										>
+											<Link
+												href="/notifications"
+												onClick={() => setNotifDropdownOpen(false)}
+												className="block w-full py-2.5 text-[10px] font-bold text-text-secondary hover:text-brand-orange transition-all"
+											>
+												View All Notifications
+											</Link>
+										</div>
+									</div>
+								)}
+							</div>
 						)}
 
 						{/* Timer (problem page only) */}
@@ -264,25 +430,19 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 						{/* Support */}
 						<Link
 							href="/qr"
-							className="hidden sm:flex items-center gap-1 text-[11px] font-medium px-2.5 py-1.5 rounded-lg transition-all duration-150"
-							style={{ color: "var(--text-muted)" }}
-							onMouseEnter={(e) => { e.currentTarget.style.color = "var(--brand-orange)"; e.currentTarget.style.background = "var(--brand-glow)"; }}
-							onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-muted)"; e.currentTarget.style.background = "transparent"; }}
+							className="hidden sm:flex items-center justify-center w-10 h-10 rounded-xl transition-all duration-150 text-text-muted hover:text-brand-orange hover:bg-brand-glow"
 							title="Support"
 						>
-							☕
+							<FaCoffee size={16} />
 						</Link>
 
 						{/* Admin badge */}
 						{isAdmin && (
 							<Link
 								href="/admin"
-								className="hidden sm:flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg transition-all duration-150"
-								style={{ color: "var(--text-secondary)", background: "var(--bg-dark-fill-3)", border: "1px solid var(--border-subtle)" }}
-								onMouseEnter={(e) => { e.currentTarget.style.color = "var(--brand-orange)"; e.currentTarget.style.borderColor = "var(--border-accent)"; }}
-								onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-secondary)"; e.currentTarget.style.borderColor = "var(--border-subtle)"; }}
+								className="hidden sm:flex items-center gap-2 text-xs font-semibold px-3.5 py-2 rounded-xl transition-all duration-150 text-text-secondary bg-dark-fill-3 border border-border-subtle hover:text-brand-orange hover:border-border-accent"
 							>
-								<FaShieldAlt size={10} style={{ color: "var(--brand-orange)" }} />
+								<FaShieldAlt size={12} style={{ color: "var(--brand-orange)" }} />
 								Admin
 							</Link>
 						)}
@@ -295,10 +455,7 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 							<Link
 								href="/auth"
 								onClick={() => setAuthModal((p) => ({ ...p, isOpen: true, type: "login" }))}
-								className="inline-flex items-center px-4 py-1.5 rounded-lg text-xs font-bold transition-all duration-150"
-								style={{ background: "var(--brand-orange)", color: "#0d0d0f" }}
-								onMouseEnter={(e) => { e.currentTarget.style.background = "var(--brand-orange-s)"; }}
-								onMouseLeave={(e) => { e.currentTarget.style.background = "var(--brand-orange)"; }}
+								className="inline-flex items-center px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-150 bc-btn-brand"
 							>
 								Sign In
 							</Link>
@@ -319,15 +476,15 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 										<img
 											src={avatarUrl}
 											alt="Avatar"
-											className="w-7 h-7 rounded-full object-cover"
+											className="w-9 h-9 rounded-full object-cover"
 											style={{ border: "2px solid var(--border-accent)" }}
 										/>
 									) : (
 										<div
-											className="w-7 h-7 rounded-full flex items-center justify-center"
+											className="w-9 h-9 rounded-full flex items-center justify-center"
 											style={{ background: "var(--bg-dark-fill-3)", border: "2px solid var(--border-accent)", color: "var(--text-muted)" }}
 										>
-											<FaUser size={11} />
+											<FaUser size={14} />
 										</div>
 									)}
 								</button>
@@ -372,10 +529,7 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 													key={item.href}
 													href={item.href}
 													onClick={() => setDropdownOpen(false)}
-													className="flex items-center gap-2.5 px-4 py-2.5 text-xs font-medium transition-all duration-100"
-													style={{ color: "var(--text-secondary)" }}
-													onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-primary)"; e.currentTarget.style.background = "var(--bg-dark-fill-3)"; }}
-													onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-secondary)"; e.currentTarget.style.background = "transparent"; }}
+													className="flex items-center gap-2.5 px-4 py-2.5 text-xs font-medium transition-all duration-100 text-text-secondary hover:text-text-primary hover:bg-dark-fill-3"
 													role="menuitem"
 												>
 													<span style={{ color: "var(--brand-orange)", opacity: 0.7 }}>{item.icon}</span>
@@ -397,6 +551,7 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 														style={{
 															border: activeTheme === t.id ? "1px solid var(--border-accent)" : "1px solid var(--border-subtle)",
 															background: activeTheme === t.id ? "var(--brand-glow)" : "transparent",
+															boxShadow: activeTheme === t.id ? "var(--shadow-glow-sm)" : "none",
 															color: activeTheme === t.id ? "var(--brand-orange)" : "var(--text-muted)",
 															fontSize: "8px",
 															fontWeight: 700,
@@ -426,12 +581,12 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 						{!problemPage && (
 							<button
 								onClick={() => setMobileOpen(!mobileOpen)}
-								className="flex md:hidden items-center justify-center w-8 h-8 rounded-lg ml-1 transition-all duration-150"
+								className="flex md:hidden items-center justify-center w-10 h-10 rounded-xl ml-1 transition-all duration-150"
 								style={{ color: "var(--text-secondary)", background: mobileOpen ? "var(--bg-dark-fill-3)" : "transparent" }}
 								aria-label={mobileOpen ? "Close menu" : "Open menu"}
 								aria-expanded={mobileOpen}
 							>
-								{mobileOpen ? <FaTimes size={14} /> : <FaBars size={14} />}
+								{mobileOpen ? <FaTimes size={16} /> : <FaBars size={16} />}
 							</button>
 						)}
 					</div>
@@ -442,7 +597,7 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 			{!problemPage && mobileOpen && (
 				<div
 					ref={mobileRef}
-					className="md:hidden fixed top-[52px] left-0 right-0 z-40 animate-fade-in"
+					className="md:hidden fixed top-[68px] left-0 right-0 z-40 animate-fade-in"
 					style={{
 						background: "var(--bg-elevated)",
 						borderBottom: "1px solid var(--border-subtle)",
@@ -458,10 +613,11 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 								<Link
 									key={tab.name}
 									href={tab.path}
-									className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-semibold transition-all duration-150"
+									className={`flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-semibold transition-all duration-150 border ${
+										active ? "glow-active" : "border-transparent text-gray-400 hover:text-white"
+									}`}
 									style={{
 										color: active ? "var(--brand-orange)" : "var(--text-secondary)",
-										background: active ? "var(--brand-glow)" : "transparent",
 									}}
 									aria-current={active ? "page" : undefined}
 								>
@@ -496,11 +652,11 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 						<div className="my-1.5" style={{ borderTop: "1px solid var(--border-subtle)" }} />
 
 						<Link href="/qr" className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-all duration-150" style={{ color: "var(--text-muted)" }}>
-							☕ Support
+							<FaCoffee size={12} /> Support
 						</Link>
 
 						{!user && (
-							<Link href="/auth" className="mt-2 flex items-center justify-center py-2.5 rounded-lg text-sm font-bold transition-all duration-150" style={{ background: "var(--brand-orange)", color: "#0d0d0f" }}>
+							<Link href="/auth" className="mt-2 flex items-center justify-center py-2.5 rounded-lg text-sm font-bold transition-all duration-150" style={{ background: "var(--brand-orange)", color: "var(--bg-base)" }}>
 								Sign In
 							</Link>
 						)}

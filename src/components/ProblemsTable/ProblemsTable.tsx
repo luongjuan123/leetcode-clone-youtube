@@ -14,11 +14,21 @@ type ProblemsTableProps = {
 	setLoadingProblems: React.Dispatch<React.SetStateAction<boolean>>;
 	searchQuery?: string;
 	sortBy?: string;
+	currentPage: number;
+	pageSize: number;
+	setTotalItems: (total: number) => void;
 };
 
 const DIFFICULTY_ORDER: Record<string, number> = { Easy: 1, Medium: 2, Hard: 3 };
 
-const ProblemsTable: React.FC<ProblemsTableProps> = ({ setLoadingProblems, searchQuery = "", sortBy = "default" }) => {
+const ProblemsTable: React.FC<ProblemsTableProps> = ({
+	setLoadingProblems,
+	searchQuery = "",
+	sortBy = "default",
+	currentPage,
+	pageSize,
+	setTotalItems,
+}) => {
 	const [youtubePlayer, setYoutubePlayer] = useState({
 		isOpen: false,
 		videoId: "",
@@ -35,7 +45,7 @@ const ProblemsTable: React.FC<ProblemsTableProps> = ({ setLoadingProblems, searc
 			result = result.filter(
 				(p) =>
 					p.title.toLowerCase().includes(q) ||
-					p.category.toLowerCase().includes(q)
+					(p.tags && p.tags.some((t) => t.toLowerCase().includes(q)))
 			);
 		}
 
@@ -66,11 +76,21 @@ const ProblemsTable: React.FC<ProblemsTableProps> = ({ setLoadingProblems, searc
 				result.sort((a, b) => (b.dislikes ?? 0) - (a.dislikes ?? 0));
 				break;
 			default:
-				result.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+				result.sort((a, b) => a.title.localeCompare(b.title));
 		}
 
 		return result;
 	}, [problems, searchQuery, sortBy]);
+
+	// Update total items count in parent when filters/problems change
+	useEffect(() => {
+		setTotalItems(filteredAndSortedProblems.length);
+	}, [filteredAndSortedProblems, setTotalItems]);
+
+	const paginatedProblems = useMemo(() => {
+		const start = (currentPage - 1) * pageSize;
+		return filteredAndSortedProblems.slice(start, start + pageSize);
+	}, [filteredAndSortedProblems, currentPage, pageSize]);
 
 	const closeModal = () => {
 		setYoutubePlayer({ isOpen: false, videoId: "" });
@@ -90,7 +110,7 @@ const ProblemsTable: React.FC<ProblemsTableProps> = ({ setLoadingProblems, searc
 			<tbody>
 				{problems.length > 0 && filteredAndSortedProblems.length === 0 && (
 					<tr>
-						<td colSpan={5} className="px-6 py-14 text-center" style={{ color: "var(--text-muted)" }}>
+						<td colSpan={6} className="px-6 py-14 text-center" style={{ color: "var(--text-muted)" }}>
 							<div className="flex flex-col items-center gap-3">
 								<span className="text-3xl">🔍</span>
 								<p className="text-sm font-semibold">No problems match &ldquo;{searchQuery}&rdquo;</p>
@@ -100,26 +120,24 @@ const ProblemsTable: React.FC<ProblemsTableProps> = ({ setLoadingProblems, searc
 					</tr>
 				)}
 
-				{filteredAndSortedProblems.map((problem, idx) => {
+				{paginatedProblems.map((problem, idx) => {
 					const isSolved = solvedProblems?.includes(problem.id);
 					const diffColor =
-						problem.difficulty === "Easy"   ? { color: "#10b981", bg: "rgba(16,185,129,0.1)",  border: "rgba(16,185,129,0.25)"  } :
-						problem.difficulty === "Medium" ? { color: "#f59e0b", bg: "rgba(245,158,11,0.1)",  border: "rgba(245,158,11,0.25)"  } :
-						                                  { color: "#ef4444", bg: "rgba(239,68,68,0.1)",   border: "rgba(239,68,68,0.25)"   };
+						problem.difficulty === "Easy"   ? { color: "var(--color-success)", bg: "color-mix(in srgb, var(--color-success) 10%, transparent)",  border: "color-mix(in srgb, var(--color-success) 25%, transparent)"  } :
+						problem.difficulty === "Medium" ? { color: "var(--color-warning)", bg: "color-mix(in srgb, var(--color-warning) 10%, transparent)",  border: "color-mix(in srgb, var(--color-warning) 25%, transparent)"  } :
+						                                  { color: "var(--color-error)",   bg: "color-mix(in srgb, var(--color-error) 10%, transparent)",   border: "color-mix(in srgb, var(--color-error) 25%, transparent)"   };
 					return (
 						<tr
 							key={problem.id}
-							className="group transition-all duration-150 cursor-pointer"
+							className="group transition-all duration-150 cursor-pointer hover:bg-dark-hover"
 							style={{
 								borderTop: idx > 0 ? "1px solid var(--border-subtle)" : "none",
 							}}
-							onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
-							onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
 						>
 							{/* Solved indicator */}
 							<td className="pl-5 pr-3 py-4 w-10">
 								{isSolved ? (
-									<span title="Solved" style={{ color: "#10b981" }}>
+									<span title="Solved" style={{ color: "var(--color-success)" }}>
 										<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
 											<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
 											<polyline points="22 4 12 14.01 9 11.01"/>
@@ -137,20 +155,14 @@ const ProblemsTable: React.FC<ProblemsTableProps> = ({ setLoadingProblems, searc
 										href={problem.link}
 										target="_blank"
 										rel="noopener noreferrer"
-										className="font-semibold text-sm transition-colors duration-150"
-										style={{ color: "var(--text-primary)" }}
-										onMouseEnter={(e) => (e.currentTarget.style.color = "var(--brand-orange)")}
-										onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-primary)")}
+										className="font-semibold text-sm transition-colors duration-150 hover:text-brand-orange text-text-primary"
 									>
 										{problem.title}
 									</a>
 								) : (
 									<a
 										href={`/problems/${problem.id}`}
-										className="font-semibold text-sm transition-colors duration-150"
-										style={{ color: "var(--text-primary)" }}
-										onMouseEnter={(e) => (e.currentTarget.style.color = "var(--brand-orange)")}
-										onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-primary)")}
+										className="font-semibold text-sm transition-colors duration-150 hover:text-brand-orange text-text-primary"
 									>
 										{problem.title}
 									</a>
@@ -171,17 +183,35 @@ const ProblemsTable: React.FC<ProblemsTableProps> = ({ setLoadingProblems, searc
 								</span>
 							</td>
 
-							{/* Category */}
+							{/* Tags */}
 							<td className="px-4 py-4 hidden sm:table-cell">
-								<span
-									className="text-xs font-medium px-2 py-0.5 rounded-md"
-									style={{
-										color: "var(--text-secondary)",
-										background: "var(--bg-dark-fill-3)",
-									}}
-								>
-									{problem.category}
-								</span>
+								<div className="flex flex-wrap gap-1.5 max-w-[200px]">
+									{problem.tags.map((tag) => (
+										<Link
+											key={tag}
+											href={`/tags/${encodeURIComponent(tag.toLowerCase())}`}
+											className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold transition hover:opacity-85 border"
+											style={{
+												color: "var(--text-secondary)",
+												background: "var(--bg-dark-fill-3)",
+												borderColor: "var(--border-subtle)",
+											}}
+										>
+											{tag}
+										</Link>
+									))}
+								</div>
+							</td>
+
+							{/* Success Rate */}
+							<td className="px-4 py-4 hidden md:table-cell">
+								{problem.attempts && problem.attempts > 0 ? (
+									<span className="font-mono text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>
+										{Math.round(((problem.solved ?? 0) / problem.attempts) * 100)}%
+									</span>
+								) : (
+									<span className="text-xs" style={{ color: "var(--text-muted)" }}>—</span>
+								)}
 							</td>
 
 							{/* Solution / Video */}
@@ -189,14 +219,7 @@ const ProblemsTable: React.FC<ProblemsTableProps> = ({ setLoadingProblems, searc
 								{problem.videoId ? (
 									<button
 										onClick={() => setYoutubePlayer({ isOpen: true, videoId: problem.videoId as string })}
-										className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-all duration-150"
-										style={{
-											color: "#ef4444",
-											background: "rgba(239,68,68,0.1)",
-											border: "1px solid rgba(239,68,68,0.2)",
-										}}
-										onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(239,68,68,0.18)")}
-										onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(239,68,68,0.1)")}
+										className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-all duration-150 bg-red-500/10 hover:bg-red-500/20 border border-red-550/20 text-red-500"
 									>
 										<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
 										Watch
@@ -230,10 +253,7 @@ const ProblemsTable: React.FC<ProblemsTableProps> = ({ setLoadingProblems, searc
 										<span className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Video Solution</span>
 										<button
 											onClick={closeModal}
-											className="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-150"
-											style={{ background: "var(--bg-dark-fill-3)", color: "var(--text-secondary)" }}
-											onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-dark-fill-2)")}
-											onMouseLeave={(e) => (e.currentTarget.style.background = "var(--bg-dark-fill-3)")}
+											className="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-150 bg-dark-fill-3 hover:bg-dark-fill-2 text-text-secondary"
 										>
 											<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
 												<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -267,11 +287,15 @@ function useGetProblems(setLoadingProblems: React.Dispatch<React.SetStateAction<
 		const getProblems = async () => {
 			setLoadingProblems(true);
 			try {
-				const q = query(collection(firestore, "problems"), orderBy("order", "asc"));
+				const q = query(collection(firestore, "problems"));
 				const querySnapshot = await getDocs(q);
 				const tmp: DBProblem[] = [];
 				querySnapshot.forEach((doc) => {
-					tmp.push({ id: doc.id, ...doc.data() } as DBProblem);
+					const data = doc.data();
+					const dbTags = data.tags && Array.isArray(data.tags) && data.tags.length > 0
+						? data.tags
+						: (data.category ? [data.category] : ["Array"]);
+					tmp.push({ id: doc.id, ...data, tags: dbTags } as DBProblem);
 				});
 				setProblems(tmp);
 			} catch (error) {
@@ -280,8 +304,7 @@ function useGetProblems(setLoadingProblems: React.Dispatch<React.SetStateAction<
 					id: p.id,
 					title: p.title,
 					difficulty: p.difficulty,
-					category: p.category,
-					order: p.order,
+					tags: [p.category],
 					videoId: p.videoId,
 					likes: 0,
 					dislikes: 0,

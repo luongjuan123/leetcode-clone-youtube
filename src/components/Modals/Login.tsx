@@ -6,6 +6,7 @@ import { useSignInWithEmailAndPassword, useSignInWithGoogle, useSignInWithGithub
 import { useSetRecoilState } from "recoil";
 import { FaGoogle, FaGithub, FaEye, FaEyeSlash, FaSpinner } from "react-icons/fa";
 import { translateFirebaseError } from "@/utils/authErrors";
+import { sanitizeAutofilledEmail } from "@/utils/sanitizeEmail";
 
 type LoginProps = {};
 
@@ -22,7 +23,11 @@ const Login: React.FC<LoginProps> = () => {
 	const router = useRouter();
 
 	const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-		setInputs((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+		let val = e.target.value;
+		if (e.target.name === "email") {
+			val = sanitizeAutofilledEmail(val);
+		}
+		setInputs((prev) => ({ ...prev, [e.target.name]: val }));
 		setErrors((prev) => ({ ...prev, [e.target.name]: undefined, general: undefined }));
 	};
 
@@ -55,7 +60,6 @@ const Login: React.FC<LoginProps> = () => {
 		setShakeFields(nextShake);
 
 		if (!isValid) {
-			// Reset shake animation class after 500ms so it can trigger again on subsequent failures
 			setTimeout(() => {
 				setShakeFields({});
 			}, 500);
@@ -67,7 +71,7 @@ const Login: React.FC<LoginProps> = () => {
 	const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
 		e.preventDefault();
 		if (!validateForm() || loading || googleLoading || githubLoading) return;
-		
+
 		try {
 			const newUser = await signInWithEmailAndPassword(inputs.email, inputs.password);
 			if (!newUser) return;
@@ -98,126 +102,123 @@ const Login: React.FC<LoginProps> = () => {
 	return (
 		<form className={`space-y-5 px-4 pb-4 transition-all duration-200 ${isActionLoading ? "opacity-50 pointer-events-none" : ""}`} onSubmit={handleLogin}>
 			<div>
-				<h3 className='text-xl font-bold text-white tracking-tight'>Sign in to BeastCode</h3>
-				<p className='text-xs text-slate-400 mt-1'>Access your high-performance developer workspace.</p>
+				<h3 className="text-xl font-bold text-dark-gray-8 tracking-tight">Sign in to BeastCode</h3>
+				<p className="text-xs text-dark-gray-7 mt-1">Access your high-performance developer workspace.</p>
 			</div>
 
-			{/* Social Providers */}
-			<div className='grid grid-cols-2 gap-3'>
+			<div className="grid grid-cols-2 gap-3">
 				<button
-					type='button'
+					type="button"
 					onClick={() => signInWithGoogle()}
 					disabled={isActionLoading}
-					className='flex items-center justify-center gap-2 bg-[#13141b] border border-slate-800 hover:bg-slate-850 hover:border-slate-700 text-slate-200 font-medium py-2.5 px-4 rounded-lg text-xs transition duration-200 disabled:opacity-50'
+					className="flex items-center justify-center gap-2 bc-btn-ghost font-medium py-2.5 px-4 rounded-lg text-xs transition duration-200 disabled:opacity-50"
 				>
-					<FaGoogle className='text-red-400' size={14} />
+					<FaGoogle className="text-bc-error" size={14} />
 					<span>Google</span>
 				</button>
 				<button
-					type='button'
+					type="button"
 					onClick={() => signInWithGithub()}
 					disabled={isActionLoading}
-					className='flex items-center justify-center gap-2 bg-[#13141b] border border-slate-800 hover:bg-slate-850 hover:border-slate-700 text-slate-200 font-medium py-2.5 px-4 rounded-lg text-xs transition duration-200 disabled:opacity-50'
+					className="flex items-center justify-center gap-2 bc-btn-ghost font-medium py-2.5 px-4 rounded-lg text-xs transition duration-200 disabled:opacity-50"
 				>
 					<FaGithub size={14} />
 					<span>GitHub</span>
 				</button>
 			</div>
 
-			{/* Divider */}
-			<div className='flex items-center gap-3 py-1.5'>
-				<div className='flex-1 h-px bg-slate-800' />
-				<span className='text-[10px] font-semibold text-slate-500 uppercase tracking-wider'>or continue with email</span>
-				<div className='flex-1 h-px bg-slate-800' />
+			<div className="flex items-center gap-3 py-1.5">
+				<div className="flex-1 h-px bg-gray-850" />
+				<span className="text-[10px] font-semibold text-dark-gray-7 uppercase tracking-wider">or continue with email</span>
+				<div className="flex-1 h-px bg-gray-850" />
 			</div>
 
-			{/* Email input */}
 			<div className={shakeFields.email ? "animate-shake" : ""}>
-				<label htmlFor='email' className='text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1.5'>
+				<label htmlFor="email" className="text-xs font-semibold uppercase tracking-wider text-dark-gray-7 block mb-1.5">
 					Your Email
 				</label>
 				<input
 					onChange={handleInputChange}
 					value={inputs.email}
-					type='email'
-					name='email'
-					id='email'
+					type="email"
+					name="email"
+					id="email"
+					autoComplete="email"
 					disabled={isActionLoading}
-					className={`w-full bg-[#13141b]/90 border ${
-						errors.email ? "border-rose-500/50 focus:border-rose-500" : "border-slate-800/80 focus:border-amber-500"
-					} rounded-lg py-2.5 px-3.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500/20 transition-all duration-200`}
-					placeholder='name@company.com'
+					className={`w-full bc-input-shell rounded-lg py-2.5 px-3.5 text-xs placeholder:text-bc-muted transition-all duration-200 ${
+						errors.email ? "border-bc-error focus:border-bc-error" : ""
+					}`}
+					placeholder="name@company.com"
 				/>
-				{errors.email && <p className='text-rose-400 text-[10px] mt-1.5 font-medium'>{errors.email}</p>}
+				{errors.email && <p className="text-bc-error text-[10px] mt-1.5 font-medium">{errors.email}</p>}
 			</div>
 
-			{/* Password input */}
 			<div className={shakeFields.password ? "animate-shake" : ""}>
-				<div className='flex justify-between items-center mb-1.5'>
-					<label htmlFor='password' className='text-xs font-semibold uppercase tracking-wider text-slate-400'>
+				<div className="flex justify-between items-center mb-1.5">
+					<label htmlFor="password" className="text-xs font-semibold uppercase tracking-wider text-dark-gray-7">
 						Your Password
 					</label>
 					<button
-						type='button'
+						type="button"
 						disabled={isActionLoading}
 						onClick={() => setAuthModalState((prev) => ({ ...prev, type: "forgotPassword" }))}
-						className='text-xs text-amber-500 hover:text-amber-400 hover:underline focus:outline-none'
+						className="text-xs text-brand-orange hover:opacity-80 hover:underline focus:outline-none"
 					>
 						Forgot Password?
 					</button>
 				</div>
-				<div className='relative'>
+				<div className="relative">
 					<input
 						onChange={handleInputChange}
 						value={inputs.password}
 						type={showPassword ? "text" : "password"}
-						name='password'
-						id='password'
+						name="password"
+						id="password"
 						disabled={isActionLoading}
-						className={`w-full bg-[#13141b]/90 border ${
-							errors.password ? "border-rose-500/50 focus:border-rose-500" : "border-slate-800/80 focus:border-amber-500"
-						} rounded-lg py-2.5 px-3.5 pr-10 text-xs text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500/20 transition-all duration-200`}
-						placeholder='••••••••'
+						className={`w-full bc-input-shell rounded-lg py-2.5 px-3.5 pr-10 text-xs placeholder:text-bc-muted transition-all duration-200 ${
+							errors.password ? "border-bc-error focus:border-bc-error" : ""
+						}`}
+						placeholder="••••••••"
 					/>
 					<button
-						type='button'
+						type="button"
 						onClick={() => setShowPassword(!showPassword)}
 						disabled={isActionLoading}
-						className='absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 focus:outline-none'
+						className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-gray-7 hover:text-dark-gray-8 focus:outline-none"
 					>
 						{showPassword ? <FaEyeSlash size={14} /> : <FaEye size={14} />}
 					</button>
 				</div>
-				{errors.password && <p className='text-rose-400 text-[10px] mt-1.5 font-medium'>{errors.password}</p>}
+				{errors.password && <p className="text-bc-error text-[10px] mt-1.5 font-medium">{errors.password}</p>}
 			</div>
 
 			{errors.general && (
-				<div className='p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg text-rose-400 text-xs font-medium leading-relaxed'>
+				<div className="p-3 bg-bc-error/10 border border-bc-error/20 rounded-lg text-bc-error text-xs font-medium leading-relaxed">
 					{errors.general}
 				</div>
 			)}
 
 			<button
-				type='submit'
+				type="submit"
 				disabled={isActionLoading}
-				className='w-full mt-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-500/50 text-slate-950 font-semibold py-2.5 px-4 rounded-lg text-xs transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98]'
+				className="w-full mt-2 bc-btn-brand disabled:opacity-50 font-semibold py-2.5 px-4 rounded-lg text-xs transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98]"
 			>
 				{isActionLoading ? (
 					<>
-						<FaSpinner className='animate-spin' size={14} />
-						<span>Configuring Terminal...</span>
+						<FaSpinner className="animate-spin" size={14} />
+						<span>Signing in...</span>
 					</>
 				) : (
 					<span>Sign In</span>
 				)}
 			</button>
 
-			<div className='text-xs text-slate-400 text-center pt-2'>
+			<div className="text-xs text-dark-gray-7 text-center pt-2">
 				Not Registered?{" "}
 				<button
-					type='button'
+					type="button"
 					disabled={isActionLoading}
-					className='text-amber-500 hover:text-amber-400 hover:underline font-semibold focus:outline-none'
+					className="text-brand-orange hover:opacity-80 hover:underline font-semibold focus:outline-none"
 					onClick={() => setAuthModalState((prev) => ({ ...prev, type: "register" }))}
 				>
 					Create account

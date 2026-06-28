@@ -3,6 +3,7 @@ import { useRouter } from "next/router";
 import { useAdmin } from "@/hooks/useAdmin";
 import Topbar from "@/components/Topbar/Topbar";
 import JSZip from "jszip";
+import SecondaryNav from "@/components/TabsNavigation/SecondaryNav";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { firestore, auth } from "@/firebase/firebase";
 import { useAuthState } from "react-firebase-hooks/auth";
@@ -78,11 +79,18 @@ const EditProblem: React.FC = () => {
 	const [starterFunctionName, setStarterFunctionName] = useState("");
 
 	// Settings fields
-	const [category, setCategory] = useState("Array");
-	const [order, setOrder] = useState(1);
 	const [videoId, setVideoId] = useState("");
 	const [link, setLink] = useState("");
-		const [handlerFunction, setHandlerFunction] = useState("");
+	const [handlerFunction, setHandlerFunction] = useState("");
+
+	// Execution policy fields
+	const [executionProfile, setExecutionProfile] = useState("normal");
+	const [customTimeoutMs, setCustomTimeoutMs] = useState(5000);
+	const [customMemoryLimitMb, setCustomMemoryLimitMb] = useState(256);
+	const [customMaxOutputSizeChars, setCustomMaxOutputSizeChars] = useState(65536);
+	const [customCpuCount, setCustomCpuCount] = useState(1);
+	const [customDiskLimitMb, setCustomDiskLimitMb] = useState(50);
+	const [customProcessLimit, setCustomProcessLimit] = useState(15);
 
 	// Custom Checker fields
 	const [customCheckerType, setCustomCheckerType] = useState("exact");
@@ -121,7 +129,10 @@ const EditProblem: React.FC = () => {
 					setInputFormat(data.inputFormat || "");
 					setConstraints(data.constraints || "");
 					setOutputFormat(data.outputFormat || "");
-					setTags(data.tags || []);
+					const dbTags = data.tags && Array.isArray(data.tags) && data.tags.length > 0
+						? data.tags
+						: (data.category ? [data.category] : []);
+					setTags(dbTags);
 					
 					// moderators
 					if (data.moderators && Array.isArray(data.moderators)) {
@@ -133,11 +144,16 @@ const EditProblem: React.FC = () => {
 
 					setStarterCode(data.starterCode || "");
 					setStarterFunctionName(data.starterFunctionName || "");
-					setCategory(data.category || "Array");
-					setOrder(Number(data.order) || 1);
 					setVideoId(data.videoId || "");
 					setLink(data.link || "");
 					setHandlerFunction(data.handlerFunction || "");
+					setExecutionProfile(data.executionProfile || "normal");
+					setCustomTimeoutMs(data.customTimeoutMs || 5000);
+					setCustomMemoryLimitMb(data.customMemoryLimitMb || 256);
+					setCustomMaxOutputSizeChars(data.customMaxOutputSizeChars || 65536);
+					setCustomCpuCount(data.customCpuCount || 1);
+					setCustomDiskLimitMb(data.customDiskLimitMb || 50);
+					setCustomProcessLimit(data.customProcessLimit || 15);
 					setExamples(data.examples || []);
 					setCustomCheckerType(data.customChecker?.type || "exact");
 					setCustomCheckerEpsilon(data.customChecker?.epsilon || 1e-6);
@@ -409,9 +425,7 @@ const EditProblem: React.FC = () => {
 			const problemData = {
 				id: pid as string,
 				title,
-				category,
 				difficulty,
-				order: Number(order),
 				videoId: videoId.trim() || null,
 				link: link.trim() || null,
 				problemStatement,
@@ -425,6 +439,13 @@ const EditProblem: React.FC = () => {
 				starterCode: starterCode.trim() || "",
 				starterFunctionName: starterFunctionName.trim() || "",
 				handlerFunction: handlerFunction.trim() || "",
+				executionProfile,
+				customTimeoutMs: Number(customTimeoutMs) || 5000,
+				customMemoryLimitMb: Number(customMemoryLimitMb) || 256,
+				customMaxOutputSizeChars: Number(customMaxOutputSizeChars) || 65536,
+				customCpuCount: Number(customCpuCount) || 1,
+				customDiskLimitMb: Number(customDiskLimitMb) || 50,
+				customProcessLimit: Number(customProcessLimit) || 15,
 				examples: examples,
 				customChecker: {
 					type: customCheckerType,
@@ -452,7 +473,7 @@ const EditProblem: React.FC = () => {
 
 	if (loadingAdmin || !isAdmin) {
 		return (
-			<div className='bg-dark-layer-2 min-h-screen text-white flex items-center justify-center'>
+			<div className='min-h-screen flex items-center justify-center' style={{ background: "var(--bg-base)", color: "var(--text-primary)" }}>
 				<div className='text-xl font-semibold animate-pulse'>Checking credentials...</div>
 			</div>
 		);
@@ -470,31 +491,32 @@ const EditProblem: React.FC = () => {
 	];
 
 	return (
-		<main className='bg-[#f4f6f8] min-h-screen text-gray-800 pb-16 font-sans'>
+		<main className='min-h-screen pb-16 font-sans' style={{ background: "var(--bg-base)", color: "var(--text-primary)" }}>
 			<Topbar />
 			
 			<div className='max-w-[1200px] mx-auto px-6 mt-6'>
 				
 				{/* Breadcrumb */}
-				<div className='text-xs text-gray-500 mb-2 flex items-center gap-1 font-semibold'>
-					<Link href='/admin' className='hover:underline text-blue-600 transition flex items-center gap-1'>
+				<div className='text-xs mb-2 flex items-center gap-1 font-semibold' style={{ color: "var(--text-muted)" }}>
+					<Link href='/admin' className='hover:underline transition flex items-center gap-1' style={{ color: "var(--brand-orange)" }}>
 						<FaChevronLeft size={10} className="mt-0.5" />
 						Manage Challenges
 					</Link>
 					<span>&gt;</span>
-					<span className='text-gray-600'>{pid}</span>
+					<span style={{ color: "var(--text-secondary)" }}>{pid}</span>
 				</div>
 
 				{/* Title Area */}
 				<div className='flex justify-between items-center mb-6'>
-					<h1 className='text-3xl font-light text-gray-800'>
+					<h1 className='text-3xl font-light' style={{ color: "var(--text-primary)" }}>
 						{title || pid}
 					</h1>
 					<button
 						type='button'
 						onClick={handleSubmit}
 						disabled={submitting}
-						className='bg-[#2ec866] hover:bg-[#27a855] text-white px-5 py-2 rounded font-semibold text-sm transition shadow-sm flex items-center gap-2 disabled:opacity-50'
+						className='hover:opacity-90 px-5 py-2 rounded font-semibold text-sm transition shadow flex items-center gap-2 disabled:opacity-50'
+						style={{ background: "var(--color-success)", color: "var(--bg-surface)", boxShadow: "0 0 10px rgba(16, 185, 129, 0.2)" }}
 					>
 						{submitting ? <FaSpinner className='animate-spin' size={12} /> : <FaCheck size={12} />}
 						Save Changes
@@ -504,73 +526,60 @@ const EditProblem: React.FC = () => {
 				{/* Status Ribbon */}
 				{statusRibbon && (
 					<div
-						className={`mb-6 p-3 rounded-lg border text-sm font-semibold transition-all duration-300 ${
-							statusRibbon.type === "success"
-								? "bg-emerald-950/40 text-emerald-400 border-emerald-800/50"
+						className="mb-6 p-3 rounded-lg border text-sm font-semibold transition-all duration-300"
+						style={{
+							background: statusRibbon.type === "success"
+								? "color-mix(in srgb, var(--color-success) 12%, transparent)"
 								: statusRibbon.type === "error"
-								? "bg-rose-950/40 text-rose-400 border-rose-800/50"
-								: "bg-blue-950/40 text-blue-400 border-blue-800/50"
-						}`}
+								? "color-mix(in srgb, var(--color-error) 12%, transparent)"
+								: "color-mix(in srgb, var(--brand-orange) 12%, transparent)",
+							color: statusRibbon.type === "success"
+								? "var(--color-success)"
+								: statusRibbon.type === "error"
+								? "var(--color-error)"
+								: "var(--brand-orange)",
+							borderColor: statusRibbon.type === "success"
+								? "color-mix(in srgb, var(--color-success) 30%, transparent)"
+								: statusRibbon.type === "error"
+								? "color-mix(in srgb, var(--color-error) 30%, transparent)"
+								: "color-mix(in srgb, var(--brand-orange) 30%, transparent)",
+						}}
 					>
 						{statusRibbon.message}
 					</div>
 				)}
 
 				{/* Tabs Navigation */}
-				<div className='flex border-b border-gray-300 mb-6 bg-[#edeef0] rounded-t overflow-hidden'>
-					{tabs.map((tab) => {
-						const isActive = activeTab === tab.id;
-						if (tab.disabled) {
-							return (
-								<div
-									key={tab.id}
-									className='px-5 py-3 text-xs font-semibold text-gray-405 cursor-not-allowed border-r border-gray-300 bg-gray-50/50'
-									title='Feature coming soon'
-								>
-									{tab.label}
-								</div>
-							);
-						}
-						return (
-							<button
-								key={tab.id}
-								type='button'
-								onClick={() => {
-									setActiveTab(tab.id);
-									setIsEditingTestCase(false);
-								}}
-								className={`px-5 py-3 text-xs font-semibold transition border-r border-gray-300 ${
-									isActive
-										? "bg-white text-gray-800 border-t-2 border-t-blue-500 font-bold"
-										: "text-[#576871] hover:bg-gray-200"
-								}`}
-							>
-								{tab.label}
-							</button>
-						);
-					})}
-				</div>
+				<SecondaryNav
+					tabs={tabs}
+					activeTab={activeTab}
+					onChange={(id) => {
+						setActiveTab(id);
+						setIsEditingTestCase(false);
+					}}
+					className="mb-6"
+				/>
 
 				{/* Tab content area */}
-				<div className='bg-white border border-gray-300 rounded shadow-sm p-8'>
+				<div className='border rounded shadow-sm p-8' style={{ background: "var(--bg-surface)", borderColor: "var(--border-default)" }}>
 					
 					{loadingProblem ? (
 						<div className='flex flex-col justify-center items-center py-20 gap-4'>
-							<div className='w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin'></div>
-							<div className='text-gray-500 font-semibold'>Loading challenge details...</div>
+							<div className='w-12 h-12 border-4 rounded-full animate-spin' style={{ borderColor: "var(--brand-orange)", borderTopColor: "transparent" }}></div>
+							<div className='font-semibold' style={{ color: "var(--text-secondary)" }}>Loading challenge details...</div>
 						</div>
 					) : (
 						<>
 							{/* DETAILS TAB */}
 							{activeTab === "details" && (
 								<div className='space-y-6'>
-									<p className='text-sm text-gray-500 italic border-b border-gray-100 pb-4'>
+									<p className='text-sm italic border-b pb-4' style={{ color: "var(--text-muted)", borderBottomColor: "var(--border-subtle)" }}>
 										This is the basic information that describes your challenge.
 									</p>
 
 									{/* Language */}
 									<div className='grid grid-cols-12 gap-4 items-center'>
-										<label htmlFor='language' className='col-span-3 text-right pr-6 font-semibold text-gray-700 text-sm'>
+										<label htmlFor='language' className='col-span-3 text-right pr-6 font-semibold text-sm' style={{ color: "var(--text-secondary)" }}>
 											Language
 										</label>
 										<div className='col-span-6'>
@@ -578,7 +587,8 @@ const EditProblem: React.FC = () => {
 												id='language'
 												value={language}
 												onChange={(e) => setLanguage(e.target.value)}
-												className='border border-gray-300 outline-none rounded p-2 bg-white text-sm w-full focus:border-blue-500 transition shadow-sm'
+												className='border outline-none rounded p-2 text-sm w-full focus:border-brand-orange transition shadow-sm'
+												style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
 											>
 												<option value='English'>English</option>
 												<option value='Vietnamese'>Vietnamese</option>
@@ -590,7 +600,7 @@ const EditProblem: React.FC = () => {
 
 									{/* Difficulty */}
 									<div className='grid grid-cols-12 gap-4 items-center'>
-										<label htmlFor='difficulty' className='col-span-3 text-right pr-6 font-semibold text-gray-700 text-sm'>
+										<label htmlFor='difficulty' className='col-span-3 text-right pr-6 font-semibold text-sm' style={{ color: "var(--text-secondary)" }}>
 											Challenge Difficulty
 										</label>
 										<div className='col-span-6'>
@@ -598,7 +608,8 @@ const EditProblem: React.FC = () => {
 												id='difficulty'
 												value={difficulty}
 												onChange={(e) => setDifficulty(e.target.value)}
-												className='border border-gray-300 outline-none rounded p-2 bg-white text-sm w-full focus:border-blue-500 transition shadow-sm'
+												className='border outline-none rounded p-2 text-sm w-full focus:border-brand-orange transition shadow-sm'
+												style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
 											>
 												<option value='Easy'>Easy</option>
 												<option value='Medium'>Medium</option>
@@ -609,7 +620,7 @@ const EditProblem: React.FC = () => {
 
 									{/* Challenge Name */}
 									<div className='grid grid-cols-12 gap-4 items-center'>
-										<label htmlFor='title' className='col-span-3 text-right pr-6 font-semibold text-gray-700 text-sm'>
+										<label htmlFor='title' className='col-span-3 text-right pr-6 font-semibold text-sm' style={{ color: "var(--text-secondary)" }}>
 											Challenge Name
 										</label>
 										<div className='col-span-7'>
@@ -618,7 +629,8 @@ const EditProblem: React.FC = () => {
 												id='title'
 												value={title}
 												onChange={(e) => setTitle(e.target.value)}
-												className='border border-gray-300 outline-none rounded p-2 text-sm w-full focus:border-blue-500 transition shadow-sm bg-white'
+												className='border outline-none rounded p-2 text-sm w-full focus:border-brand-orange transition shadow-sm'
+												style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
 												required
 											/>
 										</div>
@@ -626,7 +638,7 @@ const EditProblem: React.FC = () => {
 
 									{/* Challenge Slug */}
 									<div className='grid grid-cols-12 gap-4 items-start'>
-										<div className='col-span-3 text-right pr-6 font-semibold text-gray-700 text-sm pt-2'>
+										<div className='col-span-3 text-right pr-6 font-semibold text-sm pt-2' style={{ color: "var(--text-secondary)" }}>
 											Challenge Slug
 										</div>
 										<div className='col-span-7'>
@@ -634,9 +646,10 @@ const EditProblem: React.FC = () => {
 												type='text'
 												value={`https://leetcode-yt.com/problems/${pid}`}
 												disabled
-												className='border border-gray-200 outline-none rounded p-2 text-sm w-full bg-gray-50 text-gray-500 font-mono select-all cursor-not-allowed'
+												className='border outline-none rounded p-2 text-sm w-full font-mono select-all cursor-not-allowed'
+												style={{ background: "var(--bg-dark-layer-1)", borderColor: "var(--border-subtle)", color: "var(--text-muted)" }}
 											/>
-											<span className='text-[11px] text-gray-400 mt-1 block italic font-semibold'>
+											<span className='text-[11px] mt-1 block italic font-semibold' style={{ color: "var(--text-muted)" }}>
 												Slug can only be updated within 48 hours after creation of a challenge.
 											</span>
 										</div>
@@ -644,7 +657,7 @@ const EditProblem: React.FC = () => {
 
 									{/* Description */}
 									<div className='grid grid-cols-12 gap-4 items-start'>
-										<label htmlFor='description' className='col-span-3 text-right pr-6 font-semibold text-gray-700 text-sm pt-2'>
+										<label htmlFor='description' className='col-span-3 text-right pr-6 font-semibold text-sm pt-2' style={{ color: "var(--text-secondary)" }}>
 											Description
 										</label>
 										<div className='col-span-9'>
@@ -653,9 +666,10 @@ const EditProblem: React.FC = () => {
 												value={description}
 												onChange={(e) => setDescription(e.target.value.slice(0, 140))}
 												rows={3}
-												className='border border-gray-300 outline-none rounded p-3 text-sm w-full focus:border-blue-500 transition shadow-sm font-sans bg-white resize-y'
+												className='border outline-none rounded p-3 text-sm w-full focus:border-brand-orange transition shadow-sm font-sans resize-y'
+												style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
 											/>
-											<div className='text-right text-xs text-gray-400 mt-1 font-semibold'>
+											<div className='text-right text-xs mt-1 font-semibold' style={{ color: "var(--text-muted)" }}>
 												Characters left: {140 - description.length}
 											</div>
 										</div>
@@ -663,7 +677,7 @@ const EditProblem: React.FC = () => {
 
 									{/* Problem Statement */}
 									<div className='grid grid-cols-12 gap-4 items-start'>
-										<label className='col-span-3 text-right pr-6 font-semibold text-gray-700 text-sm pt-2'>
+										<label className='col-span-3 text-right pr-6 font-semibold text-sm pt-2' style={{ color: "var(--text-secondary)" }}>
 											Problem Statement
 										</label>
 										<div className='col-span-9'>
@@ -678,7 +692,7 @@ const EditProblem: React.FC = () => {
 
 									{/* Input Format */}
 									<div className='grid grid-cols-12 gap-4 items-start'>
-										<label className='col-span-3 text-right pr-6 font-semibold text-gray-700 text-sm pt-2'>
+										<label className='col-span-3 text-right pr-6 font-semibold text-sm pt-2' style={{ color: "var(--text-secondary)" }}>
 											Input Format
 										</label>
 										<div className='col-span-9'>
@@ -693,7 +707,7 @@ const EditProblem: React.FC = () => {
 
 									{/* Constraints */}
 									<div className='grid grid-cols-12 gap-4 items-start'>
-										<label className='col-span-3 text-right pr-6 font-semibold text-gray-700 text-sm pt-2'>
+										<label className='col-span-3 text-right pr-6 font-semibold text-sm pt-2' style={{ color: "var(--text-secondary)" }}>
 											Constraints
 										</label>
 										<div className='col-span-9'>
@@ -708,7 +722,7 @@ const EditProblem: React.FC = () => {
 
 									{/* Output Format */}
 									<div className='grid grid-cols-12 gap-4 items-start'>
-										<label className='col-span-3 text-right pr-6 font-semibold text-gray-700 text-sm pt-2'>
+										<label className='col-span-3 text-right pr-6 font-semibold text-sm pt-2' style={{ color: "var(--text-secondary)" }}>
 											Output Format
 										</label>
 										<div className='col-span-9'>
@@ -723,7 +737,7 @@ const EditProblem: React.FC = () => {
 
 									{/* Tags */}
 									<div className='grid grid-cols-12 gap-4 items-start'>
-										<label className='col-span-3 text-right pr-6 font-semibold text-gray-700 text-sm pt-2'>
+										<label className='col-span-3 text-right pr-6 font-semibold text-sm pt-2' style={{ color: "var(--text-secondary)" }}>
 											Tags
 										</label>
 										<div className='col-span-9'>
@@ -737,8 +751,8 @@ const EditProblem: React.FC = () => {
 							{activeTab === "moderators" && (
 								<div className='space-y-6'>
 									<div>
-										<h3 className='text-lg font-semibold text-gray-800 mb-1'>Moderators</h3>
-										<p className='text-xs text-gray-500 mb-4'>
+										<h3 className='text-lg font-semibold mb-1' style={{ color: "var(--text-primary)" }}>Moderators</h3>
+										<p className='text-xs mb-4' style={{ color: "var(--text-muted)" }}>
 											Moderators can edit this challenge and manage its settings.
 										</p>
 									</div>
@@ -751,15 +765,17 @@ const EditProblem: React.FC = () => {
 												value={newModEmail}
 												onChange={(e) => setNewModEmail(e.target.value)}
 												placeholder="Enter moderator's email address"
-												className='border border-gray-300 outline-none rounded p-2 text-sm w-full focus:border-blue-500 bg-white'
+												className='border outline-none rounded p-2 text-sm w-full focus:border-brand-orange'
+												style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
 											/>
-											<span className='text-[10px] text-gray-400 mt-1 block font-semibold'>
+											<span className='text-[10px] mt-1 block font-semibold' style={{ color: "var(--text-muted)" }}>
 												Enter moderator email. Moderators can edit this challenge.
 											</span>
 										</div>
 										<button
 											type='submit'
-											className='bg-[#edeef0] border border-gray-300 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded font-semibold text-sm transition shadow-sm'
+											className='hover:bg-dark-hover px-4 py-2 rounded font-semibold text-sm transition border border-border-default font-sans'
+											style={{ background: "var(--bg-dark-layer-1)", color: "var(--text-primary)" }}
 										>
 											Add
 										</button>
@@ -767,20 +783,20 @@ const EditProblem: React.FC = () => {
 
 									{/* Moderators List */}
 									<div className='mt-8 max-w-2xl'>
-										<h4 className='text-sm font-semibold text-gray-700 mb-3 border-b border-gray-150 pb-2'>
+										<h4 className='text-sm font-semibold mb-3 border-b pb-2' style={{ color: "var(--text-secondary)", borderColor: "var(--border-subtle)" }}>
 											Current Access
 										</h4>
 
 										<div className='space-y-3'>
 											{moderators.map((email, idx) => (
-												<div key={idx} className='flex justify-between items-center bg-gray-50 p-3 rounded border border-gray-200 hover:bg-gray-100/70 transition'>
+												<div key={idx} className='flex justify-between items-center p-3 rounded border hover:bg-dark-hover transition' style={{ background: "var(--bg-dark-layer-1)", borderColor: "var(--border-subtle)" }}>
 													<div className='flex items-center gap-3'>
-														<div className='w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-600 text-sm'>
+														<div className='w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm' style={{ background: "color-mix(in srgb, var(--brand-orange) 15%, transparent)", color: "var(--brand-orange)" }}>
 															{email.charAt(0).toUpperCase()}
 														</div>
 														<div>
-															<p className='text-sm font-semibold text-gray-800'>{email}</p>
-															<p className='text-xs text-gray-400'>{idx === 0 ? "owner" : "moderator"}</p>
+															<p className='text-sm font-semibold' style={{ color: "var(--text-primary)" }}>{email}</p>
+															<p className='text-xs' style={{ color: "var(--text-muted)" }}>{idx === 0 ? "owner" : "moderator"}</p>
 														</div>
 													</div>
 
@@ -788,14 +804,15 @@ const EditProblem: React.FC = () => {
 														<button
 															type='button'
 															onClick={() => handleRemoveModerator(email)}
-															className='text-red-500 hover:text-red-700 text-xs font-semibold hover:underline bg-transparent'
+															className='text-xs font-semibold hover:underline bg-transparent'
+															style={{ color: "var(--color-error)" }}
 														>
 															Revoke Access
 														</button>
 													)}
 													
 													{idx === 0 && (
-														<span className='bg-gray-200 text-gray-500 text-[10px] font-bold px-2 py-0.5 rounded uppercase select-none border border-gray-300'>
+														<span className='text-[10px] font-bold px-2 py-0.5 rounded uppercase select-none border' style={{ background: "var(--bg-surface)", color: "var(--text-muted)", borderColor: "var(--border-default)" }}>
 															Owner
 														</span>
 													)}
@@ -810,12 +827,12 @@ const EditProblem: React.FC = () => {
 							{activeTab === "testcases" && (
 								<div className='space-y-6'>
 									<div>
-										<h3 className='text-lg font-semibold text-gray-800 mb-1'>Test Cases</h3>
-										<p className='text-xs text-[#576871] leading-relaxed'>
+										<h3 className='text-lg font-semibold mb-1' style={{ color: "var(--text-primary)" }}>Test Cases</h3>
+										<p className='text-xs leading-relaxed' style={{ color: "var(--text-secondary)" }}>
 											Add test cases to judge the correctness of a user&apos;s code. Refer to these{" "}
-											<a href='#' className='text-blue-600 hover:underline'>instructions</a> to write a good test case.
+											<a href='#' style={{ color: "var(--brand-orange)" }} className='hover:underline'>instructions</a> to write a good test case.
 											<br />
-											<button type="button" onClick={handleFileUploadClick} className='text-blue-600 hover:underline inline-flex items-center gap-1 font-semibold text-[11px] mt-1 bg-transparent'>
+											<button type="button" onClick={handleFileUploadClick} className='hover:underline inline-flex items-center gap-1 font-semibold text-[11px] mt-1 bg-transparent' style={{ color: "var(--brand-orange)" }}>
 												Import test cases (.json or paired .zip)
 											</button>
 											<input
@@ -830,13 +847,13 @@ const EditProblem: React.FC = () => {
 
 									{/* Alert when empty */}
 									{examples.length === 0 && (
-										<div className='border-l-4 border-[#ff9c00] bg-[#fdf8e2]/60 p-4 rounded-r flex gap-3 items-start max-w-4xl shadow-sm'>
-											<FaExclamationTriangle size={16} className='text-[#ff9c00] mt-0.5' />
+										<div className='border-l-4 border-brand-orange bg-brand-orange/10 p-4 rounded-r flex gap-3 items-start max-w-4xl shadow-sm'>
+											<FaExclamationTriangle size={16} className='text-brand-orange mt-0.5' />
 											<div>
-												<p className='text-sm font-semibold text-[#805000]'>
+												<p className='text-sm font-semibold' style={{ color: "var(--text-primary)" }}>
 													You do not have any test cases for this challenge.
 												</p>
-												<p className='text-xs text-[#b37409] font-medium mt-1'>
+												<p className='text-xs font-medium mt-1' style={{ color: "var(--text-secondary)" }}>
 													Add at least one test case to allow users to submit solutions.
 												</p>
 											</div>
@@ -854,7 +871,7 @@ const EditProblem: React.FC = () => {
 													onChange={(e) => setAutofillSample(e.target.checked)}
 													className='rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4 shadow-sm'
 												/>
-												<label htmlFor='autofill' className='text-xs font-semibold text-[#576871] select-none cursor-pointer'>
+												<label htmlFor='autofill' className='text-xs font-semibold select-none cursor-pointer' style={{ color: "var(--text-secondary)" }}>
 													Autofill Sample Input, Sample Output, and Explanation fields for all test cases marked as Sample.
 												</label>
 											</div>
@@ -863,15 +880,17 @@ const EditProblem: React.FC = () => {
 												<button
 													type='button'
 													onClick={handleFileUploadClick}
-													className='bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded font-semibold text-xs transition shadow-sm flex items-center gap-1.5'
+													className='hover:bg-dark-hover px-4 py-2 rounded font-semibold text-xs transition border flex items-center gap-1.5'
+													style={{ background: "var(--bg-dark-layer-1)", color: "var(--text-primary)", borderColor: "var(--border-default)" }}
 												>
-													<FaCloudUploadAlt size={14} className="text-gray-500" />
+													<FaCloudUploadAlt size={14} style={{ color: "var(--text-muted)" }} />
 													Upload JSON
 												</button>
 												<button
 													type='button'
 													onClick={handleAddTestCaseClick}
-													className='bg-[#2ec866] hover:bg-[#27a855] text-white px-4 py-2 rounded font-semibold text-xs transition shadow-sm flex items-center gap-1'
+													className='hover:opacity-90 px-4 py-2 rounded font-semibold text-xs transition shadow flex items-center gap-1'
+													style={{ background: "var(--color-success)", color: "var(--bg-surface)" }}
 												>
 													<FaPlus size={10} />
 													Add Test Case
@@ -882,15 +901,16 @@ const EditProblem: React.FC = () => {
 
 									{/* Test Case Editor (Form) */}
 									{isEditingTestCase && (
-										<div className='border border-blue-200 bg-blue-50/20 p-6 rounded-lg max-w-4xl space-y-4 shadow-sm relative'>
-											<h4 className='text-sm font-bold text-blue-700 border-b border-blue-100 pb-2 mb-2'>
+										<div className='border p-6 rounded-lg max-w-4xl space-y-4 shadow relative' style={{ background: "var(--bg-dark-layer-1)", borderColor: "var(--border-default)" }}>
+											<h4 className='text-sm font-bold border-b pb-2 mb-2' style={{ color: "var(--brand-orange)", borderBottomColor: "var(--border-subtle)" }}>
 												{editingTestCaseIndex !== null ? `Edit Test Case ${editingTestCaseIndex + 1}` : "Add New Test Case"}
 											</h4>
 
 											<button
 												type='button'
 												onClick={() => setIsEditingTestCase(false)}
-												className='absolute top-4 right-4 text-gray-400 hover:text-gray-600'
+												className='absolute top-4 right-4'
+												style={{ color: "var(--text-muted)" }}
 												title='Cancel'
 											>
 												<FaTimes size={16} />
@@ -898,44 +918,48 @@ const EditProblem: React.FC = () => {
 
 											<div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
 												<div>
-													<label className='text-xs font-bold block mb-1 text-gray-600'>Input (stdin) <span className='text-red-500'>*</span></label>
+													<label className='text-xs font-bold block mb-1' style={{ color: "var(--text-secondary)" }}>Input (stdin) <span style={{ color: "var(--color-error)" }}>*</span></label>
 													<textarea
 														value={tcInput}
 														onChange={(e) => setTcInput(e.target.value)}
 														rows={5}
-														className='border border-gray-300 outline-none text-xs rounded block w-full p-2.5 bg-white text-gray-800 font-mono focus:border-blue-500 shadow-sm'
+														className='border outline-none text-xs rounded block w-full p-2.5 font-mono focus:border-brand-orange shadow-sm'
+														style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
 														placeholder={'e.g. 4\n2 7 11 15\n9'}
 														required
 													/>
 												</div>
 												<div>
-													<label className='text-xs font-bold block mb-1 text-gray-600'>Output (stdout) <span className='text-red-500'>*</span></label>
+													<label className='text-xs font-bold block mb-1' style={{ color: "var(--text-secondary)" }}>Output (stdout) <span style={{ color: "var(--color-error)" }}>*</span></label>
 													<textarea
 														value={tcOutput}
 														onChange={(e) => setTcOutput(e.target.value)}
 														rows={5}
-														className='border border-gray-300 outline-none text-xs rounded block w-full p-2.5 bg-white text-gray-800 font-mono focus:border-blue-500 shadow-sm'
+														className='border outline-none text-xs rounded block w-full p-2.5 font-mono focus:border-brand-orange shadow-sm'
+														style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
 														placeholder='e.g. 0 1'
 														required
 													/>
 												</div>
 												<div className='col-span-1 md:col-span-2'>
-													<label className='text-xs font-bold block mb-1 text-gray-600'>Explanation (Optional)</label>
+													<label className='text-xs font-bold block mb-1' style={{ color: "var(--text-secondary)" }}>Explanation (Optional)</label>
 													<textarea
 														value={tcExplanation}
 														onChange={(e) => setTcExplanation(e.target.value)}
 														rows={2}
-														className='border border-gray-300 outline-none text-xs rounded block w-full p-2.5 bg-white text-gray-800 focus:border-blue-500 shadow-sm'
+														className='border outline-none text-xs rounded block w-full p-2.5 focus:border-brand-orange shadow-sm'
+														style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
 														placeholder='Explain why this input maps to the output'
 													/>
 												</div>
 												<div className='col-span-1 md:col-span-2'>
-													<label className='text-xs font-bold block mb-1 text-gray-600'>Image URL (Optional)</label>
+													<label className='text-xs font-bold block mb-1' style={{ color: "var(--text-secondary)" }}>Image URL (Optional)</label>
 													<input
 														type='text'
 														value={tcImg}
 														onChange={(e) => setTcImg(e.target.value)}
-														className='border border-gray-300 outline-none text-xs rounded block w-full p-2 bg-white text-gray-800 focus:border-blue-500 shadow-sm'
+														className='border outline-none text-xs rounded block w-full p-2 focus:border-brand-orange shadow-sm'
+														style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
 														placeholder='e.g. https://assets.leetcode.com/uploads/...'
 													/>
 												</div>
@@ -950,7 +974,7 @@ const EditProblem: React.FC = () => {
 														onChange={(e) => setTcIsSample(e.target.checked)}
 														className='rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4 shadow-sm'
 													/>
-													<label htmlFor='tcSample' className='text-xs font-bold text-gray-600 select-none cursor-pointer'>
+													<label htmlFor='tcSample' className='text-xs font-bold select-none cursor-pointer' style={{ color: "var(--text-secondary)" }}>
 														Is Sample Case
 													</label>
 												</div>
@@ -963,13 +987,13 @@ const EditProblem: React.FC = () => {
 														onChange={(e) => setTcIsAdditional(e.target.checked)}
 														className='rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4 shadow-sm'
 													/>
-													<label htmlFor='tcAdditional' className='text-xs font-bold text-gray-600 select-none cursor-pointer'>
+													<label htmlFor='tcAdditional' className='text-xs font-bold select-none cursor-pointer' style={{ color: "var(--text-secondary)" }}>
 														Is Additional Case
 													</label>
 												</div>
 
 												<div className='flex items-center gap-2'>
-													<label htmlFor='tcStrength' className='text-xs font-bold text-gray-600 select-none'>
+													<label htmlFor='tcStrength' className='text-xs font-bold select-none' style={{ color: "var(--text-secondary)" }}>
 														Strength:
 													</label>
 													<input
@@ -978,7 +1002,8 @@ const EditProblem: React.FC = () => {
 														value={tcStrength}
 														onChange={(e) => setTcStrength(Number(e.target.value) || 1)}
 														min={1}
-														className='border border-gray-300 rounded px-2 py-1 text-xs w-16 bg-white outline-none focus:border-blue-500 shadow-sm'
+														className='border rounded px-2 py-1 text-xs w-16 outline-none focus:border-brand-orange shadow-sm'
+														style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
 													/>
 												</div>
 											</div>
@@ -987,14 +1012,16 @@ const EditProblem: React.FC = () => {
 												<button
 													type='button'
 													onClick={() => setIsEditingTestCase(false)}
-													className='bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 px-4 py-2 rounded font-semibold text-xs transition'
+													className='hover:bg-dark-hover px-4 py-2 rounded font-semibold text-xs transition border'
+													style={{ background: "var(--bg-surface)", color: "var(--text-primary)", borderColor: "var(--border-default)" }}
 												>
 													Cancel
 												</button>
 												<button
 													type='button'
 													onClick={handleSaveTestCase}
-													className='bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded font-bold text-xs transition shadow-sm'
+													className='hover:opacity-90 px-5 py-2 rounded font-bold text-xs transition shadow'
+													style={{ background: "var(--brand-orange)", color: "var(--bg-base)" }}
 												>
 													Save Case
 												</button>
@@ -1004,10 +1031,10 @@ const EditProblem: React.FC = () => {
 
 									{/* Test Cases Table */}
 									{examples.length > 0 && (
-										<div className='border border-gray-300 rounded overflow-hidden max-w-5xl shadow-sm'>
-											<table className='w-full text-left border-collapse bg-white text-xs text-gray-600'>
+										<div className='border rounded overflow-hidden max-w-5xl shadow' style={{ borderColor: "var(--border-default)" }}>
+											<table className='w-full text-left border-collapse text-xs' style={{ background: "var(--bg-surface)" }}>
 												<thead>
-													<tr className='bg-gray-100 text-gray-700 font-bold border-b border-gray-300 uppercase text-[10px] select-none'>
+													<tr className='font-bold border-b uppercase text-[10px] select-none' style={{ background: "var(--bg-dark-layer-1)", color: "var(--text-secondary)", borderBottomColor: "var(--border-default)" }}>
 														<th className='px-4 py-3 w-16 text-center'>Order</th>
 														<th className='px-4 py-3'>Input</th>
 														<th className='px-4 py-3'>Output</th>
@@ -1018,17 +1045,17 @@ const EditProblem: React.FC = () => {
 														<th className='px-4 py-3 w-24 text-center'>Actions</th>
 													</tr>
 												</thead>
-												<tbody className='divide-y divide-gray-200'>
+												<tbody className='divide-y divide-border-subtle'>
 													{examples.map((tc, idx) => (
-														<tr key={idx} className='hover:bg-gray-50/80 transition'>
-															<td className='px-4 py-3 font-mono font-semibold text-center text-gray-500'>{idx + 1}</td>
-															<td className='px-4 py-3 font-mono max-w-[150px] truncate text-gray-800' title={tc.inputText}>
+														<tr key={idx} className='hover:bg-dark-hover transition'>
+															<td className='px-4 py-3 font-mono font-semibold text-center' style={{ color: "var(--text-muted)" }}>{idx + 1}</td>
+															<td className='px-4 py-3 font-mono max-w-[150px] truncate' style={{ color: "var(--text-primary)" }} title={tc.inputText}>
 																{tc.inputText.substring(0, 40)}{tc.inputText.length > 40 ? "..." : ""}
 															</td>
-															<td className='px-4 py-3 font-mono max-w-[150px] truncate text-gray-800' title={tc.outputText}>
+															<td className='px-4 py-3 font-mono max-w-[150px] truncate' style={{ color: "var(--text-primary)" }} title={tc.outputText}>
 																{tc.outputText.substring(0, 40)}{tc.outputText.length > 40 ? "..." : ""}
 															</td>
-															<td className='px-4 py-3 font-semibold text-gray-500'>
+															<td className='px-4 py-3 font-semibold' style={{ color: "var(--text-secondary)" }}>
 																{tc.explanation ? "With explanation" : "Standard"}
 															</td>
 															<td className='px-4 py-3 text-center'>
@@ -1059,13 +1086,13 @@ const EditProblem: React.FC = () => {
 																	className='rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4 shadow-sm'
 																/>
 															</td>
-															<td className='px-4 py-3 text-center font-mono font-semibold text-gray-700'>{tc.strength || 1}</td>
+															<td className='px-4 py-3 text-center font-mono font-semibold' style={{ color: "var(--text-primary)" }}>{tc.strength || 1}</td>
 															<td className='px-4 py-3 text-center'>
 																<div className='flex gap-1 justify-center'>
 																	<button
 																		type='button'
 																		onClick={() => handleEditTestCaseClick(idx)}
-																		className='p-1.5 hover:bg-gray-100 text-blue-600 hover:text-blue-800 rounded transition'
+																		className='p-1.5 hover:bg-dark-hover rounded transition text-blue-600 hover:text-blue-800'
 																		title='Edit case'
 																	>
 																		<FaEdit size={13} />
@@ -1073,7 +1100,7 @@ const EditProblem: React.FC = () => {
 																	<button
 																		type='button'
 																		onClick={() => handleRemoveTestCase(idx)}
-																		className='p-1.5 hover:bg-gray-100 text-red-500 hover:text-red-700 rounded transition'
+																		className='p-1.5 hover:bg-dark-hover rounded transition text-red-500 hover:text-red-700'
 																		title='Delete case'
 																	>
 																		<FaTrash size={12} />
@@ -1085,9 +1112,9 @@ const EditProblem: React.FC = () => {
 												</tbody>
 											</table>
 
-											<div className='bg-gray-50 p-4 border-t border-gray-200 select-none'>
-												<span className='text-xs font-semibold text-gray-500'>
-													You will get <span className='text-green-600 bg-green-50 border border-green-200 rounded px-1.5 py-0.5 font-bold font-mono'>100.00%</span> of the maximum score if you pass the selected test cases.
+											<div className='p-4 border-t select-none' style={{ background: "var(--bg-dark-layer-1)", borderTopColor: "var(--border-default)" }}>
+												<span className='text-xs font-semibold' style={{ color: "var(--text-muted)" }}>
+													You will get <span className='rounded px-1.5 py-0.5 font-bold font-mono border' style={{ color: "var(--color-success)", background: "color-mix(in srgb, var(--color-success) 12%, transparent)", borderColor: "color-mix(in srgb, var(--color-success) 25%, transparent)" }}>100.00%</span> of the maximum score if you pass the selected test cases.
 												</span>
 											</div>
 										</div>
@@ -1098,12 +1125,12 @@ const EditProblem: React.FC = () => {
 							{/* CODE STUBS TAB */}
 							{activeTab === "codestubs" && (
 								<div className='space-y-6'>
-									<h3 className='text-lg font-semibold text-gray-800 border-b border-gray-100 pb-3'>
+									<h3 className='text-lg font-semibold border-b pb-3' style={{ color: "var(--text-primary)", borderColor: "var(--border-subtle)" }}>
 										Starter Code Templates
 									</h3>
 									
 									<div>
-										<label htmlFor='starterFunctionName' className='text-sm font-semibold block mb-2 text-gray-700'>
+										<label htmlFor='starterFunctionName' className='text-sm font-semibold block mb-2' style={{ color: "var(--text-secondary)" }}>
 											Starter Function Signature Prefix (Optional)
 										</label>
 										<input
@@ -1112,15 +1139,16 @@ const EditProblem: React.FC = () => {
 											value={starterFunctionName}
 											onChange={(e) => setStarterFunctionName(e.target.value)}
 											placeholder='e.g. function solve('
-											className='border border-gray-300 outline-none rounded p-2 text-sm w-full focus:border-blue-500 transition font-mono bg-white'
+											className='border outline-none rounded p-2 text-sm w-full focus:border-brand-orange transition font-mono'
+											style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
 										/>
-										<span className='text-xs text-gray-500 mt-1 block'>
+										<span className='text-xs mt-1 block' style={{ color: "var(--text-muted)" }}>
 											Leave empty for standard CP-style (stdin/stdout) problems.
 										</span>
 									</div>
 
 									<div>
-										<label htmlFor='starterCode' className='text-sm font-semibold block mb-2 text-gray-700'>
+										<label htmlFor='starterCode' className='text-sm font-semibold block mb-2' style={{ color: "var(--text-secondary)" }}>
 											Starter Code Template (Optional)
 										</label>
 										<textarea
@@ -1129,7 +1157,8 @@ const EditProblem: React.FC = () => {
 											onChange={(e) => setStarterCode(e.target.value)}
 											rows={10}
 											placeholder='// Write starter template here...'
-											className='border border-gray-300 outline-none rounded p-3 text-sm w-full focus:border-blue-500 transition font-mono bg-white'
+											className='border outline-none rounded p-3 text-sm w-full focus:border-brand-orange transition font-mono'
+											style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
 										/>
 									</div>
 								</div>
@@ -1138,39 +1167,13 @@ const EditProblem: React.FC = () => {
 							{/* SETTINGS TAB */}
 							{activeTab === "settings" && (
 								<div className='space-y-6'>
-									<h3 className='text-lg font-semibold text-gray-800 border-b border-gray-100 pb-3'>
+									<h3 className='text-lg font-semibold border-b pb-3' style={{ color: "var(--text-primary)", borderColor: "var(--border-subtle)" }}>
 										Integration & Extra Settings
 									</h3>
 
 									<div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
 										<div>
-											<label htmlFor='category' className='text-sm font-semibold block mb-2 text-gray-700'>
-												Category / Topic
-											</label>
-											<input
-												type='text'
-												id='category'
-												value={category}
-												onChange={(e) => setCategory(e.target.value)}
-												className='border border-gray-300 outline-none rounded p-2 text-sm w-full focus:border-blue-500 bg-white'
-											/>
-										</div>
-
-										<div>
-											<label htmlFor='order' className='text-sm font-semibold block mb-2 text-gray-700'>
-												Sorting Order
-											</label>
-											<input
-												type='number'
-												id='order'
-												value={order}
-												onChange={(e) => setOrder(Number(e.target.value))}
-												className='border border-gray-300 outline-none rounded p-2 text-sm w-full focus:border-blue-500 bg-white'
-											/>
-										</div>
-
-										<div>
-											<label htmlFor='videoId' className='text-sm font-semibold block mb-2 text-gray-700'>
+											<label htmlFor='videoId' className='text-sm font-semibold block mb-2' style={{ color: "var(--text-secondary)" }}>
 												YouTube Video ID (Optional)
 											</label>
 											<input
@@ -1179,12 +1182,13 @@ const EditProblem: React.FC = () => {
 												value={videoId}
 												onChange={(e) => setVideoId(e.target.value)}
 												placeholder='e.g. qm_T3YV8yks'
-												className='border border-gray-300 outline-none rounded p-2 text-sm w-full focus:border-blue-500 bg-white'
+												className='border outline-none rounded p-2 text-sm w-full focus:border-brand-orange'
+												style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
 											/>
 										</div>
 
 										<div>
-											<label htmlFor='link' className='text-sm font-semibold block mb-2 text-gray-700'>
+											<label htmlFor='link' className='text-sm font-semibold block mb-2' style={{ color: "var(--text-secondary)" }}>
 												External Original Link (Optional)
 											</label>
 											<input
@@ -1193,13 +1197,14 @@ const EditProblem: React.FC = () => {
 												value={link}
 												onChange={(e) => setLink(e.target.value)}
 												placeholder='e.g. https://leetcode.com/problems/...'
-												className='border border-gray-[#ccc] outline-none rounded p-2 text-sm w-full focus:border-blue-500 bg-white'
+												className='border outline-none rounded p-2 text-sm w-full focus:border-brand-orange'
+												style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
 											/>
 										</div>
 									</div>
 
 									<div>
-										<label htmlFor='handlerFunction' className='text-sm font-semibold block mb-2 text-gray-700'>
+										<label htmlFor='handlerFunction' className='text-sm font-semibold block mb-2' style={{ color: "var(--text-secondary)" }}>
 											JavaScript Handler Function (Legacy execution scripts)
 										</label>
 										<textarea
@@ -1207,8 +1212,166 @@ const EditProblem: React.FC = () => {
 											value={handlerFunction}
 											onChange={(e) => setHandlerFunction(e.target.value)}
 											rows={8}
-											className='border border-gray-300 outline-none rounded p-3 text-sm w-full focus:border-blue-500 font-mono bg-white'
+											className='border outline-none rounded p-3 text-sm w-full focus:border-brand-orange font-mono'
+											style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
 										/>
+									</div>
+
+									{/* Execution Policy Settings */}
+									<div className='mt-8 pt-6 border-t border-border-subtle' style={{ borderTopColor: "var(--border-subtle)" }}>
+										<h4 className='text-md font-semibold mb-3' style={{ color: "var(--text-primary)" }}>
+											Execution Policy & Resource Limits
+										</h4>
+										<p className='text-xs mb-4' style={{ color: "var(--text-muted)" }}>
+											Select an execution profile to define sandbox resource constraints. Custom limits can be specified if needed.
+										</p>
+
+										<div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
+											<div>
+												<label htmlFor='executionProfile' className='text-xs font-bold block mb-2' style={{ color: "var(--text-secondary)" }}>
+													Execution Profile
+												</label>
+												<select
+													id='executionProfile'
+													value={executionProfile}
+													onChange={(e) => setExecutionProfile(e.target.value)}
+													className='border outline-none rounded p-2 text-xs w-full focus:border-brand-orange transition shadow-sm'
+													style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+												>
+													<option value='fast'>Fast (Short algorithmic problems)</option>
+													<option value='normal'>Normal (Standard competitive programming)</option>
+													<option value='long'>Long (Heavy computations)</option>
+													<option value='machine_learning'>Machine Learning (Model training / AI challenges)</option>
+													<option value='custom'>Custom (Expose individual limits)</option>
+												</select>
+											</div>
+
+											{/* Effective Limits Preview Panel */}
+											<div className='p-4 rounded-lg border' style={{ background: "var(--bg-dark-layer-1)", borderColor: "var(--border-default)" }}>
+												<span className='text-xs font-bold uppercase block mb-3' style={{ color: "var(--brand-orange)" }}>
+													Effective Limits Preview
+												</span>
+												<div className='grid grid-cols-2 gap-y-2 text-xs'>
+													<div style={{ color: "var(--text-secondary)" }}>Timeout:</div>
+													<div className='font-mono font-bold' style={{ color: "var(--text-primary)" }}>
+														{executionProfile === "custom" ? customTimeoutMs : (executionProfile === "fast" ? 1000 : (executionProfile === "long" ? 15000 : (executionProfile === "machine_learning" ? 60000 : 5000)))} ms
+													</div>
+													
+													<div style={{ color: "var(--text-secondary)" }}>Memory Limit:</div>
+													<div className='font-mono font-bold' style={{ color: "var(--text-primary)" }}>
+														{executionProfile === "custom" ? customMemoryLimitMb : (executionProfile === "fast" ? 64 : (executionProfile === "long" ? 512 : (executionProfile === "machine_learning" ? 2048 : 256)))} MB
+													</div>
+
+													<div style={{ color: "var(--text-secondary)" }}>Max Output Size:</div>
+													<div className='font-mono font-bold' style={{ color: "var(--text-primary)" }}>
+														{executionProfile === "custom" ? customMaxOutputSizeChars : (executionProfile === "fast" ? 16384 : (executionProfile === "long" ? 262144 : (executionProfile === "machine_learning" ? 1048576 : 65536)))} characters
+													</div>
+
+													<div style={{ color: "var(--text-secondary)" }}>CPU Count:</div>
+													<div className='font-mono font-bold' style={{ color: "var(--text-primary)" }}>
+														{executionProfile === "custom" ? customCpuCount : (executionProfile === "machine_learning" ? 2 : 1)}
+													</div>
+
+													<div style={{ color: "var(--text-secondary)" }}>Disk Limit:</div>
+													<div className='font-mono font-bold' style={{ color: "var(--text-primary)" }}>
+														{executionProfile === "custom" ? customDiskLimitMb : (executionProfile === "fast" ? 10 : (executionProfile === "long" ? 100 : (executionProfile === "machine_learning" ? 1024 : 50)))} MB
+													</div>
+
+													<div style={{ color: "var(--text-secondary)" }}>Process Limit:</div>
+													<div className='font-mono font-bold' style={{ color: "var(--text-primary)" }}>
+														{executionProfile === "custom" ? customProcessLimit : (executionProfile === "fast" ? 5 : (executionProfile === "long" ? 30 : (executionProfile === "machine_learning" ? 100 : 15)))}
+													</div>
+												</div>
+											</div>
+										</div>
+
+										{executionProfile === "custom" && (
+											<div className='grid grid-cols-1 md:grid-cols-3 gap-6 mt-6 p-4 rounded-lg border animate-scale-up' style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)" }}>
+												<div>
+													<label htmlFor='customTimeoutMs' className='text-xs font-bold block mb-1' style={{ color: "var(--text-secondary)" }}>
+														Execution Timeout (ms)
+													</label>
+													<input
+														type='number'
+														id='customTimeoutMs'
+														value={customTimeoutMs}
+														onChange={(e) => setCustomTimeoutMs(Number(e.target.value) || 0)}
+														className='border outline-none rounded p-2 text-xs w-full focus:border-brand-orange'
+														style={{ background: "var(--bg-surface)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+													/>
+												</div>
+
+												<div>
+													<label htmlFor='customMemoryLimitMb' className='text-xs font-bold block mb-1' style={{ color: "var(--text-secondary)" }}>
+														Memory Limit (MB)
+													</label>
+													<input
+														type='number'
+														id='customMemoryLimitMb'
+														value={customMemoryLimitMb}
+														onChange={(e) => setCustomMemoryLimitMb(Number(e.target.value) || 0)}
+														className='border outline-none rounded p-2 text-xs w-full focus:border-brand-orange'
+														style={{ background: "var(--bg-surface)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+													/>
+												</div>
+
+												<div>
+													<label htmlFor='customMaxOutputSizeChars' className='text-xs font-bold block mb-1' style={{ color: "var(--text-secondary)" }}>
+														Max Output Size (chars)
+													</label>
+													<input
+														type='number'
+														id='customMaxOutputSizeChars'
+														value={customMaxOutputSizeChars}
+														onChange={(e) => setCustomMaxOutputSizeChars(Number(e.target.value) || 0)}
+														className='border outline-none rounded p-2 text-xs w-full focus:border-brand-orange'
+														style={{ background: "var(--bg-surface)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+													/>
+												</div>
+
+												<div>
+													<label htmlFor='customCpuCount' className='text-xs font-bold block mb-1' style={{ color: "var(--text-secondary)" }}>
+														CPU Count
+													</label>
+													<input
+														type='number'
+														id='customCpuCount'
+														value={customCpuCount}
+														onChange={(e) => setCustomCpuCount(Number(e.target.value) || 0)}
+														className='border outline-none rounded p-2 text-xs w-full focus:border-brand-orange'
+														style={{ background: "var(--bg-surface)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+													/>
+												</div>
+
+												<div>
+													<label htmlFor='customDiskLimitMb' className='text-xs font-bold block mb-1' style={{ color: "var(--text-secondary)" }}>
+														Disk Limit (MB)
+													</label>
+													<input
+														type='number'
+														id='customDiskLimitMb'
+														value={customDiskLimitMb}
+														onChange={(e) => setCustomDiskLimitMb(Number(e.target.value) || 0)}
+														className='border outline-none rounded p-2 text-xs w-full focus:border-brand-orange'
+														style={{ background: "var(--bg-surface)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+													/>
+												</div>
+
+												<div>
+													<label htmlFor='customProcessLimit' className='text-xs font-bold block mb-1' style={{ color: "var(--text-secondary)" }}>
+														Process Limit
+													</label>
+													<input
+														type='number'
+														id='customProcessLimit'
+														value={customProcessLimit}
+														onChange={(e) => setCustomProcessLimit(Number(e.target.value) || 0)}
+														className='border outline-none rounded p-2 text-xs w-full focus:border-brand-orange'
+														style={{ background: "var(--bg-surface)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+													/>
+												</div>
+											</div>
+										)}
 									</div>
 								</div>
 							)}
@@ -1217,15 +1380,15 @@ const EditProblem: React.FC = () => {
 							{activeTab === "editorial" && (
 								<div className='space-y-6'>
 									<div>
-										<h3 className='text-lg font-semibold text-gray-800 mb-1'>Editorial / Official Solution</h3>
-										<p className='text-xs text-gray-500 mb-4'>
+										<h3 className='text-lg font-semibold mb-1' style={{ color: "var(--text-primary)" }}>Editorial / Official Solution</h3>
+										<p className='text-xs mb-4' style={{ color: "var(--text-muted)" }}>
 											Provide detailed explanations, hints, analysis, or walk-through videos to help users.
 										</p>
 									</div>
 
 									<div className='space-y-4'>
 										<div>
-											<label htmlFor='editorialVideoUrl' className='text-xs font-bold block mb-1 text-gray-650'>
+											<label htmlFor='editorialVideoUrl' className='text-xs font-bold block mb-1' style={{ color: "var(--text-secondary)" }}>
 												Video Solution URL (Optional YouTube or Vimeo link)
 											</label>
 											<input
@@ -1234,12 +1397,13 @@ const EditProblem: React.FC = () => {
 												value={editorialVideoUrl}
 												onChange={(e) => setEditorialVideoUrl(e.target.value)}
 												placeholder='e.g. https://www.youtube.com/watch?v=...'
-												className='border border-gray-300 outline-none rounded p-2 text-xs w-full focus:border-blue-500 bg-white'
+												className='border outline-none rounded p-2 text-xs w-full focus:border-brand-orange'
+												style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
 											/>
 										</div>
 
 										<div>
-											<label className='text-xs font-bold block mb-1 text-gray-650'>
+											<label className='text-xs font-bold block mb-1' style={{ color: "var(--text-secondary)" }}>
 												Editorial Content (Markdown Format)
 											</label>
 											<MarkdownEditor
@@ -1257,8 +1421,8 @@ const EditProblem: React.FC = () => {
 							{activeTab === "customchecker" && (
 								<div className='space-y-6'>
 									<div>
-										<h3 className='text-lg font-semibold text-gray-800 mb-1'>Custom Output Verification</h3>
-										<p className='text-xs text-gray-500 mb-4'>
+										<h3 className='text-lg font-semibold mb-1' style={{ color: "var(--text-primary)" }}>Custom Output Verification</h3>
+										<p className='text-xs mb-4' style={{ color: "var(--text-muted)" }}>
 											Configure how submission results are verified against testcase expected outputs.
 										</p>
 									</div>
@@ -1266,14 +1430,15 @@ const EditProblem: React.FC = () => {
 									<div className='grid grid-cols-12 gap-6 items-start'>
 										<div className='col-span-12 md:col-span-6 space-y-4'>
 											<div>
-												<label htmlFor='checkerType' className='text-xs font-bold block mb-1 text-gray-650'>
+												<label htmlFor='checkerType' className='text-xs font-bold block mb-1' style={{ color: "var(--text-secondary)" }}>
 													Checker Logic Type
 												</label>
 												<select
 													id='checkerType'
 													value={customCheckerType}
 													onChange={(e) => setCustomCheckerType(e.target.value)}
-													className='border border-gray-300 outline-none rounded p-2 bg-white text-xs w-full focus:border-blue-500 transition shadow-sm'
+													className='border outline-none rounded p-2 text-xs w-full focus:border-brand-orange transition shadow-sm'
+													style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
 												>
 													<option value='exact'>Exact Token Matching</option>
 													<option value='whitespace'>Ignore Extra Whitespaces & Case Insensitive</option>
@@ -1284,7 +1449,7 @@ const EditProblem: React.FC = () => {
 
 											{customCheckerType === "float_tolerance" && (
 												<div>
-													<label htmlFor='checkerEpsilon' className='text-xs font-bold block mb-1 text-gray-650'>
+													<label htmlFor='checkerEpsilon' className='text-xs font-bold block mb-1' style={{ color: "var(--text-secondary)" }}>
 														Epsilon Tolerance (Float delta threshold)
 													</label>
 													<input
@@ -1294,9 +1459,10 @@ const EditProblem: React.FC = () => {
 														value={customCheckerEpsilon}
 														onChange={(e) => setCustomCheckerEpsilon(Number(e.target.value) || 1e-6)}
 														placeholder='e.g. 1e-6'
-														className='border border-gray-300 outline-none rounded p-2 text-xs w-full focus:border-blue-500 bg-white font-mono'
+														className='border outline-none rounded p-2 text-xs w-full font-mono focus:border-brand-orange'
+														style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
 													/>
-													<span className='text-[10px] text-gray-400 mt-1 block italic font-semibold'>
+													<span className='text-[10px] mt-1 block italic font-semibold' style={{ color: "var(--text-muted)" }}>
 														Accepts solutions if absolute or relative error is smaller than epsilon.
 													</span>
 												</div>
@@ -1304,14 +1470,15 @@ const EditProblem: React.FC = () => {
 
 											{customCheckerType === "special_judge" && (
 												<div>
-													<label htmlFor='checkerLang' className='text-xs font-bold block mb-1 text-gray-650'>
+													<label htmlFor='checkerLang' className='text-xs font-bold block mb-1' style={{ color: "var(--text-secondary)" }}>
 														Judge script language
 													</label>
 													<select
 														id='checkerLang'
 														value={customCheckerLang}
 														onChange={(e) => setCustomCheckerLang(e.target.value)}
-														className='border border-gray-300 outline-none rounded p-2 bg-white text-xs w-full focus:border-blue-500 transition shadow-sm'
+														className='border outline-none rounded p-2 text-xs w-full focus:border-brand-orange transition shadow-sm'
+														style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
 													>
 														<option value='python'>Python 3</option>
 														<option value='cpp'>C++20</option>
@@ -1322,7 +1489,7 @@ const EditProblem: React.FC = () => {
 
 										{customCheckerType === "special_judge" && (
 											<div className='col-span-12 md:col-span-6 space-y-2'>
-												<label htmlFor='checkerCode' className='text-xs font-bold block text-gray-650'>
+												<label htmlFor='checkerCode' className='text-xs font-bold block' style={{ color: "var(--text-secondary)" }}>
 													Judge Script Code
 												</label>
 												<textarea
@@ -1349,7 +1516,8 @@ if actual_data.strip() == expected_data.strip():
 else:
     sys.exit(1)
 `}
-													className='border border-gray-300 outline-none rounded p-3 text-xs w-full focus:border-blue-500 font-mono bg-white'
+													className='border outline-none rounded p-3 text-xs w-full font-mono focus:border-brand-orange'
+													style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
 												/>
 											</div>
 										)}
@@ -1365,14 +1533,16 @@ else:
 					<div className='flex justify-end gap-3 mt-6'>
 						<Link
 							href='/admin'
-							className='bg-[#edeef0] hover:bg-gray-200 text-gray-700 px-5 py-2 rounded font-semibold text-sm transition border border-gray-300'
+							className='hover:bg-dark-hover px-5 py-2 rounded font-semibold text-sm transition border border-border-default'
+							style={{ background: "var(--bg-dark-layer-1)", color: "var(--text-primary)" }}
 						>
 							Cancel
 						</Link>
 						<button
 							type='button'
 							onClick={handleSubmit}
-							className='bg-[#2ec866] hover:bg-[#27a855] text-white px-7 py-2 rounded font-bold text-sm transition shadow-sm'
+							className='hover:opacity-90 px-7 py-2 rounded font-bold text-sm transition shadow'
+							style={{ background: "var(--color-success)", color: "var(--bg-surface)", boxShadow: "0 0 10px rgba(16, 185, 129, 0.2)" }}
 						>
 							Save Changes
 						</button>

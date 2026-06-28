@@ -53,5 +53,4 @@ export const validParentheses: Problem = {
 	starterCode: "",
 	handlerFunction: "() => true",
 	starterFunctionName: "",
-	order: 4,
 };

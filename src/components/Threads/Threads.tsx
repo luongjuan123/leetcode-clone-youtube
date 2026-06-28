@@ -12,7 +12,6 @@ import {
 	addDoc,
 	doc,
 	getDoc,
-	updateDoc,
 	startAfter,
 	getDocs,
 } from "firebase/firestore";
@@ -22,7 +21,23 @@ import { threadCommentFeedbackAtom } from "@/atoms/threadCommentFeedbackAtom";
 import ThreadCard from "./ThreadCard";
 import ThreadComposer from "./ThreadComposer";
 import Avatar from "./Avatar";
-import { FaArrowLeft, FaPaperPlane, FaImage, FaSpinner, FaHeart } from "react-icons/fa";
+import { useUserProfile } from "@/hooks/useUserProfile";
+import SecondaryNav from "../TabsNavigation/SecondaryNav";
+import {
+	FaArrowLeft,
+	FaPaperPlane,
+	FaImage,
+	FaSpinner,
+	FaHeart,
+	FaSearch,
+	FaFilter,
+	FaTimes,
+	FaSortAmountDown,
+	FaAngleDown,
+	FaAngleUp
+} from "react-icons/fa";
+import { getFriendlyErrorMessage } from "@/utils/errorFilter";
+import BeastCodeSelect from "@/components/UI/BeastCodeSelect";
 
 interface AttachmentFile {
 	name: string;
@@ -40,6 +55,8 @@ interface AttachmentProblem {
 	language: string;
 	status: string;
 	timestamp: number;
+	attempts?: number;
+	solved?: number;
 }
 
 interface Thread {
@@ -110,7 +127,7 @@ const VirtualizedThreadItem: React.FC<VirtualizedThreadItemProps> = ({ children 
 
 	return (
 		<div ref={containerRef} style={{ minHeight: height }}>
-			{isVisible ? children : <div style={{ height }} className='bg-white dark:bg-[#111622] border border-slate-200/80 dark:border-slate-800/70 rounded-2xl opacity-10' />}
+			{isVisible ? children : <div style={{ height }} className="bc-surface rounded-2xl opacity-10" />}
 		</div>
 	);
 };
@@ -134,6 +151,11 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 	const [, setComposer] = useRecoilState(threadComposerState);
 	const [commentFeedback, setCommentFeedback] = useRecoilState(threadCommentFeedbackAtom);
 
+	// Fetch current user's profile to display the latest updated avatar/displayName
+	const { profile: loggedInProfile } = useUserProfile(user?.uid);
+	const currentUserAvatar = loggedInProfile?.avatarUrl || user?.photoURL;
+	const currentUserDisplayName = loggedInProfile?.displayName || user?.displayName || user?.email?.split("@")[0] || "User";
+
 	// Core State
 	const [threads, setThreads] = useState<Thread[]>([]);
 	const [loading, setLoading] = useState(true);
@@ -141,6 +163,18 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 	const [lastDoc, setLastDoc] = useState<any>(null);
 	const [hasMore, setHasMore] = useState(true);
 	const [activeTab, setActiveTab] = useState<"forYou" | "following">("forYou");
+
+	// Search & Sort filters
+	const [searchQuery, setSearchQuery] = useState("");
+	const [sortBy, setSortBy] = useState<"latest" | "popular" | "replies" | "likes" | "trending">("latest");
+	const [searchLanguage, setSearchLanguage] = useState("");
+	const [searchProblem, setSearchProblem] = useState("");
+	const [searchAuthor, setSearchAuthor] = useState("");
+	const [searchHashtag, setSearchHashtag] = useState("");
+	const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
+	// Collapsed subreplies state
+	const [collapsedReplies, setCollapsedReplies] = useState<Record<string, boolean>>({});
 
 	// Detailed View State
 	const [focusedThreadId, setFocusedThreadId] = useState<string | null>(null);
@@ -166,6 +200,19 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 			setFocusedThread(null);
 		}
 	}, [router.query.threadId]);
+
+	// Automatically open reply composer if query param reply=true is detected
+	useEffect(() => {
+		if (focusedThread && router.query.reply === "true") {
+			setComposer({
+				isOpen: true,
+				parentThreadId: focusedThread.id,
+				replyToDisplayName: focusedThread.displayName,
+			});
+			const { reply, ...rest } = router.query;
+			router.replace({ pathname: router.pathname, query: rest }, undefined, { shallow: true });
+		}
+	}, [focusedThread, router.query.reply, setComposer]);
 
 	// Fetch target thread details when focusedThreadId changes
 	useEffect(() => {
@@ -245,7 +292,7 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 		return () => unsub();
 	}, [focusedThreadId]);
 
-	// Subscribe to first batch (20 items) of feed in real-time
+	// Subscribe to main feed in real-time
 	useEffect(() => {
 		setLoading(true);
 		setThreads([]);
@@ -255,7 +302,7 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 		let q = query(
 			collection(firestore, "threads"),
 			orderBy("createdAt", "desc"),
-			limit(20)
+			limit(40)
 		);
 
 		if (profileUid) {
@@ -263,21 +310,21 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 				collection(firestore, "threads"),
 				where("uid", "==", profileUid),
 				orderBy("createdAt", "desc"),
-				limit(20)
+				limit(40)
 			);
 		} else if (problemId) {
 			q = query(
 				collection(firestore, "threads"),
 				where("submittedProblem.problemId", "==", problemId),
 				orderBy("createdAt", "desc"),
-				limit(20)
+				limit(40)
 			);
 		} else {
 			q = query(
 				collection(firestore, "threads"),
 				where("parentThreadId", "==", ""),
 				orderBy("createdAt", "desc"),
-				limit(20)
+				limit(40)
 			);
 		}
 
@@ -289,89 +336,74 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 					list.push({ id: docSnap.id, ...docSnap.data() } as Thread);
 				});
 				setThreads(list);
+				setLastDoc(snapshot.docs[snapshot.docs.length - 1] || null);
+				setHasMore(snapshot.docs.length >= 40);
 				setLoading(false);
-
-				if (snapshot.docs.length > 0) {
-					setLastDoc(snapshot.docs[snapshot.docs.length - 1]);
-					setHasMore(snapshot.docs.length === 20);
-				} else {
-					setLastDoc(null);
-					setHasMore(false);
-				}
 			},
 			(err) => {
-				console.error("Threads subscribe error:", err);
+				console.error(err);
 				setLoading(false);
 			}
 		);
 
 		return () => unsub();
-	}, [profileUid, problemId, activeTab]);
+	}, [profileUid, problemId]);
 
-	// Load more threads (pagination cursor)
+	// Load more pagination
 	const loadMoreThreads = useCallback(async () => {
-		if (loading || loadingMore || !hasMore || !lastDoc) return;
+		if (!lastDoc || !hasMore || loadingMore) return;
 		setLoadingMore(true);
 
-		try {
-			let q = query(
+		let q = query(
+			collection(firestore, "threads"),
+			orderBy("createdAt", "desc"),
+			startAfter(lastDoc),
+			limit(20)
+		);
+
+		if (profileUid) {
+			q = query(
 				collection(firestore, "threads"),
+				where("uid", "==", profileUid),
 				orderBy("createdAt", "desc"),
 				startAfter(lastDoc),
 				limit(20)
 			);
+		} else if (problemId) {
+			q = query(
+				collection(firestore, "threads"),
+				where("submittedProblem.problemId", "==", problemId),
+				orderBy("createdAt", "desc"),
+				startAfter(lastDoc),
+				limit(20)
+			);
+		} else {
+			q = query(
+				collection(firestore, "threads"),
+				where("parentThreadId", "==", ""),
+				orderBy("createdAt", "desc"),
+				startAfter(lastDoc),
+				limit(20)
+			);
+		}
 
-			if (profileUid) {
-				q = query(
-					collection(firestore, "threads"),
-					where("uid", "==", profileUid),
-					orderBy("createdAt", "desc"),
-					startAfter(lastDoc),
-					limit(20)
-				);
-			} else if (problemId) {
-				q = query(
-					collection(firestore, "threads"),
-					where("submittedProblem.problemId", "==", problemId),
-					orderBy("createdAt", "desc"),
-					startAfter(lastDoc),
-					limit(20)
-				);
-			} else {
-				q = query(
-					collection(firestore, "threads"),
-					where("parentThreadId", "==", ""),
-					orderBy("createdAt", "desc"),
-					startAfter(lastDoc),
-					limit(20)
-				);
-			}
-
-			const snapshot = await getDocs(q);
+		try {
+			const snap = await getDocs(q);
 			const list: Thread[] = [];
-			snapshot.forEach((d) => {
-				list.push({ id: d.id, ...d.data() } as Thread);
+			snap.forEach((docSnap) => {
+				list.push({ id: docSnap.id, ...docSnap.data() } as Thread);
 			});
-
-			if (list.length > 0) {
-				setThreads((prev) => {
-					const existingIds = new Set(prev.map((t) => t.id));
-					const filteredNew = list.filter((t) => !existingIds.has(t.id));
-					return [...prev, ...filteredNew];
-				});
-				setLastDoc(snapshot.docs[snapshot.docs.length - 1]);
-				setHasMore(snapshot.docs.length === 20);
-			} else {
-				setHasMore(false);
-			}
-		} catch (err) {
-			console.error("Error loading more threads:", err);
+			setThreads((prev) => [...prev, ...list]);
+			setLastDoc(snap.docs[snap.docs.length - 1] || null);
+			setHasMore(snap.docs.length >= 20);
+		} catch (e) {
+			console.error("Load more error:", e);
 		} finally {
 			setLoadingMore(false);
 		}
-	}, [loading, loadingMore, hasMore, lastDoc, profileUid, problemId]);
+	}, [lastDoc, hasMore, loadingMore, profileUid, problemId]);
 
-	// Sentinel intersection observer for infinite scroll
+	// Infinite Scroll sentinel detection
 	useEffect(() => {
 		const sentinel = sentinelRef.current;
 		if (!sentinel) return;
@@ -383,16 +415,14 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 					loadMoreThreads();
 				}
 			},
-			{
-				rootMargin: "200px",
-			}
+			{ threshold: 0.1 }
 		);
 
 		observer.observe(sentinel);
 		return () => observer.disconnect();
 	}, [lastDoc, hasMore, loading, loadingMore, loadMoreThreads]);
 
-	// Algorithmic Feed Sorting (For You Feed)
+	// Algorithmic feed scoring
 	const scoredThreads = useMemo(() => {
 		return threads.map((t) => {
 			const likesCount = t.likes?.length || 0;
@@ -400,9 +430,7 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 			const viewsCount = t.viewCount || 0;
 			const timeDiffHours = (Date.now() - t.createdAt) / (1000 * 60 * 60);
 
-			// Engagement Score
 			const engagement = likesCount * 10 + repliesCount * 15 + viewsCount * 1;
-			// Recency Score (time decay)
 			const recency = 1 / (1 + Math.pow(timeDiffHours, 1.4));
 
 			const score = engagement * recency;
@@ -410,9 +438,8 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 		});
 	}, [threads]);
 
-	// Filter and Rank Feeds
+	// Basic filtering top-level
 	const filteredThreads = useMemo(() => {
-		// 1. Profile Feed
 		if (profileUid) {
 			if (repostFeedOnly) {
 				return threads.filter((t) => t.uid === profileUid && !!t.repostedThreadId);
@@ -423,57 +450,128 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 			return threads.filter((t) => t.uid === profileUid && !t.parentThreadId);
 		}
 
-		// 2. Coding Problem Feed
 		if (problemId) {
 			return threads.filter(
 				(t) => t.submittedProblem?.problemId === problemId && !t.parentThreadId
 			);
 		}
 
-		// 3. Main Feed: Filter out replies (replies are viewed in subtrees)
 		const topLevelOnly = threads.filter((t) => !t.parentThreadId);
 
 		if (activeTab === "following") {
-			// Show posts by followed users and the user themselves
 			return topLevelOnly.filter((t) => followingUids.includes(t.uid) || t.uid === user?.uid);
 		}
 
-		// "For You" Feed: Sorted algorithmically
 		const topScored = scoredThreads.filter((st) => !st.thread.parentThreadId);
 		topScored.sort((a, b) => b.score - a.score);
 		return topScored.map((st) => st.thread);
 	}, [threads, profileUid, problemId, activeTab, followingUids, user, scoredThreads, postFeedOnly, repostFeedOnly]);
 
-	// Get replies for focused thread (flat list inside DB)
+	// Search & Sort filters runner
+	const processedThreads = useMemo(() => {
+		let list = [...filteredThreads];
+
+		// General search query
+		if (searchQuery.trim()) {
+			const q = searchQuery.toLowerCase().trim();
+			list = list.filter((t) => {
+				const contentMatch = t.content?.toLowerCase().includes(q);
+				const authorMatch = t.displayName?.toLowerCase().includes(q);
+				const hashtagsMatch = t.hashtags?.some((h) => h.toLowerCase().includes(q)) || false;
+				const mentionsMatch = t.mentions?.some((m) => m.toLowerCase().includes(q)) || false;
+				const problemMatch = t.submittedProblem?.problemTitle?.toLowerCase().includes(q) || false;
+				const langMatch = t.submittedProblem?.language?.toLowerCase().includes(q) || false;
+
+				return contentMatch || authorMatch || hashtagsMatch || mentionsMatch || problemMatch || langMatch;
+			});
+		}
+
+		// Advanced search filter options
+		if (searchLanguage) {
+			list = list.filter((t) => t.submittedProblem?.language?.toLowerCase() === searchLanguage.toLowerCase());
+		}
+		if (searchProblem) {
+			const qP = searchProblem.toLowerCase().trim();
+			list = list.filter((t) => t.submittedProblem?.problemTitle?.toLowerCase().includes(qP) || t.submittedProblem?.problemId?.toLowerCase().includes(qP));
+		}
+		if (searchAuthor) {
+			const qA = searchAuthor.toLowerCase().trim();
+			list = list.filter((t) => t.displayName?.toLowerCase().includes(qA));
+		}
+		if (searchHashtag) {
+			const qH = searchHashtag.toLowerCase().replace("#", "").trim();
+			list = list.filter((t) => t.hashtags?.some((h) => h.toLowerCase() === qH));
+		}
+
+		// Sorting
+		if (sortBy === "latest") {
+			list.sort((a, b) => b.createdAt - a.createdAt);
+		} else if (sortBy === "likes") {
+			list.sort((a, b) => (b.likes?.length || 0) - (a.likes?.length || 0));
+		} else if (sortBy === "replies") {
+			list.sort((a, b) => (b.replies?.length || 0) - (a.replies?.length || 0));
+		} else if (sortBy === "popular" || sortBy === "trending") {
+			list.sort((a, b) => {
+				const scoreA = (a.likes?.length || 0) * 10 + (a.replies?.length || 0) * 15 + (a.viewCount || 0);
+				const scoreB = (b.likes?.length || 0) * 10 + (b.replies?.length || 0) * 15 + (b.viewCount || 0);
+				return scoreB - scoreA;
+			});
+		}
+
+		return list;
+	}, [filteredThreads, searchQuery, sortBy, searchLanguage, searchProblem, searchAuthor, searchHashtag]);
+
 	const directReplies = useMemo(() => {
 		if (!focusedThreadId) return [];
 		return conversationThreads.filter((t) => t.parentThreadId === focusedThreadId);
 	}, [conversationThreads, focusedThreadId]);
 
+	// Toggle collapse replies state
+	const toggleReplyCollapse = (id: string, e: React.MouseEvent) => {
+		e.stopPropagation();
+		setCollapsedReplies((prev) => ({ ...prev, [id]: !prev[id] }));
+	};
+
 	// Recursive nested replies tree rendering helper
 	const renderRepliesTree = (parentId: string, depth = 0) => {
 		const replies = conversationThreads.filter((t) => t.parentThreadId === parentId);
-		// Sort oldest first for readability
 		replies.sort((a, b) => a.createdAt - b.createdAt);
 
 		if (replies.length === 0) return null;
 
 		return (
-			<div className={`space-y-4 ${depth > 0 ? "pl-6 border-l border-slate-200 dark:border-slate-800/70 mt-3 ml-4" : ""}`}>
+			<div className={`space-y-4 ${depth > 0 ? "pl-5 border-l border-[var(--border-subtle)] mt-3 ml-4 hover:border-[var(--brand-orange)] transition duration-200" : ""}`}>
 				{replies.map((reply) => {
 					const hasSubReplies = conversationThreads.some((t) => t.parentThreadId === reply.id);
+					const isCollapsed = collapsedReplies[reply.id];
+
 					return (
-						<div key={reply.id} className='relative group'>
-							<ThreadCard
-								thread={reply}
-								isDetailView={false}
-								showConnectorLine={hasSubReplies}
-							/>
-							{/* Nested level 1 */}
-							{depth < 1 && renderRepliesTree(reply.id, depth + 1)}
-							{/* If too deep, provide link to open as main focused thread */}
-							{depth >= 1 && hasSubReplies && (
-								<div className='pl-6 mt-2 text-[11px] font-semibold text-gray-500 hover:text-brand-orange transition cursor-pointer select-none'>
+						<div key={reply.id} className="relative group">
+							<div className="flex items-center justify-between mb-0.5">
+								{hasSubReplies && (
+									<button
+										onClick={(e) => toggleReplyCollapse(reply.id, e)}
+										className="text-[10px] font-black text-[var(--brand-orange)] hover:underline ml-4 select-none"
+									>
+										{isCollapsed ? `[+] Expand Thread` : `[-] Collapse Thread`}
+									</button>
+								)}
+							</div>
+
+							<div className={`transition-all duration-200 ${isCollapsed ? "opacity-45 scale-[0.98] pointer-events-none origin-left" : ""}`}>
+								<ThreadCard
+									thread={reply}
+									isDetailView={false}
+									showConnectorLine={hasSubReplies && !isCollapsed}
+								/>
+							</div>
+
+							{/* Render up to depth 3 to prevent extreme indentation */}
+							{!isCollapsed && depth < 3 && renderRepliesTree(reply.id, depth + 1)}
+
+							{/* Open deeper subtrees as focused threads */}
+							{!isCollapsed && depth >= 3 && hasSubReplies && (
+								<div className="pl-6 mt-2 text-[11px] font-black text-[var(--text-muted)] hover:text-[var(--brand-orange)] transition cursor-pointer select-none">
 									<button onClick={() => router.push(`/threads?threadId=${reply.id}`)}>
 										↳ View deeper replies...
 									</button>
@@ -486,7 +584,7 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 		);
 	};
 
-	// Inline Quick Reply submit
+	// Inline quick reply post
 	const handlePostInlineReply = async (e: React.FormEvent) => {
 		e.preventDefault();
 		if (!user || !focusedThreadId || !focusedThread) return;
@@ -509,7 +607,6 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 		const tempId = "temp-" + Date.now();
 
 		try {
-			// Fetch author profile
 			const userSnap = await getDoc(doc(firestore, "users", user.uid));
 			const profile = userSnap.exists() ? userSnap.data() : null;
 			const authorName = profile?.displayName || user.displayName || user.email?.split("@")[0] || "Anonymous";
@@ -529,7 +626,6 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 				mentions.push(match[1]);
 			}
 
-			// Optimistically push the comment directly into the conversationThreads rendering list instantly
 			const newReplyObj: Thread = {
 				id: tempId,
 				uid: user.uid,
@@ -546,13 +642,7 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 				mentions,
 			};
 			setConversationThreads((prev) => [...prev, newReplyObj]);
-			setCommentFeedback({
-				isSubmitting: false,
-				error: "",
-				justPosted: { id: tempId, timestamp: Date.now() },
-			});
 
-			// Add doc to threads collection
 			const docRef = await addDoc(collection(firestore, "threads"), {
 				uid: user.uid,
 				displayName: authorName,
@@ -568,7 +658,6 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 				mentions,
 			});
 
-			// Trigger reply notification
 			if (focusedThread.uid !== user.uid) {
 				await addDoc(collection(firestore, "notifications"), {
 					toUid: focusedThread.uid,
@@ -582,30 +671,26 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 				});
 			}
 
-			// Replace the temp ID in recoil state so the flash remains matching the firebase ID
 			setCommentFeedback({
 				isSubmitting: false,
 				error: "",
 				justPosted: { id: docRef.id, timestamp: Date.now() },
 			});
 
-			// Clear text inputs
 			setInlineReplyText("");
 			setInlinePhotos([]);
 
-			// Fade out the highlight after 2.5 seconds
 			setTimeout(() => {
-				setCommentFeedback((prev) => 
+				setCommentFeedback((prev) =>
 					prev.justPosted?.id === docRef.id ? { ...prev, justPosted: null } : prev
 				);
 			}, 2500);
 		} catch (err: any) {
 			console.error("Inline reply post error:", err);
-			// Roll back the optimistic addition from conversationThreads
 			setConversationThreads((prev) => prev.filter((t) => t.id !== tempId));
 			setCommentFeedback({
 				isSubmitting: false,
-				error: err.message || "Failed to post reply.",
+				error: getFriendlyErrorMessage(err, "Failed to post reply. Please try again."),
 				justPosted: null,
 			});
 		} finally {
@@ -613,7 +698,6 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 		}
 	};
 
-	// Photo attachment inside inline reply
 	const handleInlinePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
 		const files = e.target.files;
 		if (!files) return;
@@ -629,21 +713,20 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 		}
 	};
 
-	// Skeletal loading markup
 	if (loading) {
 		return (
-			<div className='max-w-2xl mx-auto space-y-6 pt-4'>
+			<div className="max-w-2xl mx-auto space-y-6 pt-4">
 				{[1, 2, 3].map((n) => (
 					<div
 						key={n}
-						className='border border-slate-200/80 dark:border-slate-800/70 bg-white dark:bg-[#111622] rounded-3xl p-5 flex gap-4 animate-pulse shadow-sm dark:shadow-none'
+						className="bc-surface rounded-3xl p-5 flex gap-4 animate-pulse"
 					>
-						<div className='w-11 h-11 bg-slate-100 dark:bg-dark-fill-3 rounded-full shrink-0' />
-						<div className='flex-1 space-y-3'>
-							<div className='h-3.5 bg-slate-100 dark:bg-dark-fill-3 rounded w-1/4' />
-							<div className='h-3 bg-slate-100 dark:bg-dark-fill-3 rounded w-3/4' />
-							<div className='h-3 bg-slate-100 dark:bg-dark-fill-3 rounded w-5/6' />
-							<div className='h-24 bg-slate-100 dark:bg-dark-fill-3 rounded-xl w-full' />
+						<div className="w-11 h-11 bg-[var(--bg-dark-fill-3)] rounded-full shrink-0" />
+						<div className="flex-1 space-y-3">
+							<div className="h-3.5 bg-[var(--bg-dark-fill-3)] rounded w-1/4" />
+							<div className="h-3 bg-[var(--bg-dark-fill-3)] rounded w-3/4" />
+							<div className="h-3 bg-[var(--bg-dark-fill-3)] rounded w-5/6" />
+							<div className="h-24 bg-[var(--bg-dark-fill-3)] rounded-xl w-full" />
 						</div>
 					</div>
 				))}
@@ -651,20 +734,19 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 		);
 	}
 
-	// ----------------------
-	// 1. DETAILED VIEW RENDER
-	// ----------------------
+	// ----------------------------------------------------
+	// 1. DETAIL CONVERSATION TREE RENDER
+	// ----------------------------------------------------
 	if (focusedThreadId && focusedThread) {
 		const hasReplies = directReplies.length > 0;
 		return (
-			<div className='w-full max-w-[700px] mx-auto space-y-6 pt-4 px-1'>
+			<div className="w-full max-w-[700px] mx-auto space-y-6 pt-4 px-1">
 				{/* Back Button */}
 				<button
 					onClick={() => {
-						// Clean shallow routing back to feed
 						router.push("/threads", undefined, { shallow: true });
 					}}
-					className='flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-slate-900 dark:text-gray-400 dark:hover:text-white transition duration-150 py-2.5 px-4 rounded-xl bg-slate-100 dark:bg-dark-fill-3/5 hover:bg-slate-200 dark:hover:bg-dark-fill-3/20 select-none'
+					className="bc-btn-ghost flex items-center gap-2 text-xs font-semibold transition duration-150 py-2.5 px-4 rounded-xl select-none"
 				>
 					<FaArrowLeft size={10} />
 					<span>Back to Feed</span>
@@ -679,58 +761,56 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 				/>
 
 				{/* Conversation replies tree */}
-				<div className='space-y-4'>
+				<div className="space-y-4">
 					{renderRepliesTree(focusedThreadId)}
 					{!hasReplies && (
-						<p className='text-center text-xs text-slate-500 italic py-6 select-none'>
+						<p className="text-center text-xs text-[var(--text-muted)] italic py-6 select-none">
 							No replies yet. Be the first to reply!
 						</p>
 					)}
 				</div>
 
-				{/* Sticky Inline reply box at the bottom */}
+				{/* Sticky Inline reply box */}
 				{user ? (
 					<div className="sticky bottom-4 w-full z-20 flex flex-col gap-1.5 animate-fade-in">
 						{commentFeedback.error && (
-							<div className="bg-rose-500/10 border border-rose-500/20 text-rose-655 dark:text-rose-455 text-[11px] px-3.5 py-1.5 rounded-xl shadow-lg self-start backdrop-blur-md">
+							<div className="bg-rose-500/10 border border-rose-500/20 text-rose-500 text-[11px] px-3.5 py-1.5 rounded-xl shadow-lg self-start backdrop-blur-md">
 								{commentFeedback.error}
 							</div>
 						)}
 						<form
 							onSubmit={handlePostInlineReply}
-							className='bg-white dark:bg-[#111622] border border-slate-200/85 dark:border-gray-850 p-3 rounded-2xl flex gap-3 items-center shadow-md dark:shadow-2xl w-full'
+							className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] p-3 rounded-2xl flex gap-3 items-center shadow-md w-full"
 						>
-							{/* Attach photo inside inline input */}
-							<label className='cursor-pointer text-slate-400 hover:text-slate-600 dark:text-gray-500 dark:hover:text-white p-2.5 hover:bg-slate-100 dark:hover:bg-dark-fill-3/30 rounded-xl transition shrink-0'>
+							<label className="cursor-pointer text-[var(--text-muted)] hover:text-[var(--text-primary)] p-2.5 hover:bg-[var(--bg-hover)] rounded-xl transition shrink-0">
 								<FaImage size={15} />
 								<input
 									ref={fileInputRef}
-									type='file'
-									accept='image/*'
+									type="file"
+									accept="image/*"
 									multiple
-									className='hidden'
+									className="hidden"
 									onChange={handleInlinePhotoSelect}
 								/>
 							</label>
 
 							<input
-								type='text'
+								type="text"
 								value={inlineReplyText}
 								onChange={(e) => setInlineReplyText(e.target.value)}
 								placeholder={`Reply to @${focusedThread.displayName}...`}
-								className='flex-grow !bg-transparent !border-0 !p-0 !ring-0 !focus:ring-0 !shadow-none text-xs text-slate-900 dark:text-gray-200 placeholder-slate-400 dark:placeholder-gray-600'
+								className="flex-grow !bg-transparent !border-0 !p-0 !ring-0 !focus:ring-0 !shadow-none text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
 							/>
 
-							{/* Photo attachments previews in quick composer */}
 							{inlinePhotos.length > 0 && (
-								<div className='flex gap-1.5 shrink-0 select-none'>
+								<div className="flex gap-1.5 shrink-0 select-none">
 									{inlinePhotos.map((photo, pIdx) => (
-										<div key={pIdx} className='relative w-9 h-9 rounded-lg overflow-hidden border border-slate-200 dark:border-gray-800 bg-slate-50 dark:bg-black/40'>
-											<img src={photo} className='w-full h-full object-cover' />
+										<div key={pIdx} className="relative w-9 h-9 rounded-lg overflow-hidden border border-[var(--border-subtle)] bg-[var(--bg-dark-fill-3)]">
+											<img src={photo} className="w-full h-full object-cover" />
 											<button
-												type='button'
+												type="button"
 												onClick={() => setInlinePhotos((p) => p.filter((_, idx) => idx !== pIdx))}
-												className='absolute inset-0 bg-red-655/70 dark:bg-red-600/70 opacity-0 hover:opacity-100 flex items-center justify-center text-white text-[8px] transition'
+												className="absolute inset-0 bg-red-600/70 hover:opacity-100 opacity-0 flex items-center justify-center text-white text-[8px] transition"
 											>
 												Delete
 											</button>
@@ -740,12 +820,12 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 							)}
 
 							<button
-								type='submit'
+								type="submit"
 								disabled={postingReply || (!inlineReplyText.trim() && inlinePhotos.length === 0)}
-								className='bg-brand-orange hover:bg-brand-orange-s text-white p-2.5 rounded-xl transition disabled:opacity-40 shrink-0 shadow-md flex items-center justify-center'
+								className="bc-btn-brand p-2.5 rounded-xl transition disabled:opacity-45 shrink-0 shadow-md flex items-center justify-center"
 							>
 								{postingReply ? (
-									<FaSpinner className='animate-spin' size={13} />
+									<FaSpinner className="animate-spin" size={13} />
 								) : (
 									<FaPaperPlane size={12} />
 								)}
@@ -753,7 +833,7 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 						</form>
 					</div>
 				) : (
-					<p className='text-center text-xs text-slate-500 italic py-3 select-none bg-slate-100 dark:bg-dark-fill-3/10 rounded-xl border border-slate-200/80 dark:border-gray-850/50'>
+					<p className="text-center text-xs text-[var(--text-muted)] italic py-3 select-none bg-[var(--bg-dark-fill-3)] rounded-xl border border-[var(--border-subtle)]">
 						Please log in to join the discussion.
 					</p>
 				)}
@@ -762,87 +842,214 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 		);
 	}
 
-	// ----------------------
-	// 2. MAIN FEED / LIST VIEW RENDER
-	// ----------------------
+	// ----------------------------------------------------
+	// 2. MAIN FEED LIST VIEW RENDER
+	// ----------------------------------------------------
 	return (
-		<div className='w-full max-w-[700px] mx-auto space-y-6 pt-4 px-1'>
-			{/* Feed Switcher Tabs (Only if not viewing profile or problem feed) */}
+		<div className="w-full max-w-[700px] mx-auto space-y-5 pt-4 px-1">
+			{/* Advanced Search & Sort Control Panel */}
+			<div
+				className="p-4 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] shadow-sm space-y-3"
+			>
+				{/* Main search bar */}
+				<div className="flex gap-2 items-center">
+					<div className="relative flex-1 flex items-center rounded-xl px-3 py-2 bg-[var(--bg-dark-fill-3)] border border-[var(--border-subtle)]">
+						<FaSearch className="text-[var(--text-muted)] mr-2 shrink-0" size={13} />
+						<input
+							type="text"
+							value={searchQuery}
+							onChange={(e) => setSearchQuery(e.target.value)}
+							placeholder="Search thread title, content, author, hashtag (#), language..."
+							className="bg-transparent text-xs text-[var(--text-primary)] outline-none flex-grow placeholder:text-[var(--text-muted)] !border-0 !p-0 !ring-0 !shadow-none"
+						/>
+						{searchQuery && (
+							<button onClick={() => setSearchQuery("")} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]">
+								<FaTimes size={10} />
+							</button>
+						)}
+					</div>
+
+					{/* Toggle advanced filters */}
+					<button
+						onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+						className={`p-2.5 rounded-xl border transition-all flex items-center justify-center gap-1.5 text-xs font-bold ${
+							showAdvancedFilters || searchLanguage || searchProblem || searchAuthor || searchHashtag
+								? "border-[var(--brand-orange)] bg-[var(--brand-glow)] text-[var(--brand-orange)]"
+								: "border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
+						}`}
+						title="Advanced Search Filters"
+					>
+						<FaFilter size={11} />
+						<span>Filters</span>
+						{showAdvancedFilters ? <FaAngleUp size={10} /> : <FaAngleDown size={10} />}
+					</button>
+				</div>
+
+				{/* Advanced filters drawer */}
+				{showAdvancedFilters && (
+					<div className="grid grid-cols-2 gap-3.5 p-3.5 rounded-xl bg-[var(--bg-dark-fill-3)] border border-[var(--border-subtle)] text-xs animate-fade-in">
+						<div>
+							<label className="block text-[10px] text-[var(--text-muted)] font-black uppercase mb-1.5">Language</label>
+							<BeastCodeSelect
+								options={[
+									{ value: "", label: "Any Language" },
+									{ value: "cpp", label: "C++" },
+									{ value: "python", label: "Python" },
+									{ value: "java", label: "Java" },
+									{ value: "javascript", label: "JavaScript" },
+								]}
+								value={searchLanguage}
+								onChange={setSearchLanguage}
+								placeholder="Select language"
+							/>
+						</div>
+
+						<div>
+							<label className="block text-[10px] text-[var(--text-muted)] font-black uppercase mb-1.5">Problem</label>
+							<input
+								type="text"
+								value={searchProblem}
+								onChange={(e) => setSearchProblem(e.target.value)}
+								placeholder="Problem name or ID..."
+								className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] rounded-lg px-2.5 py-1.5 outline-none focus:border-[var(--brand-orange)]"
+							/>
+						</div>
+
+						<div>
+							<label className="block text-[10px] text-[var(--text-muted)] font-black uppercase mb-1.5">Author</label>
+							<input
+								type="text"
+								value={searchAuthor}
+								onChange={(e) => setSearchAuthor(e.target.value)}
+								placeholder="Username..."
+								className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] rounded-lg px-2.5 py-1.5 outline-none focus:border-[var(--brand-orange)]"
+							/>
+						</div>
+
+						<div>
+							<label className="block text-[10px] text-[var(--text-muted)] font-black uppercase mb-1.5">Hashtag</label>
+							<input
+								type="text"
+								value={searchHashtag}
+								onChange={(e) => setSearchHashtag(e.target.value)}
+								placeholder="e.g. hackathon..."
+								className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] rounded-lg px-2.5 py-1.5 outline-none focus:border-[var(--brand-orange)]"
+							/>
+						</div>
+
+						{(searchLanguage || searchProblem || searchAuthor || searchHashtag) && (
+							<div className="col-span-2 flex justify-end">
+								<button
+									onClick={() => {
+										setSearchLanguage("");
+										setSearchProblem("");
+										setSearchAuthor("");
+										setSearchHashtag("");
+									}}
+									className="text-[10px] font-black text-rose-500 hover:underline uppercase"
+								>
+									Clear Filters
+								</button>
+							</div>
+						)}
+					</div>
+				)}
+
+				{/* Sorting selector row */}
+				<div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-[var(--border-subtle)] text-xs select-none">
+					<div className="flex items-center gap-1.5 text-[var(--text-secondary)] font-bold">
+						<FaSortAmountDown size={11} className="text-[var(--brand-orange)]" />
+						<span>Sort By:</span>
+					</div>
+					<div className="flex gap-1.5 flex-wrap">
+						{[
+							{ id: "latest", label: "Latest" },
+							{ id: "popular", label: "Popular" },
+							{ id: "replies", label: "Replies" },
+							{ id: "likes", label: "Likes" },
+							{ id: "trending", label: "Trending" },
+						].map((tab) => (
+							<button
+								key={tab.id}
+								onClick={() => setSortBy(tab.id as any)}
+								className={`px-3 py-1 rounded-full text-[10px] font-black transition ${
+									sortBy === tab.id
+										? "bg-[var(--brand-orange)] text-white shadow-sm"
+										: "bg-[var(--bg-dark-fill-3)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+								}`}
+							>
+								{tab.label}
+							</button>
+						))}
+					</div>
+				</div>
+			</div>
+
+			{/* Feed Switcher Tabs */}
 			{!profileUid && !problemId && (
-				<div className='flex gap-3 justify-center mb-4 select-none'>
-					<button
-						onClick={() => setActiveTab("forYou")}
-						className={`px-5 py-2 text-xs font-bold rounded-2xl border transition duration-200 ${
-							activeTab === "forYou"
-								? "border-brand-orange bg-brand-orange/5 text-brand-orange"
-								: "border-slate-200 dark:border-slate-800/80 text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white bg-transparent"
-						}`}
-					>
-						For You
-					</button>
-					<button
-						onClick={() => setActiveTab("following")}
-						className={`px-5 py-2 text-xs font-bold rounded-2xl border transition duration-200 ${
-							activeTab === "following"
-								? "border-brand-orange bg-brand-orange/5 text-brand-orange"
-								: "border-slate-200 dark:border-slate-800/80 text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white bg-transparent"
-						}`}
-					>
-						Following
-					</button>
+				<div className="flex justify-center mb-1">
+					<SecondaryNav
+						tabs={[
+							{ id: "forYou", label: "For You" },
+							{ id: "following", label: "Following" },
+						]}
+						activeTab={activeTab}
+						onChange={setActiveTab}
+					/>
 				</div>
 			)}
 
-			{/* Inline "What's new?" composer card at the top of the feed */}
+			{/* Inline Quick Composer input card at the top */}
 			{user && !profileUid && !problemId && (
 				<div
 					onClick={() => setComposer({ isOpen: true })}
-					className='flex items-center gap-4 border border-dashed border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#111622] hover:bg-slate-50 dark:hover:bg-[#151B2A] transition duration-150 rounded-2xl p-5 cursor-pointer select-none shadow-sm dark:shadow-none'
+					className="flex items-center gap-4 border border-dashed border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] transition duration-200 rounded-2xl p-5 cursor-pointer select-none shadow-sm"
 				>
 					<Avatar
-						src={user.photoURL}
-						displayName={user.displayName || user.email?.split("@")[0] || "M"}
+						src={currentUserAvatar}
+						displayName={currentUserDisplayName}
 						size={40}
 					/>
-					<span className='text-xs font-semibold text-slate-500 dark:text-gray-500 flex-grow'>
-						{"What's new?"}
+					<span className="text-xs font-bold text-[var(--text-muted)] flex-grow">
+						{"What's new? Support markdown format..."}
 					</span>
-					<button className='bg-brand-orange hover:bg-brand-orange-s text-white text-xs font-bold px-5 py-2 rounded-full transition shadow-md'>
+					<button className="bc-btn-brand text-xs font-black px-5 py-2 rounded-full transition shadow-md">
 						Post
 					</button>
 				</div>
 			)}
 
 			{/* Threads Feed list */}
-			<div className='space-y-4 pb-12'>
-				{filteredThreads.map((thread) => (
+			<div className="space-y-4 pb-12">
+				{processedThreads.map((thread) => (
 					<VirtualizedThreadItem key={thread.id}>
 						<div
 							onClick={() => {
-								// Open detailed view by updating router query parameters (shallow)
 								router.push(`/threads?threadId=${thread.id}`, undefined, { shallow: true });
 							}}
-							className='cursor-pointer'
+							className="cursor-pointer"
 						>
 							<ThreadCard thread={thread} />
 						</div>
 					</VirtualizedThreadItem>
 				))}
 
-				{/* Infinite scroll sentinel */}
-				<div ref={sentinelRef} className='h-10 flex items-center justify-center select-none'>
+				{/* Sentinel for scrolling load */}
+				<div ref={sentinelRef} className="h-10 flex items-center justify-center select-none">
 					{loadingMore && (
-						<FaSpinner className='animate-spin text-brand-orange' size={18} />
+						<FaSpinner className="animate-spin text-[var(--brand-orange)]" size={18} />
 					)}
 				</div>
 
 				{/* Empty Feed State */}
-				{filteredThreads.length === 0 && (
-					<div className='flex flex-col items-center justify-center py-16 text-center select-none bg-slate-50 dark:bg-dark-fill-3/5 border border-slate-200 dark:border-slate-800/60 rounded-3xl p-6'>
-						<FaHeart className='text-slate-400 dark:text-gray-600 mb-3 animate-pulse' size={28} />
-						<p className='text-sm font-bold text-slate-700 dark:text-gray-400'>No threads posted here yet.</p>
-						<p className='text-xs text-slate-500 dark:text-gray-600 mt-1 max-w-xs'>
-							{activeTab === "following"
+				{processedThreads.length === 0 && (
+					<div className="flex flex-col items-center justify-center py-16 text-center select-none bg-[var(--bg-dark-fill-3)] border border-[var(--border-subtle)] rounded-3xl p-6">
+						<FaHeart className="text-[var(--text-muted)] mb-3 animate-pulse" size={28} />
+						<p className="text-sm font-bold text-[var(--text-primary)]">No threads posted here yet.</p>
+						<p className="text-xs text-[var(--text-muted)] mt-1 max-w-xs leading-relaxed">
+							{searchQuery || searchLanguage || searchProblem || searchAuthor || searchHashtag
+								? "No threads matched your advanced search queries. Clear filters and try again!"
+								: activeTab === "following"
 								? "Users you follow haven't posted yet, or you haven't followed anyone. Try following developers!"
 								: "Be the first to post a thread!"}
 						</p>
@@ -850,7 +1057,6 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 				)}
 			</div>
 
-			{/* Floating composer modal */}
 			<ThreadComposer />
 		</div>
 	);

@@ -41,11 +41,27 @@ const ProblemFormStatusRibbon: React.FC<ProblemFormStatusRibbonProps> = ({
 
   if (!isVisible || status === 'idle') return null;
 
-  const statusStyles: Record<FormStatus, string> = {
-    saving: 'bg-blue-950/40 text-blue-400 border-blue-800/50',
-    success: 'bg-emerald-950/40 text-emerald-400 border-emerald-800/50',
-    error: 'bg-rose-950/40 text-rose-400 border-rose-800/50',
-    idle: 'hidden',
+  const statusStyles: Record<FormStatus, { background: string; color: string; borderColor: string }> = {
+    saving: {
+      background: "color-mix(in srgb, var(--brand-orange) 12%, transparent)",
+      color: "var(--brand-orange)",
+      borderColor: "color-mix(in srgb, var(--brand-orange) 30%, transparent)",
+    },
+    success: {
+      background: "color-mix(in srgb, var(--color-success) 12%, transparent)",
+      color: "var(--color-success)",
+      borderColor: "color-mix(in srgb, var(--color-success) 30%, transparent)",
+    },
+    error: {
+      background: "color-mix(in srgb, var(--color-error) 12%, transparent)",
+      color: "var(--color-error)",
+      borderColor: "color-mix(in srgb, var(--color-error) 30%, transparent)",
+    },
+    idle: {
+      background: "transparent",
+      color: "transparent",
+      borderColor: "transparent",
+    },
   };
 
   return (
@@ -54,9 +70,9 @@ const ProblemFormStatusRibbon: React.FC<ProblemFormStatusRibbonProps> = ({
         mx-4 mb-4 px-4 py-3 rounded-lg border
         flex items-center gap-3
         transition-all duration-300
-        ${statusStyles[status]}
         ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none'}
       `}
+      style={statusStyles[status]}
     >
       {status === 'saving' && (
         <svg 

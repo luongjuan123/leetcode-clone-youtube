@@ -102,5 +102,4 @@ export const reverseLinkedList: Problem = {
 	starterCode: "",
 	handlerFunction: "() => true",
 	starterFunctionName: "",
-	order: 2,
 };

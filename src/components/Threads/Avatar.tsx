@@ -57,7 +57,7 @@ const Avatar: React.FC<AvatarProps> = ({
 			className={`relative rounded-full flex-shrink-0 select-none ${className}`}
 		>
 			{/* Avatar Image or Fallback */}
-			<div className='w-full h-full rounded-full overflow-hidden flex items-center justify-center bg-slate-100 dark:bg-dark-fill-3 border border-slate-250 dark:border-slate-800/60'>
+			<div className='w-full h-full rounded-full overflow-hidden flex items-center justify-center bg-dark-fill-3 border border-gray-850'>
 				{imageSrc && !hasError ? (
 					<img
 						src={imageSrc}
@@ -67,7 +67,7 @@ const Avatar: React.FC<AvatarProps> = ({
 						loading='lazy'
 					/>
 				) : (
-					<div className='w-full h-full flex items-center justify-center bg-gradient-to-br from-brand-orange/25 to-yellow-600/10 text-brand-orange font-bold text-xs select-none font-mono'>
+					<div className='w-full h-full flex items-center justify-center bg-gradient-to-br from-brand-orange/25 to-brand-orange-s/10 text-brand-orange font-bold text-xs select-none font-mono'>
 						{initials}
 					</div>
 				)}
@@ -82,7 +82,7 @@ const Avatar: React.FC<AvatarProps> = ({
 						bottom: "1px",
 						right: "1px",
 					}}
-					className='absolute rounded-full bg-green-500 border-2 border-white dark:border-dark-layer-2 shadow-lg'
+					className='absolute rounded-full bg-dark-green-s border-2 border-dark-layer-2 shadow-lg'
 					title='Online'
 				/>
 			)}
@@ -94,7 +94,7 @@ const Avatar: React.FC<AvatarProps> = ({
 						bottom: "-1px",
 						right: "-1px",
 					}}
-					className='absolute rounded-full bg-white dark:bg-[#121212] p-0.5 border border-slate-200 dark:border-slate-800/60 flex items-center justify-center text-brand-orange'
+					className='absolute rounded-full bg-dark-layer-2 p-0.5 border border-gray-850 flex items-center justify-center text-brand-orange'
 				>
 					<FaCheckCircle size={badgeSize} />
 				</div>

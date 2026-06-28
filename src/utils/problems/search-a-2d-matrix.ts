@@ -76,5 +76,4 @@ export const search2DMatrix: Problem = {
 	starterCode: "",
 	handlerFunction: "() => true",
 	starterFunctionName: "",
-	order: 5,
 };

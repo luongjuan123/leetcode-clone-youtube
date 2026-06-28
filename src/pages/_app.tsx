@@ -9,14 +9,25 @@ import { doc, getDoc, setDoc } from "firebase/firestore";
 import ProfileSetupModal from "@/components/Modals/ProfileSetupModal";
 import EmailVerificationModal from "@/components/Modals/EmailVerificationModal";
 import { useRouter } from "next/router";
+import ErrorBoundary from "@/components/ErrorBoundary/ErrorBoundary";
+import { RealtimeNotificationProvider } from "@/context/RealtimeNotificationProvider";
 
-console.log = () => {};
-console.error = () => {};
-console.warn = () => {};
-console.info = () => {};
-console.debug = () => {};
+const isProduction = process.env.NODE_ENV === "production";
 
-if (typeof window !== "undefined") {
+if (isProduction) {
+	console.log = () => {};
+	console.info = () => {};
+	console.debug = () => {};
+	console.warn = () => {};
+	console.error = (...args) => {
+		if (typeof window !== "undefined") {
+			(window as any).__developer_errors = (window as any).__developer_errors || [];
+			(window as any).__developer_errors.push({ type: "console_error", args, timestamp: Date.now() });
+		}
+	};
+}
+
+if (typeof window !== "undefined" && isProduction) {
 	window.addEventListener("error", (e) => e.preventDefault());
 	window.addEventListener("unhandledrejection", (e) => e.preventDefault());
 }
@@ -109,9 +120,12 @@ function GlobalAuthAndProfileCheck() {
 }
 
 export default function App({ Component, pageProps }: AppProps) {
+	const [activeTheme, setActiveTheme] = useState("default");
+
 	useEffect(() => {
 		if (typeof window !== "undefined") {
 			const saved = localStorage.getItem("theme") || "default";
+			setActiveTheme(saved);
 			document.documentElement.setAttribute("data-theme", saved);
 			if (saved === "light") {
 				document.documentElement.classList.remove("dark");
@@ -121,6 +135,7 @@ export default function App({ Component, pageProps }: AppProps) {
 
 			const handleSync = () => {
 				const current = localStorage.getItem("theme") || "default";
+				setActiveTheme(current);
 				document.documentElement.setAttribute("data-theme", current);
 				if (current === "light") {
 					document.documentElement.classList.remove("dark");
@@ -138,7 +153,7 @@ export default function App({ Component, pageProps }: AppProps) {
 			<Head>
 				<title>BeastCode</title>
 				<meta name='viewport' content='width=device-width, initial-scale=1' />
-				<link rel='icon' href='/favicon.png' />
+				<link rel='icon' href={`/favicon-${activeTheme}.svg`} />
 				<meta name='description' content='BeastCode — Online Judge platform with coding problems, contests, and video solutions.' />
 				<meta property='og:type' content='website' />
 				<meta property='og:title' content='BeastCode' />
@@ -149,7 +164,11 @@ export default function App({ Component, pageProps }: AppProps) {
 				<meta name='twitter:description' content='BeastCode — Online Judge platform with coding problems, contests, and video solutions.' />
 			</Head>
 			<GlobalAuthAndProfileCheck />
-			<Component {...pageProps} />
+			<ErrorBoundary>
+				<RealtimeNotificationProvider>
+					<Component {...pageProps} />
+				</RealtimeNotificationProvider>
+			</ErrorBoundary>
 		</RecoilRoot>
 	);
 }

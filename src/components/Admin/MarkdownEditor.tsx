@@ -91,7 +91,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 
 	// Helper to render markdown/HTML. If simple markdown is used, convert basic features.
 	const renderPreviewContent = (text: string) => {
-		if (!text) return `<p class="text-gray-400 italic">Nothing to preview</p>`;
+		if (!text) return `<p style="color: var(--text-muted); font-style: italic;">Nothing to preview</p>`;
 		
 		// Very simple regex-based markdown to HTML converter for basic tags
 		let html = text
@@ -103,22 +103,22 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 			// Italic
 			.replace(/\*(.*?)\*/g, "<em>$1</em>")
 			// Code Block
-			.replace(/```([\s\S]*?)```/g, "<pre class='bg-gray-100 p-3 rounded my-2 font-mono text-xs text-gray-800 border border-gray-200 overflow-auto'>$1</pre>")
+			.replace(/```([\s\S]*?)```/g, "<pre style='background: var(--bg-dark-layer-1); color: var(--text-primary); border: 1px solid var(--border-subtle); padding: 0.75rem; border-radius: var(--radius-md); font-family: var(--font-mono); font-size: 0.75rem; overflow: auto; margin: 0.5rem 0;'>$1</pre>")
 			// Inline code
-			.replace(/`(.*?)`/g, "<code class='bg-gray-100 px-1 py-0.5 rounded font-mono text-xs text-red-600'>$1</code>")
+			.replace(/`(.*?)`/g, "<code style='background: var(--bg-dark-layer-1); color: var(--text-accent); padding: 0.125rem 0.25rem; border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 0.75rem;'>$1</code>")
 			// Image
-			.replace(/!\[(.*?)\]\((.*?)\)/g, "<img src='$2' alt='$1' class='max-w-full h-auto rounded my-2' />")
+			.replace(/!\[(.*?)\]\((.*?)\)/g, "<img src='$2' alt='$1' style='max-w-full; height: auto; border-radius: var(--radius-md); margin: 0.5rem 0;' />")
 			// Link
-			.replace(/\[(.*?)\]\((.*?)\)/g, "<a href='$2' target='_blank' class='text-blue-600 underline hover:text-blue-800'>$1</a>")
+			.replace(/\[(.*?)\]\((.*?)\)/g, "<a href='$2' target='_blank' style='color: var(--brand-orange); text-decoration: underline;'>$1</a>")
 			// Unordered List
-			.replace(/^\s*\*\s+(.*)$/gm, "<li class='list-disc ml-5'>$1</li>")
+			.replace(/^\s*\*\s+(.*)$/gm, "<li style='list-style-type: disc; margin-left: 1.25rem;'>$1</li>")
 			// Ordered List
-			.replace(/^\s*\d+\.\s+(.*)$/gm, "<li class='list-decimal ml-5'>$1</li>")
+			.replace(/^\s*\d+\.\s+(.*)$/gm, "<li style='list-style-type: decimal; margin-left: 1.25rem;'>$1</li>")
 			// Paragraphs / Newlines
 			.split("\n")
 			.map(line => {
 				if (line.trim().startsWith("<li") || line.trim().startsWith("<pre") || line.trim().startsWith("</pre")) return line;
-				return line.trim() ? `<p class='my-1'>${line}</p>` : "<br />";
+				return line.trim() ? `<p style='margin: 0.25rem 0;'>${line}</p>` : "<br />";
 			})
 			.join("\n");
 
@@ -126,15 +126,22 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 	};
 
 	return (
-		<div className="border border-gray-300 rounded bg-white text-gray-800 flex flex-col shadow-sm">
+		<div 
+			className="border rounded flex flex-col shadow-sm"
+			style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)" }}
+		>
 			{/* Toolbar */}
-			<div className="flex justify-between items-center bg-gray-50 border-b border-gray-300 px-3 py-1.5 select-none">
+			<div 
+				className="flex justify-between items-center border-b px-3 py-1.5 select-none"
+				style={{ background: "var(--bg-dark-layer-1)", borderBottomColor: "var(--border-subtle)" }}
+			>
 				<div className="flex items-center gap-1">
 					<button
 						type="button"
 						onClick={() => handleToolbarClick("bold")}
 						disabled={preview}
-						className="p-2 hover:bg-gray-200 rounded text-gray-600 hover:text-gray-900 transition disabled:opacity-50 disabled:hover:bg-transparent"
+						className="p-2 hover:bg-dark-hover rounded transition disabled:opacity-50 disabled:hover:bg-transparent"
+						style={{ color: "var(--text-secondary)" }}
 						title="Bold"
 					>
 						<FaBold size={13} />
@@ -143,17 +150,19 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 						type="button"
 						onClick={() => handleToolbarClick("italic")}
 						disabled={preview}
-						className="p-2 hover:bg-gray-200 rounded text-gray-600 hover:text-gray-900 transition disabled:opacity-50 disabled:hover:bg-transparent font-serif italic font-bold"
+						className="p-2 hover:bg-dark-hover rounded transition disabled:opacity-50 disabled:hover:bg-transparent font-serif italic font-bold"
+						style={{ color: "var(--text-secondary)" }}
 						title="Italic"
 					>
 						<FaItalic size={13} />
 					</button>
-					<div className="w-px h-5 bg-gray-300 mx-1" />
+					<div className="w-px h-5 mx-1" style={{ background: "var(--border-subtle)" }} />
 					<button
 						type="button"
 						onClick={() => handleToolbarClick("unordered-list")}
 						disabled={preview}
-						className="p-2 hover:bg-gray-200 rounded text-gray-600 hover:text-gray-900 transition disabled:opacity-50 disabled:hover:bg-transparent"
+						className="p-2 hover:bg-dark-hover rounded transition disabled:opacity-50 disabled:hover:bg-transparent"
+						style={{ color: "var(--text-secondary)" }}
 						title="Bullet List"
 					>
 						<FaListUl size={13} />
@@ -162,17 +171,19 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 						type="button"
 						onClick={() => handleToolbarClick("ordered-list")}
 						disabled={preview}
-						className="p-2 hover:bg-gray-200 rounded text-gray-600 hover:text-gray-900 transition disabled:opacity-50 disabled:hover:bg-transparent"
+						className="p-2 hover:bg-dark-hover rounded transition disabled:opacity-50 disabled:hover:bg-transparent"
+						style={{ color: "var(--text-secondary)" }}
 						title="Numbered List"
 					>
 						<FaListOl size={13} />
 					</button>
-					<div className="w-px h-5 bg-gray-300 mx-1" />
+					<div className="w-px h-5 mx-1" style={{ background: "var(--border-subtle)" }} />
 					<button
 						type="button"
 						onClick={() => handleToolbarClick("image")}
 						disabled={preview}
-						className="p-2 hover:bg-gray-200 rounded text-gray-600 hover:text-gray-900 transition disabled:opacity-50 disabled:hover:bg-transparent"
+						className="p-2 hover:bg-dark-hover rounded transition disabled:opacity-50 disabled:hover:bg-transparent"
+						style={{ color: "var(--text-secondary)" }}
 						title="Image"
 					>
 						<FaImage size={13} />
@@ -181,7 +192,8 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 						type="button"
 						onClick={() => handleToolbarClick("link")}
 						disabled={preview}
-						className="p-2 hover:bg-gray-200 rounded text-gray-600 hover:text-gray-900 transition disabled:opacity-50 disabled:hover:bg-transparent"
+						className="p-2 hover:bg-dark-hover rounded transition disabled:opacity-50 disabled:hover:bg-transparent"
+						style={{ color: "var(--text-secondary)" }}
 						title="Link"
 					>
 						<FaLink size={13} />
@@ -190,7 +202,8 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 						type="button"
 						onClick={() => handleToolbarClick("code")}
 						disabled={preview}
-						className="p-2 hover:bg-gray-200 rounded text-gray-600 hover:text-gray-900 transition disabled:opacity-50 disabled:hover:bg-transparent"
+						className="p-2 hover:bg-dark-hover rounded transition disabled:opacity-50 disabled:hover:bg-transparent"
+						style={{ color: "var(--text-secondary)" }}
 						title="Code Block"
 					>
 						<FaCode size={13} />
@@ -200,9 +213,12 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 				<button
 					type="button"
 					onClick={() => setPreview(!preview)}
-					className={`text-xs px-3 py-1 rounded border border-gray-300 shadow-sm font-semibold transition hover:bg-gray-100 ${
-						preview ? "bg-blue-50 text-blue-600 border-blue-300 hover:bg-blue-100" : "bg-white text-gray-700"
-					}`}
+					className="text-xs px-3 py-1 rounded border shadow-sm font-semibold transition hover:bg-dark-hover"
+					style={{
+						color: preview ? "var(--brand-orange)" : "var(--text-secondary)",
+						borderColor: preview ? "var(--brand-orange)" : "var(--border-default)",
+						background: preview ? "color-mix(in srgb, var(--brand-orange) 10%, transparent)" : "var(--bg-surface)",
+					}}
 				>
 					{preview ? "Edit" : "Preview"}
 				</button>
@@ -212,8 +228,8 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 			<div className="relative flex-1 min-h-[150px]">
 				{preview ? (
 					<div
-						className="p-4 overflow-y-auto bg-gray-50 text-gray-800 text-sm font-sans"
-						style={{ height }}
+						className="p-4 overflow-y-auto text-sm font-sans"
+						style={{ height, background: "var(--bg-surface)", color: "var(--text-primary)" }}
 						dangerouslySetInnerHTML={{ __html: renderPreviewContent(value) }}
 					/>
 				) : (
@@ -238,7 +254,10 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 
 			{/* Gutter / Footer */}
 			{maxChars && (
-				<div className="bg-gray-50 border-t border-gray-200 px-3 py-1 text-right text-xs text-gray-500 font-semibold select-none">
+				<div 
+					className="border-t px-3 py-1 text-right text-xs font-semibold select-none"
+					style={{ background: "var(--bg-dark-layer-1)", borderTopColor: "var(--border-subtle)", color: "var(--text-muted)" }}
+				>
 					Characters left: {Math.max(0, maxChars - value.length)}
 				</div>
 			)}

@@ -1,10 +1,7 @@
 import { authModalState } from "@/atoms/authModalAtom";
-import { auth } from "@/firebase/firebase";
-import React, { useState, useEffect } from "react";
-import { useSendPasswordResetEmail } from "react-firebase-hooks/auth";
+import React, { useState } from "react";
 import { useSetRecoilState } from "recoil";
 import { FaSpinner, FaArrowLeft } from "react-icons/fa";
-import { translateFirebaseError } from "@/utils/authErrors";
 
 type ResetPasswordProps = {};
 
@@ -14,8 +11,7 @@ const ResetPassword: React.FC<ResetPasswordProps> = () => {
 	const [successMsg, setSuccessMsg] = useState("");
 	const [errors, setErrors] = useState<{ email?: string; general?: string }>({});
 	const [shake, setShake] = useState(false);
-
-	const [sendPasswordResetEmail, sending, error] = useSendPasswordResetEmail(auth);
+	const [sending, setSending] = useState(false);
 
 	const validateForm = (): boolean => {
 		if (!email) {
@@ -39,76 +35,83 @@ const ResetPassword: React.FC<ResetPasswordProps> = () => {
 
 		setSuccessMsg("");
 		setErrors({});
+		setSending(true);
 
 		try {
-			const success = await sendPasswordResetEmail(email);
-			if (success) {
-				setSuccessMsg("Reset link successfully sent. Please check your inbox.");
+			const res = await fetch("/api/auth/forgot-password", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json"
+				},
+				body: JSON.stringify({ email })
+			});
+
+			const data = await res.json();
+			if (res.ok && data.success) {
+				setSuccessMsg("If an account exists, a password reset email has been sent.");
+			} else {
+				setErrors({ general: data.message || "Unable to send reset email. Please try again later." });
 			}
 		} catch (err: any) {
-			// Handled by useEffect matching firebase hooks state
+			console.error("Forgot password client error:", err);
+			setErrors({ general: "Unable to send reset email. Please try again later." });
+		} finally {
+			setSending(false);
 		}
 	};
-
-	useEffect(() => {
-		if (error) {
-			const code = (error as any).code || "auth/unknown";
-			const msg = translateFirebaseError(code);
-			setErrors({ general: msg });
-		}
-	}, [error]);
 
 	return (
 		<form className={`space-y-5 px-4 pb-4 transition-all duration-200 ${sending ? "opacity-50 pointer-events-none" : ""}`} onSubmit={handleReset}>
 			<div>
-				<h3 className='text-xl font-bold text-white tracking-tight'>Reset Password</h3>
-				<p className='text-xs text-slate-400 mt-1'>
+				<h3 className="text-xl font-bold text-dark-gray-8 tracking-tight">Reset Password</h3>
+				<p className="text-xs text-dark-gray-7 mt-1">
 					Enter your email address below, and we will send a password reset link to your inbox.
 				</p>
 			</div>
 
 			<div className={shake ? "animate-shake" : ""}>
-				<label htmlFor='email' className='text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1.5'>
+				<label htmlFor="email" className="text-xs font-semibold uppercase tracking-wider text-dark-gray-7 block mb-1.5">
 					Your email
 				</label>
 				<input
-					type='email'
-					name='email'
+					type="email"
+					name="email"
+					value={email}
 					onChange={(e) => {
 						setEmail(e.target.value);
 						setErrors({});
 						setSuccessMsg("");
 					}}
-					id='email'
+					id="email"
 					disabled={sending}
-					className={`w-full bg-[#13141b]/90 border ${
-						errors.email ? "border-rose-500/50 focus:border-rose-500" : "border-slate-800/80 focus:border-amber-500"
-					} rounded-lg py-2.5 px-3.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500/20 transition-all duration-200`}
-					placeholder='name@company.com'
+					className={`w-full bc-input-shell rounded-lg py-2.5 px-3.5 text-xs placeholder:text-bc-muted transition-all duration-200 ${
+						errors.email ? "border-bc-error focus:border-bc-error" : ""
+					}`}
+					placeholder="name@company.com"
 				/>
-				{errors.email && <p className='text-rose-400 text-[10px] mt-1.5 font-medium'>{errors.email}</p>}
+				{errors.email && <p className="text-bc-error text-[10px] mt-1.5 font-medium">{errors.email}</p>}
 			</div>
 
 			{errors.general && (
-				<div className='p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg text-rose-400 text-xs font-medium leading-relaxed'>
+				<div className="p-3 bg-bc-error/10 border border-bc-error/20 rounded-lg text-bc-error text-xs font-medium leading-relaxed">
 					{errors.general}
 				</div>
 			)}
 
 			{successMsg && (
-				<div className='p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400 text-xs font-medium leading-relaxed'>
+				<div className="p-3 bg-bc-success/10 border border-bc-success/20 rounded-lg text-bc-success text-xs font-medium leading-relaxed">
 					{successMsg}
 				</div>
 			)}
 
 			<button
-				type='submit'
+				type="submit"
 				disabled={sending}
-				className='w-full bg-amber-500 hover:bg-amber-600 disabled:bg-amber-500/50 text-slate-950 font-semibold py-2.5 px-4 rounded-lg text-xs transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98]'
+				className="w-full bc-btn-brand disabled:opacity-50 font-semibold py-2.5 px-4 rounded-lg text-xs transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98]"
 			>
 				{sending ? (
 					<>
-						<FaSpinner className='animate-spin' size={14} />
+						<FaSpinner className="animate-spin" size={14} />
 						<span>Sending Link...</span>
 					</>
 				) : (
@@ -116,12 +119,12 @@ const ResetPassword: React.FC<ResetPasswordProps> = () => {
 				)}
 			</button>
 
-			<div className='text-center pt-1'>
+			<div className="text-center pt-1">
 				<button
-					type='button'
+					type="button"
 					disabled={sending}
 					onClick={() => setAuthModalState((prev) => ({ ...prev, type: "login" }))}
-					className='text-xs text-slate-500 hover:text-slate-300 flex items-center justify-center gap-1.5 mx-auto transition duration-150 focus:outline-none'
+					className="text-xs text-bc-muted hover:text-dark-gray-8 flex items-center justify-center gap-1.5 mx-auto transition duration-150 focus:outline-none"
 				>
 					<FaArrowLeft size={10} />
 					<span>Back to Sign In</span>

@@ -20,12 +20,17 @@ module.exports = {
 				"dark-surface": "var(--bg-surface, #131316)",
 				"dark-elevated": "var(--bg-elevated, #1e1e24)",
 				"dark-hover": "var(--bg-hover, #252530)",
+				"bg-surface": "var(--bg-surface, #131316)",
+				"bg-dark-layer-1": "var(--bg-dark-layer-1, #1a1a1f)",
+				"text-primary": "var(--text-primary, #f1f1f3)",
+				"text-secondary": "var(--text-secondary, #a1a1aa)",
+				"text-muted": "var(--text-muted, #52525b)",
 
 				/* Fill utilities */
 				"dark-label-2": "rgba(239, 241, 246, 0.75)",
 				"dark-divider-border-2": "rgb(61, 61, 61)",
-				"dark-fill-2": "var(--bg-dark-fill-2, hsla(0,0%,100%,.14))",
-				"dark-fill-3": "var(--bg-dark-fill-3, hsla(0,0%,100%,.06))",
+				"dark-fill-2": "var(--bg-dark-fill-2)",
+				"dark-fill-3": "var(--bg-dark-fill-3)",
 
 				/* Text */
 				"dark-gray-6": "rgb(138, 138, 138)",
@@ -41,8 +46,19 @@ module.exports = {
 				"dark-yellow":   "rgb(255 192 30)",
 				"dark-pink":     "rgb(255 55 95)",
 				olive:           "rgb(0, 184, 163)",
-				"dark-green-s":  "rgb(44 187 93)",
-				"dark-blue-s":   "rgb(10 132 255)",
+				"dark-green-s":  "var(--color-success, rgb(44 187 93))",
+				"dark-blue-s":   "var(--color-info, rgb(10 132 255))",
+				"bc-success":    "var(--color-success)",
+				"bc-warning":    "var(--color-warning)",
+				"bc-error":      "var(--color-error)",
+				"bc-info":       "var(--color-info)",
+				"bc-primary":    "var(--text-primary)",
+				"bc-secondary":  "var(--text-secondary)",
+				"bc-muted":      "var(--text-muted)",
+				"bc-accent":     "var(--text-accent)",
+				"border-subtle": "var(--border-subtle)",
+				"border-default": "var(--border-default)",
+				"border-strong": "var(--border-strong)",
 
 				/* Custom grays */
 				"gray-250": "rgb(200,200,210)",
@@ -65,10 +81,23 @@ module.exports = {
 				xl: "22px",
 			},
 			boxShadow: {
-				sm:   "0 1px 3px rgba(0,0,0,0.5)",
-				md:   "0 4px 16px rgba(0,0,0,0.6)",
-				lg:   "0 10px 40px rgba(0,0,0,0.7)",
-				glow: "0 0 20px rgba(245,158,11,0.2)",
+				sm:       "0 1px 3px rgba(0,0,0,0.5)",
+				md:       "0 4px 16px rgba(0,0,0,0.6)",
+				lg:       "0 10px 40px rgba(0,0,0,0.7)",
+				glow:     "var(--shadow-glow)",
+				"glow-sm": "var(--shadow-glow-sm)",
+				"glow-md": "var(--shadow-glow-md)",
+				"glow-lg": "var(--shadow-glow-lg)",
+				"glow-inner": "var(--shadow-glow-inner)",
+				"glow-success": "var(--shadow-glow-success)",
+				"glow-error": "var(--shadow-glow-error)",
+			},
+			dropShadow: {
+				glow: "var(--drop-shadow-glow)",
+				"glow-sm": "var(--drop-shadow-glow-sm)",
+				"glow-md": "var(--drop-shadow-glow-md)",
+				"glow-success": "0 0 6px rgba(16, 185, 129, 0.45)",
+				"glow-error": "0 0 6px rgba(239, 68, 68, 0.45)",
 			},
 			transitionTimingFunction: {
 				smooth: "cubic-bezier(0.25, 0.46, 0.45, 0.94)",
@@ -101,5 +130,19 @@ module.exports = {
 			},
 		},
 	},
-	plugins: [],
+	plugins: [
+		require("tailwindcss/plugin")(function ({ addUtilities }) {
+			addUtilities({
+				".text-shadow-glow": {
+					"text-shadow": "var(--text-shadow-glow, 0 0 10px rgba(245, 158, 11, 0.4))",
+				},
+				".text-shadow-glow-success": {
+					"text-shadow": "0 0 10px rgba(16, 185, 129, 0.45)",
+				},
+				".text-shadow-glow-error": {
+					"text-shadow": "0 0 10px rgba(239, 68, 68, 0.45)",
+				},
+			});
+		}),
+	],
 };

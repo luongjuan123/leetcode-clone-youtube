@@ -16,7 +16,7 @@ export function useAdmin() {
 				return;
 			}
 			// check if email is admin email
-			const adminEmails = ["admin@leetcode.com", "juan@test.com", "admin@test.com", "dungpubgame@gmail.com"];
+			const adminEmails = ["admin@leetcode.com", "juan@test.com", "admin@test.com", "dungpubgame@gmail.com", "24110215@st.vju.ac.vn"];
 			if (adminEmails.includes(user.email || "")) {
 				setIsAdmin(true);
 				setLoading(false);

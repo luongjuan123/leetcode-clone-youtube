@@ -35,9 +35,7 @@ const EditorFooter: React.FC<EditorFooterProps> = ({
 	};
 
 	return (
-		<div className={`flex w-full py-3 px-5 items-center justify-between border-t ${
-			lightTheme ? "bg-white border-gray-300" : "bg-dark-layer-1 border-transparent"
-		}`}>
+		<div className="flex w-full py-3 px-5 items-center justify-between border-t" style={{ background: "var(--bg-dark-layer-1)", borderColor: "var(--border-subtle)" }}>
 			<input
 				type='file'
 				ref={fileInputRef}
@@ -51,24 +49,19 @@ const EditorFooter: React.FC<EditorFooterProps> = ({
 				<button
 					type='button'
 					onClick={() => fileInputRef.current?.click()}
-					className={`flex items-center gap-2 text-xs font-semibold hover:opacity-80 transition cursor-pointer ${
-						lightTheme ? "text-gray-650 underline" : "text-gray-400 underline"
-					}`}
+					className="flex items-center gap-2 text-xs font-semibold hover:opacity-80 transition cursor-pointer underline"
+					style={{ color: "var(--text-muted)" }}
 				>
 					<FaUpload size={12} />
 					<span>Upload Code as File</span>
 				</button>
 
-				<label className={`flex items-center gap-2 text-xs font-semibold cursor-pointer ${
-					lightTheme ? "text-gray-650" : "text-gray-400"
-				}`}>
+				<label className="flex items-center gap-2 text-xs font-semibold cursor-pointer" style={{ color: "var(--text-muted)" }}>
 					<input
 						type='checkbox'
 						checked={customInputChecked}
 						onChange={(e) => setCustomInputChecked(e.target.checked)}
-						className={`rounded focus:ring-0 ${
-							lightTheme ? "border-gray-300 text-blue-600" : "border-gray-805 text-brand-orange bg-dark-fill-3"
-						}`}
+						className="rounded focus:ring-0 border-gray-805 text-brand-orange bg-dark-fill-3"
 					/>
 					<span>Test against custom input</span>
 				</label>
@@ -79,15 +72,11 @@ const EditorFooter: React.FC<EditorFooterProps> = ({
 				<button
 					onClick={handleRun}
 					disabled={executingType !== null}
-					className={`px-5 py-1.5 text-xs font-bold rounded transition focus:outline-none flex items-center gap-1.5 ${
-						lightTheme
-							? "bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300"
-							: "bg-dark-fill-3 hover:bg-dark-fill-2 text-gray-300"
-					} disabled:opacity-60 disabled:cursor-not-allowed`}
+					className="px-5 py-1.5 text-xs font-bold rounded-lg transition-all duration-150 focus:outline-none flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed bg-dark-fill-3 text-text-secondary border border-border-subtle hover:text-text-primary hover:border-border-accent"
 				>
 					{executingType === "run" ? (
 						<>
-							<svg className='animate-spin h-3.5 w-3.5 text-gray-450' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+							<svg className='animate-spin h-3.5 w-3.5' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
 								<circle cx='12' cy='12' r='10' stroke='currentColor' strokeWidth='2' opacity='0.3' />
 								<path d='M12 2a10 10 0 0110 10' strokeWidth='2' strokeLinecap='round' />
 							</svg>
@@ -100,11 +89,8 @@ const EditorFooter: React.FC<EditorFooterProps> = ({
 				<button
 					onClick={handleSubmit}
 					disabled={executingType !== null}
-					className={`px-5 py-1.5 text-xs font-bold rounded transition focus:outline-none text-white shadow-sm flex items-center gap-1.5 ${
-						lightTheme
-							? "bg-[#2ec866] hover:bg-[#25b157]"
-							: "bg-dark-green-s hover:bg-green-3"
-					} disabled:opacity-60 disabled:cursor-not-allowed`}
+					className="px-5 py-1.5 text-xs font-bold rounded-lg transition-all duration-150 focus:outline-none text-white flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed bg-brand-orange hover:bg-brand-orange-s"
+					style={{ boxShadow: "var(--shadow-glow-sm)" }}
 				>
 					{executingType === "submit" ? (
 						<>
@@ -124,3 +110,4 @@ const EditorFooter: React.FC<EditorFooterProps> = ({
 };
 
 export default EditorFooter;
+

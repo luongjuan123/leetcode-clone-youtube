@@ -1,0 +1,45 @@
+[debug] [2026-06-28T19:59:34.524Z] ----------------------------------------------------------------------
+[debug] [2026-06-28T19:59:34.525Z] Command:       /usr/bin/node /home/juan/.npm/_npx/ba4f1959e38407b5/node_modules/.bin/firebase apphosting:secrets:grantaccess firebase_client_email --project beastcode-7555e --backend beastcode
+[debug] [2026-06-28T19:59:34.525Z] CLI Version:   15.22.3
+[debug] [2026-06-28T19:59:34.525Z] Platform:      linux
+[debug] [2026-06-28T19:59:34.525Z] Node Version:  v24.16.0
+[debug] [2026-06-28T19:59:34.525Z] Detected Agent: antigravity
+[debug] [2026-06-28T19:59:34.525Z] Time:          Mon Jun 29 2026 02:59:34 GMT+0700 (Indochina Time)
+[debug] [2026-06-28T19:59:34.526Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-06-28T19:59:34.648Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-06-28T19:59:34.648Z] > authorizing via signed-in user (dungpubgame@gmail.com)
+[debug] [2026-06-28T19:59:34.649Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-06-28T19:59:34.649Z] > authorizing via signed-in user (dungpubgame@gmail.com)
+[debug] [2026-06-28T19:59:34.649Z] [iam] checking project beastcode-7555e for permissions ["firebase.projects.get","secretmanager.secrets.create","secretmanager.secrets.get","secretmanager.secrets.getIamPolicy","secretmanager.secrets.setIamPolicy","secretmanager.secrets.update","secretmanager.versions.add"]
+[debug] [2026-06-28T19:59:34.649Z] Checked if tokens are valid: true, expires at: 1782679292059
+[debug] [2026-06-28T19:59:34.649Z] Checked if tokens are valid: true, expires at: 1782679292059
+[debug] [2026-06-28T19:59:34.650Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/beastcode-7555e:testIamPermissions [none]
+[debug] [2026-06-28T19:59:34.650Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/beastcode-7555e:testIamPermissions  x-goog-user-project=beastcode-7555e
+[debug] [2026-06-28T19:59:34.650Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/beastcode-7555e:testIamPermissions {"permissions":["firebase.projects.get","secretmanager.secrets.create","secretmanager.secrets.get","secretmanager.secrets.getIamPolicy","secretmanager.secrets.setIamPolicy","secretmanager.secrets.update","secretmanager.versions.add"]}
+[debug] [2026-06-28T19:59:35.585Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/beastcode-7555e:testIamPermissions 200
+[debug] [2026-06-28T19:59:35.585Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/beastcode-7555e:testIamPermissions {"permissions":["firebase.projects.get","secretmanager.secrets.create","secretmanager.secrets.get","secretmanager.secrets.getIamPolicy","secretmanager.secrets.setIamPolicy","secretmanager.secrets.update","secretmanager.versions.add"]}
+[debug] [2026-06-28T19:59:35.586Z] Checked if tokens are valid: true, expires at: 1782679292059
+[debug] [2026-06-28T19:59:35.586Z] Checked if tokens are valid: true, expires at: 1782679292059
+[debug] [2026-06-28T19:59:35.586Z] >>> [apiv2][query] GET https://cloudresourcemanager.googleapis.com/v1/projects/beastcode-7555e [none]
+[debug] [2026-06-28T19:59:35.826Z] <<< [apiv2][status] GET https://cloudresourcemanager.googleapis.com/v1/projects/beastcode-7555e 200
+[debug] [2026-06-28T19:59:35.826Z] <<< [apiv2][body] GET https://cloudresourcemanager.googleapis.com/v1/projects/beastcode-7555e {"projectNumber":"348293518232","projectId":"beastcode-7555e","lifecycleState":"ACTIVE","name":"BeastCode","labels":{"firebase":"enabled","firebase-core":"disabled"},"createTime":"2026-05-27T16:24:06.178Z"}
+[debug] [2026-06-28T19:59:35.826Z] Checked if tokens are valid: true, expires at: 1782679292059
+[debug] [2026-06-28T19:59:35.826Z] Checked if tokens are valid: true, expires at: 1782679292059
+[debug] [2026-06-28T19:59:35.826Z] >>> [apiv2][query] GET https://secretmanager.googleapis.com/v1/projects/beastcode-7555e/secrets/firebase_client_email [none]
+[debug] [2026-06-28T19:59:36.200Z] <<< [apiv2][status] GET https://secretmanager.googleapis.com/v1/projects/beastcode-7555e/secrets/firebase_client_email 200
+[debug] [2026-06-28T19:59:36.201Z] <<< [apiv2][body] GET https://secretmanager.googleapis.com/v1/projects/beastcode-7555e/secrets/firebase_client_email {"name":"projects/348293518232/secrets/firebase_client_email","replication":{"automatic":{}},"createTime":"2026-06-28T19:55:15.526922Z","etag":"\"165555b884197e\""}
+[debug] [2026-06-28T19:59:36.201Z] Checked if tokens are valid: true, expires at: 1782679292059
+[debug] [2026-06-28T19:59:36.201Z] Checked if tokens are valid: true, expires at: 1782679292059
+[debug] [2026-06-28T19:59:36.201Z] >>> [apiv2][query] GET https://firebaseapphosting.googleapis.com/v1beta/projects/beastcode-7555e/locations/-/backends 
+[debug] [2026-06-28T19:59:37.577Z] <<< [apiv2][status] GET https://firebaseapphosting.googleapis.com/v1beta/projects/beastcode-7555e/locations/-/backends 200
+[debug] [2026-06-28T19:59:37.577Z] <<< [apiv2][body] GET https://firebaseapphosting.googleapis.com/v1beta/projects/beastcode-7555e/locations/-/backends {"backends":[{"name":"projects/beastcode-7555e/locations/asia-southeast1/backends/beastcode","createTime":"2026-05-27T16:42:18.142114748Z","updateTime":"2026-06-28T19:49:04.520149Z","labels":{"deployment-tool":"cli-firebase"},"uri":"beastcode--beastcode-7555e.asia-southeast1.hosted.app","managedResources":[{"runService":{"service":"projects/348293518232/locations/asia-southeast1/services/beastcode"}}],"uid":"1862ed7a-c5a9-49a6-9b68-801a76de8667","etag":"6ok3rHdk1tBCuw1Nt4rQi-N4p6LHVIojkRGnSADuNgQ","reconciling":false,"servingLocality":"GLOBAL_ACCESS","serviceAccount":"firebase-app-hosting-compute@beastcode-7555e.iam.gserviceaccount.com","appId":"1:348293518232:web:194eee44089a85f7e751ed"}]}
+[debug] [2026-06-28T19:59:37.578Z] Checked if tokens are valid: true, expires at: 1782679292059
+[debug] [2026-06-28T19:59:37.578Z] Checked if tokens are valid: true, expires at: 1782679292059
+[debug] [2026-06-28T19:59:37.578Z] >>> [apiv2][query] GET https://secretmanager.googleapis.com/v1/projects/beastcode-7555e/secrets/firebase_client_email:getIamPolicy [none]
+[debug] [2026-06-28T19:59:38.034Z] <<< [apiv2][status] GET https://secretmanager.googleapis.com/v1/projects/beastcode-7555e/secrets/firebase_client_email:getIamPolicy 200
+[debug] [2026-06-28T19:59:38.034Z] <<< [apiv2][body] GET https://secretmanager.googleapis.com/v1/projects/beastcode-7555e/secrets/firebase_client_email:getIamPolicy {"version":1,"etag":"BwZVVbocynA=","bindings":[{"role":"roles/secretmanager.secretAccessor","members":["serviceAccount:service-348293518232@gcp-sa-firebaseapphosting.iam.gserviceaccount.com"]}]}
+[debug] [2026-06-28T19:59:38.034Z] Checked if tokens are valid: true, expires at: 1782679292059
+[debug] [2026-06-28T19:59:38.034Z] Checked if tokens are valid: true, expires at: 1782679292059
+[debug] [2026-06-28T19:59:38.034Z] >>> [apiv2][query] POST https://secretmanager.googleapis.com/v1/projects/beastcode-7555e/secrets/firebase_client_email:setIamPolicy [none]
+[debug] [2026-06-28T19:59:38.035Z] >>> [apiv2][body] POST https://secretmanager.googleapis.com/v1/projects/beastcode-7555e/secrets/firebase_client_email:setIamPolicy {"policy":{"bindings":[{"role":"roles/secretmanager.secretAccessor","members":["serviceAccount:service-348293518232@gcp-sa-firebaseapphosting.iam.gserviceaccount.com"]},{"role":"roles/secretmanager.secretAccessor","members":["serviceAccount:firebase-app-hosting-compute@beastcode-7555e.iam.gserviceaccount.com"]},{"role":"roles/secretmanager.viewer","members":["serviceAccount:firebase-app-hosting-compute@beastcode-7555e.iam.gserviceaccount.com"]},{"role":"roles/secretmanager.secretVersionManager","members":["serviceAccount:service-348293518232@gcp-sa-firebaseapphosting.iam.gserviceaccount.com"]}]},"updateMask":"bindings"}

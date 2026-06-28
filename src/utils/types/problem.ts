@@ -15,7 +15,6 @@ export type Problem = {
 	problemStatement: string;
 	examples: Example[];
 	constraints: string;
-	order: number;
 	starterCode: string;
 	handlerFunction: ((fn: any) => boolean) | string;
 	starterFunctionName: string;
@@ -24,7 +23,6 @@ export type Problem = {
 	tags?: string[];
 	description?: string;
 	language?: string;
-	category?: string;
 	difficulty?: string;
 	points?: number;
 	customChecker?: {
@@ -37,16 +35,24 @@ export type Problem = {
 		markdown?: string;
 		videoUrl?: string;
 	};
+	executionProfile?: "fast" | "normal" | "long" | "machine_learning" | "custom";
+	customTimeoutMs?: number;
+	customMemoryLimitMb?: number;
+	customMaxOutputSizeChars?: number;
+	customCpuCount?: number;
+	customDiskLimitMb?: number;
+	customProcessLimit?: number;
 };
 
 export type DBProblem = {
 	id: string;
 	title: string;
-	category: string;
+	tags: string[];
 	difficulty: string;
 	likes: number;
 	dislikes: number;
-	order: number;
 	videoId?: string;
 	link?: string;
+	attempts?: number;
+	solved?: number;
 };
