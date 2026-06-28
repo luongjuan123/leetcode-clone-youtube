@@ -8,17 +8,39 @@ import { useAuthState } from "react-firebase-hooks/auth";
 import { AiFillLike, AiFillDislike, AiOutlineLoading3Quarters, AiFillStar } from "react-icons/ai";
 import { BsCheck2Circle } from "react-icons/bs";
 import { TiStarOutline } from "react-icons/ti";
+import { FaCheck, FaGlobe } from "react-icons/fa";
 
 type ProblemDescriptionProps = {
 	problem: Problem;
 	_solved: boolean;
 	lightTheme?: boolean;
+	activeLanguage: string;
+	translating: boolean;
+	handleTranslate: (langCode: string) => Promise<void>;
 };
 
-const ProblemDescription: React.FC<ProblemDescriptionProps> = ({ problem, _solved, lightTheme = false }) => {
+const ProblemDescription: React.FC<ProblemDescriptionProps> = ({
+	problem,
+	_solved,
+	lightTheme = false,
+	activeLanguage,
+	translating,
+	handleTranslate,
+}) => {
 	const [user] = useAuthState(auth);
 	const { currentProblem, loading, problemDifficultyClass, setCurrentProblem } = useGetCurrentProblem(problem.id);
 	const { liked, disliked, solved, setData, starred } = useGetUsersDataOnProblem(problem.id);
+	const [dropdownOpen, setDropdownOpen] = useState(false);
+
+	const LANGUAGES = [
+		{ code: "en", name: "English (Original)" },
+		{ code: "vi", name: "Tiếng Việt (Vietnamese)" },
+		{ code: "es", name: "Español (Spanish)" },
+		{ code: "ja", name: "日本語 (Japanese)" },
+		{ code: "zh-CN", name: "简体中文 (Chinese)" },
+		{ code: "fr", name: "Français (French)" },
+		{ code: "ko", name: "한국어 (Korean)" },
+	];
 	const [updating, setUpdating] = useState(false);
 	const [loginTooltipTarget, setLoginTooltipTarget] = useState<"like" | "dislike" | "star" | null>(null);
 
@@ -174,190 +196,311 @@ const ProblemDescription: React.FC<ProblemDescriptionProps> = ({ problem, _solve
 	};
 
 	return (
-		<div className={`flex flex-col w-full ${lightTheme ? "bg-white text-gray-800" : "bg-dark-layer-1 text-white"}`}>
-			{/* Render simple header only if NOT in lightTheme workspace (since Workspace has its own header) */}
-			{!lightTheme && (
-				<div className='flex h-11 w-full items-center pt-2 bg-dark-layer-2 text-white overflow-x-auto'>
-					<div className={"bg-dark-layer-1 rounded-t-[5px] px-5 py-[10px] text-xs cursor-pointer"}>
-						Description
-					</div>
-				</div>
-			)}
-
-			<div className={`flex px-0 py-4 ${lightTheme ? "" : "h-[calc(100vh-94px)] overflow-y-auto"}`}>
-				<div className={lightTheme ? "w-full" : "px-5 w-full"}>
-					{/* Problem heading */}
-					{!lightTheme && (
-						<div className='w-full'>
-							<div className='flex space-x-4'>
-								<div className='flex-1 mr-2 text-lg text-white font-medium'>{problem?.title}</div>
+		<div className="w-full text-text-primary" style={{ backgroundColor: "transparent" }}>
+			<div className="w-full space-y-8">
+				{/* Actions and Status Bar */}
+				<div className="flex items-center justify-between flex-wrap gap-4 pb-6 border-b border-border-subtle select-none" style={{ borderColor: "var(--border-subtle)" }}>
+					<div className="flex items-center gap-3">
+						{/* Solved Indicator */}
+						{(solved || _solved) && (
+							<div
+								className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-extrabold select-none shadow-[0_0_10px_rgba(16,185,129,0.15)] transition-all duration-300"
+								style={{
+									color: "var(--color-success)",
+									backgroundColor: "color-mix(in srgb, var(--color-success) 10%, transparent)",
+									border: "1px solid color-mix(in srgb, var(--color-success) 20%, transparent)",
+								}}
+							>
+								<BsCheck2Circle size={14} />
+								<span>SOLVED</span>
 							</div>
-							{!loading && currentProblem && (
-								<div className='flex items-center mt-3'>
-									<div
-										className={`${problemDifficultyClass} inline-block rounded-[21px] bg-opacity-[.15] px-2.5 py-1 text-xs font-medium capitalize `}
-									>
-										{currentProblem.difficulty}
-									</div>
-									{(solved || _solved) && (
-										<div className='rounded p-[3px] ml-4 text-lg transition-colors duration-200 text-green-s text-dark-green-s'>
-											<BsCheck2Circle />
-										</div>
-									)}
-									<div
-										className='flex items-center cursor-pointer hover:bg-dark-fill-3 space-x-1 rounded p-[3px]  ml-4 text-lg transition-colors duration-200 text-dark-gray-6 relative'
-										onClick={handleLike}
-									>
-										{liked && !updating && <AiFillLike className='text-blue-500' />}
-										{!liked && !updating && <AiFillLike />}
-										{updating && <AiOutlineLoading3Quarters className='animate-spin' />}
+						)}
 
-										<span className='text-xs'>{currentProblem.likes}</span>
-										{loginTooltipTarget === "like" && (
-											<span className='absolute -top-7 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded shadow border border-gray-750 font-semibold whitespace-nowrap z-10 animate-fade-in'>
-												Sign in first
-											</span>
-										)}
-									</div>
-									<div
-										className='flex items-center cursor-pointer hover:bg-dark-fill-3 space-x-1 rounded p-[3px]  ml-4 text-lg transition-colors duration-200 text-green-s text-dark-gray-6 relative'
-										onClick={handleDislike}
-									>
-										{disliked && !updating && <AiFillDislike className='text-red-500' />}
-										{!disliked && !updating && <AiFillDislike />}
-										{updating && <AiOutlineLoading3Quarters className='animate-spin' />}
-
-										<span className='text-xs'>{currentProblem.dislikes}</span>
-										{loginTooltipTarget === "dislike" && (
-											<span className='absolute -top-7 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded shadow border border-gray-750 font-semibold whitespace-nowrap z-10 animate-fade-in'>
-												Sign in first
-											</span>
-										)}
-									</div>
-									<div
-										className='cursor-pointer hover:bg-dark-fill-3 rounded p-[3px] ml-4 text-xl transition-all duration-200 ease-out active:scale-95 transform shrink-0 relative'
-										onClick={handleStar}
-									>
-										{starred && !updating && <AiFillStar className='text-amber-500' />}
-										{!starred && !updating && <TiStarOutline />}
-										{updating && <AiOutlineLoading3Quarters className='animate-spin text-amber-500' />}
-
-										{loginTooltipTarget === "star" && (
-											<span className='absolute -top-7 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded shadow border border-gray-750 font-semibold whitespace-nowrap z-10 animate-fade-in'>
-												Sign in first
-											</span>
-										)}
-									</div>
-								</div>
-							)}
-
-							{loading && (
-								<div className='mt-3 flex space-x-2'>
-									<RectangleSkeleton />
-									<CircleSkeleton />
-									<RectangleSkeleton />
-									<RectangleSkeleton />
-									<CircleSkeleton />
-								</div>
-							)}
-						</div>
-					)}
-
-					{/* Problem Statement */}
-					<div className={`text-sm leading-relaxed ${lightTheme ? "text-gray-700 font-sans" : "text-white mt-4"}`}>
-						<div dangerouslySetInnerHTML={{ __html: renderMarkdown(problem.problemStatement, lightTheme) }} />
-					</div>
-
-					{/* Input Format */}
-					{problem.inputFormat && (
-						<div className='mt-6 text-sm'>
-							<div className={`font-bold pb-1.5 mb-2 border-b ${
-								lightTheme ? "text-gray-800 border-gray-200" : "text-gray-200 border-gray-800"
-							}`}>Input Format</div>
-							<div className={lightTheme ? "text-gray-700" : "text-white"} dangerouslySetInnerHTML={{ __html: renderMarkdown(problem.inputFormat, lightTheme) }} />
-						</div>
-					)}
-
-					{/* Constraints */}
-					{problem.constraints && (
-						<div className='mt-6 text-sm'>
-							<div className={`font-bold pb-1.5 mb-2 border-b ${
-								lightTheme ? "text-gray-800 border-gray-200" : "text-gray-200 border-gray-800"
-							}`}>Constraints</div>
-							<div className={lightTheme ? "text-gray-700" : "text-white"} dangerouslySetInnerHTML={{ __html: renderMarkdown(problem.constraints, lightTheme) }} />
-						</div>
-					)}
-
-					{/* Output Format */}
-					{problem.outputFormat && (
-						<div className='mt-6 text-sm'>
-							<div className={`font-bold pb-1.5 mb-2 border-b ${
-								lightTheme ? "text-gray-800 border-gray-200" : "text-gray-200 border-gray-800"
-							}`}>Output Format</div>
-							<div className={lightTheme ? "text-gray-700" : "text-white"} dangerouslySetInnerHTML={{ __html: renderMarkdown(problem.outputFormat, lightTheme) }} />
-						</div>
-					)}
-
-					{/* Examples/Samples Section */}
-					<div className='mt-6'>
-						{problem.examples.filter(ex => !!ex.isSample).map((example, index) => (
-							<div key={example.id} className='mb-6 select-none'>
-								<p className={`font-bold text-sm mb-2 ${lightTheme ? "text-gray-750" : "text-gray-200"}`}>
-									Sample Input {index}
-								</p>
-								<pre className={`p-4 rounded border font-mono text-xs whitespace-pre-wrap mb-4 ${
-									lightTheme
-										? "bg-[#f5f7fa] border-gray-250 text-gray-800"
-										: "bg-dark-fill-3 border-gray-800 text-gray-300"
-								}`}>
-									{example.inputText}
-								</pre>
-								<p className={`font-bold text-sm mb-2 ${lightTheme ? "text-gray-750" : "text-gray-200"}`}>
-									Sample Output {index}
-								</p>
-								<pre className={`p-4 rounded border font-mono text-xs whitespace-pre-wrap mb-4 ${
-									lightTheme
-										? "bg-[#f5f7fa] border-gray-250 text-gray-800"
-										: "bg-dark-fill-3 border-gray-800 text-gray-300"
-								}`}>
-									{example.outputText}
-								</pre>
-								{example.explanation && (
-									<>
-										<p className={`font-bold text-sm mb-1.5 ${lightTheme ? "text-gray-750" : "text-gray-200"}`}>
-											Explanation {index}
-										</p>
-										<div
-											className={`text-sm ${lightTheme ? "text-gray-700" : "text-gray-300"}`}
-											dangerouslySetInnerHTML={{ __html: renderMarkdown(example.explanation, lightTheme) }}
-										/>
-									</>
+						{/* Translation Selector Dropdown */}
+						<div className="relative">
+							<button
+								onClick={() => setDropdownOpen(!dropdownOpen)}
+								className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold border transition-all duration-250 cursor-pointer active:scale-95 select-none"
+								style={{
+									backgroundColor: "var(--bg-surface)",
+									borderColor: "var(--border-subtle)",
+									color: "var(--text-secondary)",
+								}}
+							>
+								{translating ? (
+									<AiOutlineLoading3Quarters size={12} className="animate-spin text-brand-orange" />
+								) : (
+									<FaGlobe size={12} className={activeLanguage !== "en" ? "text-brand-orange" : ""} />
 								)}
-							</div>
+								<span>
+									{LANGUAGES.find((l) => l.code === activeLanguage)?.name.split(" ")[0]}
+								</span>
+								<svg
+									className={`w-3.5 h-3.5 transition-transform duration-200 ${dropdownOpen ? "rotate-180" : ""}`}
+									fill="none"
+									viewBox="0 0 24 24"
+									stroke="currentColor"
+								>
+									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+								</svg>
+							</button>
+
+							{dropdownOpen && (
+								<>
+									{/* Click backdrop to close */}
+									<div className="fixed inset-0 z-40" onClick={() => setDropdownOpen(false)} />
+									<div
+										className="absolute left-0 mt-2 w-56 rounded-xl border shadow-xl z-50 overflow-hidden animate-fade-in py-1"
+										style={{
+											backgroundColor: "var(--bg-surface)",
+											borderColor: "var(--border-default)",
+										}}
+									>
+										<div className="px-3 py-2 text-[10px] uppercase font-bold tracking-wider border-b mb-1 select-none" style={{ color: "var(--text-muted)", borderColor: "var(--border-subtle)" }}>
+											Translate Problem
+										</div>
+										{LANGUAGES.map((lang) => {
+											const isSelected = activeLanguage === lang.code;
+											return (
+												<button
+													key={lang.code}
+													onClick={async () => {
+														setDropdownOpen(false);
+														await handleTranslate(lang.code);
+													}}
+													className={`w-full text-left px-4 py-2 text-xs font-semibold flex items-center justify-between transition-colors duration-150 cursor-pointer ${
+														isSelected
+															? "text-brand-orange bg-brand-orange/10"
+															: "text-text-primary bg-transparent hover:bg-dark-hover"
+													}`}
+												>
+													<span>{lang.name}</span>
+													{isSelected && <FaCheck size={10} className="text-brand-orange" />}
+												</button>
+											);
+										})}
+									</div>
+								</>
+							)}
+						</div>
+					</div>
+
+					{/* Feedback Actions */}
+					{!loading && currentProblem && (
+						<div className="flex items-center gap-2">
+							{/* Like Button */}
+							<button
+								onClick={handleLike}
+								disabled={updating}
+								className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all duration-200 hover:scale-105 active:scale-95"
+								style={{
+									color: liked ? "var(--brand-orange)" : "var(--text-muted)",
+									backgroundColor: liked ? "color-mix(in srgb, var(--brand-orange) 10%, transparent)" : "transparent",
+									border: liked ? "1px solid color-mix(in srgb, var(--brand-orange) 20%, transparent)" : "1px solid transparent",
+								}}
+							>
+								{liked && !updating && <AiFillLike size={14} className="text-shadow-glow" />}
+								{!liked && !updating && <AiFillLike size={14} />}
+								{updating && <AiOutlineLoading3Quarters size={12} className="animate-spin" />}
+								<span>{currentProblem.likes}</span>
+							</button>
+
+							{/* Dislike Button */}
+							<button
+								onClick={handleDislike}
+								disabled={updating}
+								className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all duration-200 hover:scale-105 active:scale-95"
+								style={{
+									color: disliked ? "var(--color-error)" : "var(--text-muted)",
+									backgroundColor: disliked ? "color-mix(in srgb, var(--color-error) 10%, transparent)" : "transparent",
+									border: disliked ? "1px solid color-mix(in srgb, var(--color-error) 20%, transparent)" : "1px solid transparent",
+								}}
+							>
+								{disliked && !updating && <AiFillDislike size={14} />}
+								{!disliked && !updating && <AiFillDislike size={14} />}
+								{updating && <AiOutlineLoading3Quarters size={12} className="animate-spin" />}
+								<span>{currentProblem.dislikes}</span>
+							</button>
+
+							{/* Star Button */}
+							<button
+								onClick={handleStar}
+								disabled={updating}
+								className="flex items-center p-2 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+								style={{
+									color: starred ? "var(--brand-orange)" : "var(--text-muted)",
+									backgroundColor: starred ? "color-mix(in srgb, var(--brand-orange) 10%, transparent)" : "transparent",
+									border: starred ? "1px solid color-mix(in srgb, var(--brand-orange) 20%, transparent)" : "1px solid transparent",
+								}}
+							>
+								{starred && !updating && <AiFillStar size={16} />}
+								{!starred && !updating && <TiStarOutline size={18} />}
+								{updating && <AiOutlineLoading3Quarters size={12} className="animate-spin" />}
+							</button>
+						</div>
+					)}
+				</div>
+
+				{/* Problem Statement Markdown */}
+				<div className="prose prose-invert max-w-none prose-headings:text-text-primary prose-headings:font-semibold prose-headings:mt-10 prose-headings:mb-4 prose-p:text-text-secondary prose-p:leading-relaxed prose-p:text-base prose-strong:text-text-primary prose-strong:font-semibold select-text">
+					<div dangerouslySetInnerHTML={{ __html: renderMarkdown(problem.problemStatement, false) }} />
+				</div>
+
+				{/* Input Format */}
+				{problem.inputFormat && (
+					<div className="space-y-3 pt-6 border-t border-border-subtle" style={{ borderColor: "var(--border-subtle)" }}>
+						<h3 className="text-lg font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>Input Format</h3>
+						<div className="prose prose-invert max-w-none prose-p:text-text-secondary prose-p:leading-relaxed select-text">
+							<div dangerouslySetInnerHTML={{ __html: renderMarkdown(problem.inputFormat, false) }} />
+						</div>
+					</div>
+				)}
+
+				{/* Constraints */}
+				{problem.constraints && (
+					<div className="space-y-3 pt-6 border-t border-border-subtle" style={{ borderColor: "var(--border-subtle)" }}>
+						<h3 className="text-lg font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>Constraints</h3>
+						<div className="prose prose-invert max-w-none prose-p:text-text-secondary prose-p:leading-relaxed select-text">
+							<div dangerouslySetInnerHTML={{ __html: renderMarkdown(problem.constraints, false) }} />
+						</div>
+					</div>
+				)}
+
+				{/* Output Format */}
+				{problem.outputFormat && (
+					<div className="space-y-3 pt-6 border-t border-border-subtle" style={{ borderColor: "var(--border-subtle)" }}>
+						<h3 className="text-lg font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>Output Format</h3>
+						<div className="prose prose-invert max-w-none prose-p:text-text-secondary prose-p:leading-relaxed select-text">
+							<div dangerouslySetInnerHTML={{ __html: renderMarkdown(problem.outputFormat, false) }} />
+						</div>
+					</div>
+				)}
+
+				{/* Examples / Samples Section */}
+				<div className="space-y-8 pt-8 border-t border-border-subtle" style={{ borderColor: "var(--border-subtle)" }}>
+					{problem.examples.filter(ex => !!ex.isSample).map((example, index) => (
+						<ExampleBlock key={example.id || index} example={example} index={index} />
+					))}
+				</div>
+
+				{/* Tags Badges */}
+				{problem.tags && problem.tags.length > 0 && (
+					<div className="flex flex-wrap gap-2 mt-8 pt-6 border-t select-none" style={{ borderColor: "var(--border-subtle)" }}>
+						{problem.tags.map((tag, idx) => (
+							<span
+								key={idx}
+								className="px-3 py-1 rounded-lg text-xs font-semibold font-mono"
+								style={{
+									color: "var(--brand-orange)",
+									backgroundColor: "color-mix(in srgb, var(--brand-orange) 8%, transparent)",
+									border: "1px solid color-mix(in srgb, var(--brand-orange) 15%, transparent)",
+								}}
+							>
+								{tag}
+							</span>
 						))}
 					</div>
+				)}
+			</div>
+		</div>
+	);
+};
 
-					{/* Tags badges */}
-					{problem.tags && problem.tags.length > 0 && (
-						<div className={`flex flex-wrap gap-2 mt-8 pt-4 border-t select-none ${
-							lightTheme ? "border-gray-200" : "border-gray-800/60"
-						}`}>
-							{problem.tags.map((tag, idx) => (
-								<span
-									key={idx}
-									className={
-										lightTheme
-											? "bg-[#edf4eb] text-[#1ba94c] border border-[#d2e7d7] px-2.5 py-0.5 rounded text-xs font-semibold font-mono"
-											: "bg-[#3a442e] text-[#8bcd52] border border-[#4d6138] px-2.5 py-0.5 rounded text-xs font-semibold"
-									}
-								>
-									{lightTheme ? `.${tag.toLowerCase()}` : tag}
-								</span>
-							))}
-						</div>
-					)}
+// Sleek Copyable Example Block component
+const ExampleBlock: React.FC<{ example: any; index: number }> = ({ example, index }) => {
+	const [copiedInput, setCopiedInput] = useState(false);
+	const [copiedOutput, setCopiedOutput] = useState(false);
+
+	const handleCopy = async (text: string, type: "input" | "output") => {
+		try {
+			await navigator.clipboard.writeText(text);
+			if (type === "input") {
+				setCopiedInput(true);
+				setTimeout(() => setCopiedInput(false), 2000);
+			} else {
+				setCopiedOutput(true);
+				setTimeout(() => setCopiedOutput(false), 2000);
+			}
+		} catch (err) {
+			console.error("Failed to copy text:", err);
+		}
+	};
+
+	return (
+		<div className="space-y-6">
+			{/* Sample Input */}
+			<div className="space-y-2">
+				<p className="text-sm font-semibold tracking-tight" style={{ color: "var(--text-secondary)" }}>
+					Sample Input {index}
+				</p>
+				<div className="relative group rounded-xl overflow-hidden border transition-all duration-200 hover:border-border-strong" style={{ backgroundColor: "var(--bg-base)", borderColor: "var(--border-default)" }}>
+					<button
+						onClick={() => handleCopy(example.inputText, "input")}
+						className="absolute top-3.5 right-3.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow"
+						style={{
+							backgroundColor: "var(--bg-surface)",
+							border: "1px solid var(--border-subtle)",
+							color: "var(--text-secondary)",
+						}}
+					>
+						{copiedInput ? (
+							<>
+								<FaCheck size={10} style={{ color: "var(--color-success)" }} />
+								<span style={{ color: "var(--color-success)" }}>Copied!</span>
+							</>
+						) : (
+							<span className="opacity-80">Copy</span>
+						)}
+					</button>
+					<pre className="p-5 font-mono text-sm leading-6 whitespace-pre-wrap select-text" style={{ color: "var(--text-primary)" }}>
+						{example.inputText}
+					</pre>
 				</div>
 			</div>
+
+			{/* Sample Output */}
+			<div className="space-y-2">
+				<p className="text-sm font-semibold tracking-tight" style={{ color: "var(--text-secondary)" }}>
+					Sample Output {index}
+				</p>
+				<div className="relative group rounded-xl overflow-hidden border transition-all duration-200 hover:border-border-strong" style={{ backgroundColor: "var(--bg-base)", borderColor: "var(--border-default)" }}>
+					<button
+						onClick={() => handleCopy(example.outputText, "output")}
+						className="absolute top-3.5 right-3.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow"
+						style={{
+							backgroundColor: "var(--bg-surface)",
+							border: "1px solid var(--border-subtle)",
+							color: "var(--text-secondary)",
+						}}
+					>
+						{copiedOutput ? (
+							<>
+								<FaCheck size={10} style={{ color: "var(--color-success)" }} />
+								<span style={{ color: "var(--color-success)" }}>Copied!</span>
+							</>
+						) : (
+							<span className="opacity-80">Copy</span>
+						)}
+					</button>
+					<pre className="p-5 font-mono text-sm leading-6 whitespace-pre-wrap select-text" style={{ color: "var(--text-primary)" }}>
+						{example.outputText}
+					</pre>
+				</div>
+			</div>
+
+			{/* Explanation */}
+			{example.explanation && (
+				<div className="space-y-2">
+					<p className="text-sm font-semibold tracking-tight" style={{ color: "var(--text-secondary)" }}>
+						Explanation {index}
+					</p>
+					<div
+						className="text-sm leading-relaxed"
+						style={{ color: "var(--text-secondary)" }}
+						dangerouslySetInnerHTML={{ __html: renderMarkdown(example.explanation, false) }}
+					/>
+				</div>
+			)}
 		</div>
 	);
 };
@@ -372,14 +515,10 @@ function renderMarkdown(text: string, lightTheme: boolean): string {
 	// Italic
 	html = html.replace(/\*(.*?)\*/g, "<em>$1</em>");
 	// Inline Code
-	const inlineClass = lightTheme
-		? "bg-gray-100 px-1.5 py-0.5 rounded font-mono text-xs text-red-650"
-		: "bg-dark-fill-3 px-1.5 py-0.5 rounded font-mono text-xs text-red-400";
+	const inlineClass = "bg-bg-dark-layer-1 text-brand-orange px-1.5 py-0.5 rounded text-sm font-mono";
 	html = html.replace(/`(.*?)`/g, `<code class='${inlineClass}'>$1</code>`);
 	// Code Blocks
-	const preClass = lightTheme
-		? "bg-gray-50 p-3 rounded-lg font-mono text-xs border border-gray-200 overflow-auto my-2.5 whitespace-pre text-gray-750"
-		: "bg-black/45 p-3 rounded-lg font-mono text-xs border border-gray-850 overflow-auto my-2.5 whitespace-pre text-gray-300";
+	const preClass = "bg-black/45 p-3 rounded-lg font-mono text-xs border border-gray-850 overflow-auto my-2.5 whitespace-pre text-gray-300";
 	html = html.replace(/```([\s\S]*?)```/g, `<pre class='${preClass}'>$1</pre>`);
 	// Links
 	html = html.replace(/\[(.*?)\]\((.*?)\)/g, "<a href='$2' target='_blank' class='text-blue-600 hover:text-blue-500 underline transition'>$1</a>");
@@ -409,10 +548,10 @@ function useGetCurrentProblem(problemId: string) {
 				setCurrentProblem({ id: docSnap.id, ...problem } as DBProblem);
 				setProblemDifficultyClass(
 					problem.difficulty === "Easy"
-						? "bg-olive text-olive"
+						? "bg-bc-success/15 text-bc-success"
 						: problem.difficulty === "Medium"
-						? "bg-dark-yellow text-dark-yellow"
-						: " bg-dark-pink text-dark-pink"
+						? "bg-bc-warning/15 text-bc-warning"
+						: "bg-bc-error/15 text-bc-error"
 				);
 			}
 			setLoading(false);

@@ -1,102 +1,299 @@
-import React, { useState, useEffect } from "react";
-import { FaSearch, FaTimes, FaSpinner } from "react-icons/fa";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { FaSearch, FaTimes, FaSpinner, FaHeart, FaRegHeart, FaFire, FaFolder, FaHistory } from "react-icons/fa";
 
 interface GifPickerProps {
 	onSelect: (url: string) => void;
 	onClose: () => void;
 }
 
-const DEFAULT_GIFS = [
-	"https://media.giphy.com/media/3o7qE1YN7aBOFPRw8E/giphy.gif", // Coding
-	"https://media.giphy.com/media/13HgwGsXF0aiGY/giphy.gif", // Typing
-	"https://media.giphy.com/media/2IudUHdI075HL02tQH/giphy.gif", // Fast typing
-	"https://media.giphy.com/media/ZVik7pBtu9RlJfXIqV/giphy.gif", // Debugging
-	"https://media.giphy.com/media/t372ypP6E79EQ/giphy.gif", // Matrix
-	"https://media.giphy.com/media/Q9aXC15zo91A6A6q99/giphy.gif", // Fire IT
-	"https://media.giphy.com/media/9KCPkAcRqT9Df0ed5d/giphy.gif", // Mind blown
-	"https://media.giphy.com/media/initial/giphy.gif", // Developer
+const CATEGORIES = [
+	{ id: "coding", label: "💻 Coding", query: "coding developer" },
+	{ id: "typing", label: "⌨️ Typing", query: "typing keyboard" },
+	{ id: "debugging", label: "🐛 Debugging", query: "debugging computer" },
+	{ id: "mindblown", label: "🤯 Mindblown", query: "mind blown" },
+	{ id: "congrats", label: "🎉 Congrats", query: "congrats celebration" },
+	{ id: "funny", label: "😂 Funny", query: "funny meme" },
+	{ id: "sad", label: "😢 Sad", query: "sad crying" },
+	{ id: "fire", label: "🔥 Fire", query: "fire coding" },
 ];
 
+const GIPHY_API_KEY = "dc6zaTOxFJmzC"; // Public beta API key
+
 const GifPicker: React.FC<GifPickerProps> = ({ onSelect, onClose }) => {
+	const [activeTab, setActiveTab] = useState<"trending" | "categories" | "favorites" | "recent">("trending");
 	const [searchQuery, setSearchQuery] = useState("");
-	const [gifs, setGifs] = useState<string[]>(DEFAULT_GIFS);
+	const [gifs, setGifs] = useState<string[]>([]);
 	const [loading, setLoading] = useState(false);
+	const [favorites, setFavorites] = useState<string[]>([]);
+	const [recents, setRecents] = useState<string[]>([]);
+	const [focusedIdx, setFocusedIdx] = useState<number>(-1);
 
+	const containerRef = useRef<HTMLDivElement>(null);
+	const gridRef = useRef<HTMLDivElement>(null);
+
+	// Load favorites & recents from localStorage on mount
 	useEffect(() => {
-		if (searchQuery.trim() === "") {
-			setGifs(DEFAULT_GIFS);
-			return;
+		try {
+			const favs = localStorage.getItem("beastcode_favorite_gifs");
+			if (favs) setFavorites(JSON.parse(favs));
+
+			const recs = localStorage.getItem("beastcode_recent_gifs");
+			if (recs) setRecents(JSON.parse(recs));
+		} catch (e) {
+			console.error("Error reading localStorage:", e);
 		}
+	}, []);
 
-		const delayDebounce = setTimeout(async () => {
-			setLoading(true);
-			try {
-				const apiKey = "dc6zaTOxFJmzC"; // Giphy Public Beta API key
-				const res = await fetch(
-					`https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${encodeURIComponent(
-						searchQuery
-					)}&limit=12&rating=g`
-				);
-				const json = await res.json();
-				if (json.data && json.data.length > 0) {
-					const urls = json.data.map((item: any) => item.images.fixed_height.url);
-					setGifs(urls);
-				} else {
-					setGifs([]);
-				}
-			} catch (e) {
-				console.error("Giphy Search error:", e);
-				// Fallback to filtering our preselected list
-				const filtered = DEFAULT_GIFS.filter((gif) =>
-					gif.toLowerCase().includes(searchQuery.toLowerCase())
-				);
-				setGifs(filtered);
-			} finally {
-				setLoading(false);
+	// Handle saving favorites
+	const toggleFavorite = (url: string, e: React.MouseEvent) => {
+		e.stopPropagation();
+		let updated: string[];
+		if (favorites.includes(url)) {
+			updated = favorites.filter((fav) => fav !== url);
+		} else {
+			updated = [url, ...favorites].slice(0, 50); // limit to 50
+		}
+		setFavorites(updated);
+		localStorage.setItem("beastcode_favorite_gifs", JSON.stringify(updated));
+	};
+
+	// Save recent GIF selection
+	const saveRecent = (url: string) => {
+		const updated = [url, ...recents.filter((r) => r !== url)].slice(0, 30);
+		setRecents(updated);
+		localStorage.setItem("beastcode_recent_gifs", JSON.stringify(updated));
+	};
+
+	// Fetch GIF search or trending
+	const fetchGifs = useCallback(async (queryStr: string = "") => {
+		setLoading(true);
+		try {
+			const isSearch = queryStr.trim().length > 0;
+			const endpoint = isSearch ? "search" : "trending";
+			const params = isSearch
+				? `&q=${encodeURIComponent(queryStr.trim())}&limit=24&rating=g`
+				: `&limit=24&rating=g`;
+
+			const res = await fetch(`https://api.giphy.com/v1/gifs/${endpoint}?api_key=${GIPHY_API_KEY}${params}`);
+			const json = await res.json();
+			if (json.data && json.data.length > 0) {
+				const urls = json.data.map((item: any) => item.images.fixed_height.url);
+				setGifs(urls);
+			} else {
+				setGifs([]);
 			}
-		}, 600);
+		} catch (e) {
+			console.error("Giphy API error:", e);
+			setGifs([]);
+		} finally {
+			setLoading(false);
+		}
+	}, []);
 
-		return () => clearTimeout(delayDebounce);
-	}, [searchQuery]);
+	// Trigger fetch based on search query or tab change
+	useEffect(() => {
+		if (searchQuery.trim() !== "") {
+			const delayDebounce = setTimeout(() => {
+				fetchGifs(searchQuery);
+			}, 400);
+			return () => clearTimeout(delayDebounce);
+		} else {
+			if (activeTab === "trending") {
+				fetchGifs();
+			} else if (activeTab === "favorites") {
+				setGifs(favorites);
+			} else if (activeTab === "recent") {
+				setGifs(recents);
+			}
+		}
+	}, [searchQuery, activeTab, fetchGifs, favorites, recents]);
+
+	// Close on click outside
+	useEffect(() => {
+		const handleClickOutside = (e: MouseEvent) => {
+			if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+				onClose();
+			}
+		};
+		document.addEventListener("mousedown", handleClickOutside);
+		return () => document.removeEventListener("mousedown", handleClickOutside);
+	}, [onClose]);
+
+	// Keyboard accessibility navigation
+	useEffect(() => {
+		const handleKeyDown = (e: KeyboardEvent) => {
+			if (e.key === "Escape") {
+				onClose();
+			} else if (e.key === "ArrowRight") {
+				setFocusedIdx((prev) => (prev < gifs.length - 1 ? prev + 1 : prev));
+			} else if (e.key === "ArrowLeft") {
+				setFocusedIdx((prev) => (prev > 0 ? prev - 1 : prev));
+			} else if (e.key === "ArrowDown") {
+				setFocusedIdx((prev) => (prev + 2 < gifs.length ? prev + 2 : prev));
+			} else if (e.key === "ArrowUp") {
+				setFocusedIdx((prev) => (prev - 2 >= 0 ? prev - 2 : prev));
+			} else if (e.key === "Enter" && focusedIdx >= 0) {
+				const selected = gifs[focusedIdx];
+				if (selected) {
+					saveRecent(selected);
+					onSelect(selected);
+				}
+			}
+		};
+		window.addEventListener("keydown", handleKeyDown);
+		return () => window.removeEventListener("keydown", handleKeyDown);
+	}, [gifs, focusedIdx, onSelect, onClose, recents]);
+
+	// Set focus style on keyboard selection
+	useEffect(() => {
+		if (focusedIdx >= 0 && gridRef.current) {
+			const activeEl = gridRef.current.children[focusedIdx] as HTMLElement;
+			if (activeEl) {
+				activeEl.scrollIntoView({ block: "nearest" });
+			}
+		}
+	}, [focusedIdx]);
 
 	return (
-		<div className='absolute z-50 bg-white dark:bg-dark-layer-1 border border-slate-200 dark:border-slate-800/60 rounded-2xl shadow-xl dark:shadow-none p-4 w-72 max-w-sm right-0 mt-2 animate-fade-in'>
-			<div className='flex justify-between items-center mb-3 select-none'>
-				<span className='text-xs font-bold text-slate-700 dark:text-gray-300 uppercase tracking-wider'>GIF Library</span>
-				<button onClick={onClose} className='text-slate-400 dark:text-gray-500 hover:text-slate-600 dark:hover:text-white transition'>
+		<div
+			ref={containerRef}
+			className="absolute z-50 rounded-2xl shadow-2xl p-4 w-80 max-w-sm right-0 mt-2 animate-fade-in border border-[var(--border-strong)] glass"
+			style={{ background: "var(--bg-elevated)" }}
+		>
+			{/* Header */}
+			<div className="flex justify-between items-center mb-3 select-none">
+				<span className="text-xs font-black tracking-widest text-[var(--text-primary)] uppercase">
+					GIF Library
+				</span>
+				<button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition p-1 rounded-full hover:bg-[var(--bg-hover)]">
 					<FaTimes size={13} />
 				</button>
 			</div>
 
-			<div className='relative flex items-center bg-slate-50 dark:bg-dark-fill-3 border border-slate-200 dark:border-slate-800/60 rounded-xl px-3 py-1.5 mb-3 hover:border-slate-300 dark:hover:border-slate-700 transition'>
-				<FaSearch className='text-slate-400 dark:text-gray-500 mr-2 shrink-0' size={11} />
+			{/* Search */}
+			<div className="relative flex items-center rounded-xl px-3 py-2 mb-3 transition" style={{ background: "var(--bg-dark-fill-3)", border: "1px solid var(--border-default)" }}>
+				<FaSearch className="text-[var(--text-muted)] mr-2 shrink-0" size={12} />
 				<input
-					type='text'
+					type="text"
 					value={searchQuery}
-					onChange={(e) => setSearchQuery(e.target.value)}
-					placeholder='Search GIFs...'
-					className='bg-transparent text-xs text-slate-800 dark:text-gray-200 outline-none flex-1 placeholder:text-slate-400 dark:placeholder:text-gray-600 !border-0 !p-0 !ring-0 !shadow-none'
+					onChange={(e) => {
+						setSearchQuery(e.target.value);
+						if (focusedIdx !== -1) setFocusedIdx(-1);
+					}}
+					placeholder="Search GIFs..."
+					className="bg-transparent text-xs text-[var(--text-primary)] outline-none flex-1 placeholder:text-[var(--text-muted)] !border-0 !p-0 !ring-0 !shadow-none"
 				/>
-				{loading && <FaSpinner className='animate-spin text-brand-orange shrink-0' size={11} />}
-			</div>
-
-			<div className='grid grid-cols-2 gap-2 max-h-48 overflow-y-auto scrollbar-thin pr-0.5'>
-				{gifs.map((url, idx) => (
-					<div
-						key={idx}
-						onClick={() => onSelect(url)}
-						className='relative aspect-video rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800/60 cursor-pointer hover:border-brand-orange/60 hover:scale-102 transition duration-200 group bg-black/10 dark:bg-black/40'
+				{searchQuery && (
+					<button
+						onClick={() => setSearchQuery("")}
+						className="text-[var(--text-muted)] hover:text-[var(--text-primary)] mr-1"
 					>
-						<img src={url} alt='GIF' className='w-full h-full object-cover' />
-					</div>
-				))}
-
-				{!loading && gifs.length === 0 && (
-					<p className='col-span-2 text-center text-[10px] text-slate-500 dark:text-gray-500 py-6 italic'>
-						No GIFs found. Try another search.
-					</p>
+						<FaTimes size={10} />
+					</button>
 				)}
+				{loading && <FaSpinner className="animate-spin text-[var(--brand-orange)] shrink-0" size={12} />}
 			</div>
+
+			{/* Tabs */}
+			{searchQuery.trim() === "" && (
+				<div className="flex justify-between border-b border-[var(--border-subtle)] pb-2 mb-3 text-[10px] font-bold text-[var(--text-muted)] select-none">
+					<button
+						onClick={() => { setActiveTab("trending"); setFocusedIdx(-1); }}
+						className={`flex items-center gap-1 transition ${activeTab === "trending" ? "text-[var(--brand-orange)] border-b-2 border-[var(--brand-orange)] pb-2 -mb-2.5" : "hover:text-[var(--text-primary)]"}`}
+					>
+						<FaFire size={10} /> Trending
+					</button>
+					<button
+						onClick={() => { setActiveTab("categories"); setFocusedIdx(-1); }}
+						className={`flex items-center gap-1 transition ${activeTab === "categories" ? "text-[var(--brand-orange)] border-b-2 border-[var(--brand-orange)] pb-2 -mb-2.5" : "hover:text-[var(--text-primary)]"}`}
+					>
+						<FaFolder size={10} /> Categories
+					</button>
+					<button
+						onClick={() => { setActiveTab("favorites"); setFocusedIdx(-1); }}
+						className={`flex items-center gap-1 transition ${activeTab === "favorites" ? "text-[var(--brand-orange)] border-b-2 border-[var(--brand-orange)] pb-2 -mb-2.5" : "hover:text-[var(--text-primary)]"}`}
+					>
+						<FaHeart size={10} /> Favorites
+					</button>
+					<button
+						onClick={() => { setActiveTab("recent"); setFocusedIdx(-1); }}
+						className={`flex items-center gap-1 transition ${activeTab === "recent" ? "text-[var(--brand-orange)] border-b-2 border-[var(--brand-orange)] pb-2 -mb-2.5" : "hover:text-[var(--text-primary)]"}`}
+					>
+						<FaHistory size={10} /> Recents
+					</button>
+				</div>
+			)}
+
+			{/* Categories list */}
+			{activeTab === "categories" && searchQuery.trim() === "" ? (
+				<div className="grid grid-cols-2 gap-2 max-h-56 overflow-y-auto scrollbar-thin pr-1 select-none">
+					{CATEGORIES.map((cat) => (
+						<button
+							key={cat.id}
+							onClick={() => {
+								setSearchQuery(cat.query);
+								fetchGifs(cat.query);
+							}}
+							className="px-3 py-2.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] text-xs text-left font-bold text-[var(--text-primary)] transition hover:border-[var(--brand-orange)]/40 shadow-sm"
+						>
+							{cat.label}
+						</button>
+					))}
+				</div>
+			) : (
+				/* Grid of GIFs */
+				<div
+					ref={gridRef}
+					className="grid grid-cols-2 gap-2.5 max-h-56 overflow-y-auto scrollbar-thin pr-1"
+				>
+					{gifs.map((url, idx) => {
+						const isFav = favorites.includes(url);
+						const isFocused = idx === focusedIdx;
+
+						return (
+							<div
+								key={idx}
+								onClick={() => {
+									saveRecent(url);
+									onSelect(url);
+								}}
+								onMouseEnter={() => setFocusedIdx(idx)}
+								className={`relative aspect-video rounded-xl overflow-hidden cursor-pointer bg-[var(--bg-dark-fill-3)] border transition-all duration-200 group ${
+									isFocused ? "border-[var(--brand-orange)] scale-[1.02] shadow-md shadow-[var(--brand-glow)]" : "border-[var(--border-subtle)] hover:border-[var(--border-strong)]"
+								}`}
+							>
+								<img
+									src={url}
+									alt="GIF"
+									className="w-full h-full object-cover rounded-xl"
+									loading="lazy"
+								/>
+
+								{/* Hover actions */}
+								<div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition duration-150 z-10">
+									<button
+										onClick={(e) => toggleFavorite(url, e)}
+										className="p-1.5 rounded-lg backdrop-blur-md bg-black/45 text-white hover:scale-110 transition shadow-md"
+										title={isFav ? "Remove from Favorites" : "Add to Favorites"}
+									>
+										{isFav ? <FaHeart className="text-red-500" size={11} /> : <FaRegHeart size={11} />}
+									</button>
+								</div>
+							</div>
+						);
+					})}
+
+					{!loading && gifs.length === 0 && (
+						<div className="col-span-2 text-center text-xs text-[var(--text-muted)] py-10 italic">
+							{activeTab === "favorites"
+								? "No favorite GIFs saved yet. Click the heart on any GIF to save it!"
+								: activeTab === "recent"
+								? "No recently used GIFs found."
+								: "No GIFs found matching search query."}
+						</div>
+					)}
+				</div>
+			)}
 		</div>
 	);
 };

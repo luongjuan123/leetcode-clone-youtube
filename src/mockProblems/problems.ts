@@ -3,7 +3,6 @@ export type Problem = {
 	title: string;
 	difficulty: string;
 	category: string;
-	order: number;
 	videoId?: string;
 };
 
@@ -13,7 +12,6 @@ export const problems: Problem[] = [
 		title: "Two Sum",
 		difficulty: "Easy",
 		category: "Array",
-		order: 1,
 		videoId: "8-k1C6ehKuw",
 	},
 	{
@@ -21,7 +19,6 @@ export const problems: Problem[] = [
 		title: "Reverse Linked List",
 		difficulty: "Hard",
 		category: "Linked List",
-		order: 2,
 		videoId: "",
 	},
 	{
@@ -29,7 +26,6 @@ export const problems: Problem[] = [
 		title: "Jump Game",
 		difficulty: "Medium",
 		category: "Dynamic Programming",
-		order: 3,
 		videoId: "",
 	},
 	{
@@ -37,7 +33,6 @@ export const problems: Problem[] = [
 		title: "Valid Parentheses",
 		difficulty: "Easy",
 		category: "Stack",
-		order: 4,
 		videoId: "xty7fr-k0TU",
 	},
 	{
@@ -45,7 +40,6 @@ export const problems: Problem[] = [
 		title: "Search a 2D Matrix",
 		difficulty: "Medium",
 		category: "Binary Search",
-		order: 5,
 		videoId: "ZfFl4torNg4",
 	},
 	{
@@ -53,7 +47,6 @@ export const problems: Problem[] = [
 		title: "Container With Most Water",
 		difficulty: "Medium",
 		category: "Two Pointers",
-		order: 6,
 		videoId: "",
 	},
 	{
@@ -61,7 +54,6 @@ export const problems: Problem[] = [
 		title: "Merge Intervals",
 		difficulty: "Medium",
 		category: "intervals",
-		order: 7,
 		videoId: "",
 	},
 	{
@@ -69,7 +61,6 @@ export const problems: Problem[] = [
 		title: "Maximum Depth of Binary Tree",
 		difficulty: "Easy",
 		category: "Tree",
-		order: 8,
 		videoId: "4qYTqOiRMoM",
 	},
 	{
@@ -77,7 +68,6 @@ export const problems: Problem[] = [
 		title: "Best Time to Buy and Sell Stock",
 		difficulty: "Easy",
 		category: "Array",
-		order: 9,
 		videoId: "",
 	},
 	{
@@ -85,7 +75,6 @@ export const problems: Problem[] = [
 		title: "Subsets",
 		difficulty: "Medium",
 		category: "Backtracking",
-		order: 10,
 		videoId: "",
 	},
 ];

@@ -4,7 +4,8 @@ import { useRouter } from "next/router";
 import { useAdmin } from "@/hooks/useAdmin";
 import Topbar from "@/components/Topbar/Topbar";
 import { collection, getDocs, doc, getDoc, setDoc, deleteDoc, query, orderBy, writeBatch } from "firebase/firestore";
-import { firestore } from "@/firebase/firebase";
+import { firestore, auth } from "@/firebase/firebase";
+import { getFriendlyErrorMessage } from "@/utils/errorFilter";
 import { problems as staticProblems } from "@/utils/problems";
 import { problems as mockProblems } from "@/mockProblems/problems";
 import { FaEdit, FaTrash, FaPlus, FaSync, FaDatabase, FaSpinner } from "react-icons/fa";
@@ -12,9 +13,8 @@ import { FaEdit, FaTrash, FaPlus, FaSync, FaDatabase, FaSpinner } from "react-ic
 interface ProblemListItem {
 	id: string;
 	title: string;
-	category: string;
+	tags: string[];
 	difficulty: string;
-	order: number;
 	isStatic: boolean;
 }
 
@@ -28,6 +28,49 @@ const AdminDashboard: React.FC = () => {
 	const [problemToDelete, setProblemToDelete] = useState<string | null>(null);
 
 	const [statusRibbon, setStatusRibbon] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
+
+	// Bulk edit states
+	const [selectedProblemIds, setSelectedProblemIds] = useState<string[]>([]);
+	const [showBulkModal, setShowBulkModal] = useState(false);
+	const [bulkProfile, setBulkProfile] = useState("normal");
+	const [bulkTimeoutMs, setBulkTimeoutMs] = useState(5000);
+	const [bulkMemoryLimitMb, setBulkMemoryLimitMb] = useState(256);
+	const [bulkMaxOutputSizeChars, setBulkMaxOutputSizeChars] = useState(65536);
+	const [bulkCpuCount, setBulkCpuCount] = useState(1);
+	const [bulkDiskLimitMb, setBulkDiskLimitMb] = useState(50);
+	const [bulkProcessLimit, setBulkProcessLimit] = useState(15);
+	const [bulkSubmitting, setBulkSubmitting] = useState(false);
+
+	const handleApplyBulkEdit = async () => {
+		if (selectedProblemIds.length === 0) return;
+		setBulkSubmitting(true);
+		triggerStatusRibbon("info", `Applying execution policy to ${selectedProblemIds.length} problems...`, 0);
+		try {
+			const batch = writeBatch(firestore);
+			selectedProblemIds.forEach((pid) => {
+				const docRef = doc(firestore, "problems", pid);
+				batch.update(docRef, {
+					executionProfile: bulkProfile,
+					customTimeoutMs: Number(bulkTimeoutMs) || 5000,
+					customMemoryLimitMb: Number(bulkMemoryLimitMb) || 256,
+					customMaxOutputSizeChars: Number(bulkMaxOutputSizeChars) || 65536,
+					customCpuCount: Number(bulkCpuCount) || 1,
+					customDiskLimitMb: Number(bulkDiskLimitMb) || 50,
+					customProcessLimit: Number(bulkProcessLimit) || 15,
+				});
+			});
+			await batch.commit();
+			triggerStatusRibbon("success", `Successfully updated execution policy for ${selectedProblemIds.length} problem(s).`);
+			setSelectedProblemIds([]);
+			setShowBulkModal(false);
+			fetchProblems();
+		} catch (error: any) {
+			console.error("Bulk edit error:", error);
+			triggerStatusRibbon("error", getFriendlyErrorMessage(error, "Failed to apply bulk execution policy. Please try again."));
+		} finally {
+			setBulkSubmitting(false);
+		}
+	};
 
 	const triggerStatusRibbon = (type: "success" | "error" | "info", message: string, duration = 4000) => {
 		setStatusRibbon({ type, message });
@@ -48,7 +91,7 @@ const AdminDashboard: React.FC = () => {
 		setLoading(true);
 		try {
 			// Get problems in Firestore
-			const q = query(collection(firestore, "problems"), orderBy("order", "asc"));
+			const q = query(collection(firestore, "problems"));
 			const querySnapshot = await getDocs(q);
 			const dbProblems: Record<string, any> = {};
 			querySnapshot.forEach((doc) => {
@@ -59,18 +102,20 @@ const AdminDashboard: React.FC = () => {
 
 			// 1. Add all problems in DB
 			Object.keys(dbProblems).forEach((id) => {
+				const dbTags = dbProblems[id].tags && Array.isArray(dbProblems[id].tags) && dbProblems[id].tags.length > 0
+					? dbProblems[id].tags
+					: (dbProblems[id].category ? [dbProblems[id].category] : ["Array"]);
 				list.push({
 					id,
 					title: dbProblems[id].title || id,
-					category: dbProblems[id].category || "Array",
+					tags: dbTags,
 					difficulty: dbProblems[id].difficulty || "Easy",
-					order: Number(dbProblems[id].order) || 0,
 					isStatic: id in staticProblems,
 				});
 			});
 
-			// Sort by order
-			list.sort((a, b) => a.order - b.order);
+			// Sort by title
+			list.sort((a, b) => a.title.localeCompare(b.title));
 			setProblems(list);
 		} catch (error: any) {
 			console.error("Error fetching problems:", error);
@@ -120,9 +165,8 @@ const AdminDashboard: React.FC = () => {
 				const docData = {
 					id,
 					title: staticProb.title,
-					category: mockProb?.category || "Array",
+					tags: mockProb?.category ? [mockProb.category] : ["Array"],
 					difficulty: mockProb?.difficulty || "Easy",
-					order: Number(staticProb.order) || Number(mockProb?.order) || 0,
 					videoId: mockProb?.videoId || "",
 					likes: 0,
 					dislikes: 0,
@@ -160,58 +204,26 @@ const AdminDashboard: React.FC = () => {
 	 */
 	const handleRecountSolved = async () => {
 		setRecounting(true);
-		triggerStatusRibbon("info", "Recounting solved stats for all users...", 0);
+		triggerStatusRibbon("info", "Recounting and seeding solved stats for all users server-side...", 0);
 		try {
-			// 1. Collect all valid problem IDs (Firestore only)
-			const problemsSnap = await getDocs(collection(firestore, "problems"));
-			const validIds = new Set<string>();
-			problemsSnap.forEach((docSnap) => validIds.add(docSnap.id));
+			const idToken = await auth.currentUser?.getIdToken();
+			if (!idToken) throw new Error("Please log in again.");
 
-			// 2. Fetch every user
-			const usersSnap = await getDocs(collection(firestore, "users"));
+			const res = await fetch("/api/recount-solved", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ idToken }),
+			});
+			const data = await res.json();
+			if (!res.ok) throw new Error(data.error || "Recount failed");
 
-			// 3. Batch-write cleaned solvedProblems (Firestore batches max 500 ops)
-			const BATCH_SIZE = 400;
-			let batch = writeBatch(firestore);
-			let opsInBatch = 0;
-			let usersUpdated = 0;
-			let removedTotal = 0;
-
-			for (const userDoc of usersSnap.docs) {
-				const data = userDoc.data();
-				const stored: string[] = data.solvedProblems || [];
-				const cleaned = stored.filter((id) => validIds.has(id));
-
-				if (cleaned.length !== stored.length) {
-					removedTotal += stored.length - cleaned.length;
-					batch.update(doc(firestore, "users", userDoc.id), {
-						solvedProblems: cleaned,
-					});
-					usersUpdated++;
-					opsInBatch++;
-					if (opsInBatch >= BATCH_SIZE) {
-						await batch.commit();
-						batch = writeBatch(firestore);
-						opsInBatch = 0;
-					}
-				}
-			}
-
-			if (opsInBatch > 0) {
-				await batch.commit();
-			}
-
-			if (usersUpdated > 0) {
-				triggerStatusRibbon(
-					"success",
-					`Done! Cleaned ${removedTotal} stale solved record(s) across ${usersUpdated} user(s). Valid problems in DB: ${validIds.size}`
-				);
-			} else {
-				triggerStatusRibbon("info", `All solved records are already up-to-date. Valid problems in DB: ${validIds.size}`);
-			}
+			triggerStatusRibbon(
+				"success",
+				`Done! Recounted, seeded ratings/countries, and updated stats for ${data.usersUpdated} user(s). Valid problems in DB: ${data.validProblemCount}`
+			);
 		} catch (error: any) {
 			console.error("Recount error:", error);
-			triggerStatusRibbon("error", "Recount failed: " + error.message);
+			triggerStatusRibbon("error", getFriendlyErrorMessage(error, "Recount failed. Please try again."));
 		} finally {
 			setRecounting(false);
 		}
@@ -280,6 +292,12 @@ const AdminDashboard: React.FC = () => {
 					</div>
 
 					<div className='flex flex-wrap gap-3'>
+						<Link
+							href='/admin/contests'
+							className='flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition duration-200 shadow-md'
+						>
+							Manage Contests
+						</Link>
 						<button
 							onClick={handleRecountSolved}
 							disabled={recounting}
@@ -297,6 +315,15 @@ const AdminDashboard: React.FC = () => {
 							<FaSync className={syncing ? "animate-spin" : ""} />
 							Sync Static Problems
 						</button>
+						{selectedProblemIds.length > 0 && (
+							<button
+								onClick={() => setShowBulkModal(true)}
+								className='flex items-center gap-2 bg-brand-orange hover:bg-brand-orange-s text-white px-4 py-2 rounded-lg font-medium transition duration-200 shadow-md animate-scale-up border border-brand-orange'
+								style={{ boxShadow: "var(--shadow-glow-sm)" }}
+							>
+								Bulk Edit Policy ({selectedProblemIds.length})
+							</button>
+						)}
 						<Link
 							href='/admin/problems/new'
 							className='flex items-center gap-2 bg-brand-orange hover:bg-brand-orange-s text-white px-4 py-2 rounded-lg font-medium transition duration-200 shadow-md'
@@ -310,11 +337,11 @@ const AdminDashboard: React.FC = () => {
 				{loading ? (
 					<div className='flex flex-col justify-center items-center py-20 gap-4'>
 						<div className='w-12 h-12 border-4 border-brand-orange border-t-transparent rounded-full animate-spin'></div>
-						<div className='text-gray-400'>Loading problems...</div>
+						<div className='text-gray-400' style={{ color: "var(--text-secondary)" }}>Loading problems...</div>
 					</div>
 				) : problems.length === 0 ? (
-					<div className='text-center py-20 bg-dark-layer-1 rounded-xl border border-gray-800'>
-						<p className='text-gray-400 text-lg mb-4'>No problems found in the database.</p>
+					<div className='text-center py-20 rounded-xl border' style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}>
+						<p className='text-lg mb-4' style={{ color: "var(--text-secondary)" }}>No problems found in the database.</p>
 						<button
 							onClick={handleSync}
 							className='bg-brand-orange hover:bg-brand-orange-s text-white px-6 py-2 rounded-lg font-medium transition'
@@ -323,30 +350,66 @@ const AdminDashboard: React.FC = () => {
 						</button>
 					</div>
 				) : (
-					<div className='bg-dark-layer-1 border border-gray-800 rounded-xl overflow-hidden shadow-xl'>
+					<div className='rounded-xl overflow-hidden shadow-xl' style={{ backgroundColor: "var(--bg-surface)", border: "1px solid var(--border-subtle)" }}>
 						<div className='overflow-x-auto'>
-							<table className='w-full text-sm text-left text-gray-400'>
-								<thead className='text-xs uppercase bg-dark-fill-3 text-gray-300 border-b border-gray-800'>
-									<tr>
-										<th scope='col' className='px-6 py-4 w-16'>Order</th>
-										<th scope='col' className='px-6 py-4'>Title</th>
-										<th scope='col' className='px-6 py-4 w-32'>Category</th>
-										<th scope='col' className='px-6 py-4 w-28'>Difficulty</th>
-										<th scope='col' className='px-6 py-4 w-28'>Type</th>
-										<th scope='col' className='px-6 py-4 w-28 text-right'>Actions</th>
+							<table className='w-full text-sm text-left' style={{ color: "var(--text-secondary)" }}>
+								<thead>
+									<tr style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+										<th scope='col' className='px-6 py-4 w-12'>
+											<input
+												type='checkbox'
+												checked={problems.length > 0 && selectedProblemIds.length === problems.length}
+												onChange={(e) => {
+													if (e.target.checked) {
+														setSelectedProblemIds(problems.map((p) => p.id));
+													} else {
+														setSelectedProblemIds([]);
+													}
+												}}
+												className='rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4 shadow-sm'
+											/>
+										</th>
+										<th scope='col' className='px-6 py-4'>
+											<span className='text-[10px] font-bold uppercase tracking-widest' style={{ color: "var(--text-muted)" }}>Title</span>
+										</th>
+										<th scope='col' className='px-6 py-4 w-32'>
+											<span className='text-[10px] font-bold uppercase tracking-widest' style={{ color: "var(--text-muted)" }}>Tags</span>
+										</th>
+										<th scope='col' className='px-6 py-4 w-28'>
+											<span className='text-[10px] font-bold uppercase tracking-widest' style={{ color: "var(--text-muted)" }}>Difficulty</span>
+										</th>
+										<th scope='col' className='px-6 py-4 w-28'>
+											<span className='text-[10px] font-bold uppercase tracking-widest' style={{ color: "var(--text-muted)" }}>Type</span>
+										</th>
+										<th scope='col' className='px-6 py-4 w-28 text-right'>
+											<span className='text-[10px] font-bold uppercase tracking-widest' style={{ color: "var(--text-muted)" }}>Actions</span>
+										</th>
 									</tr>
 								</thead>
-								<tbody className='divide-y divide-gray-800'>
+								<tbody className='divide-y divide-border-subtle'>
 									{problems.map((problem) => {
-										const difficultyColor =
+										const diffColor =
 											problem.difficulty === "Easy"
-												? "text-dark-green-s bg-dark-green-s/10"
+												? { color: "var(--color-success)", bg: "color-mix(in srgb, var(--color-success) 10%, transparent)", border: "color-mix(in srgb, var(--color-success) 25%, transparent)" }
 												: problem.difficulty === "Medium"
-												? "text-dark-yellow bg-dark-yellow/10"
-												: "text-dark-pink bg-dark-pink/10";
+												? { color: "var(--color-warning)", bg: "color-mix(in srgb, var(--color-warning) 10%, transparent)", border: "color-mix(in srgb, var(--color-warning) 25%, transparent)" }
+												: { color: "var(--color-error)", bg: "color-mix(in srgb, var(--color-error) 10%, transparent)", border: "color-mix(in srgb, var(--color-error) 25%, transparent)" };
 										return (
 											<tr key={problem.id} className='hover:bg-dark-fill-3 transition'>
-												<td className='px-6 py-4 font-mono'>{problem.order}</td>
+												<td className='px-6 py-4 w-12'>
+													<input
+														type='checkbox'
+														checked={selectedProblemIds.includes(problem.id)}
+														onChange={(e) => {
+															if (e.target.checked) {
+																setSelectedProblemIds((prev) => [...prev, problem.id]);
+															} else {
+																setSelectedProblemIds((prev) => prev.filter((id) => id !== problem.id));
+															}
+														}}
+														className='rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4 shadow-sm'
+													/>
+												</td>
 												<td className='px-6 py-4 font-medium text-white'>
 													<Link
 														href={`/problems/${problem.id}`}
@@ -356,9 +419,32 @@ const AdminDashboard: React.FC = () => {
 														{problem.title}
 													</Link>
 												</td>
-												<td className='px-6 py-4'>{problem.category}</td>
 												<td className='px-6 py-4'>
-													<span className={`px-2.5 py-1 rounded text-xs font-semibold ${difficultyColor}`}>
+													<div className='flex flex-wrap gap-1'>
+														{problem.tags.map((t) => (
+															<span
+																key={t}
+																className='text-[10px] px-1.5 py-0.5 rounded font-bold'
+																style={{
+																	background: "var(--bg-dark-fill-3)",
+																	color: "var(--text-secondary)",
+																	border: "1px solid var(--border-subtle)",
+																}}
+															>
+																{t}
+															</span>
+														))}
+													</div>
+												</td>
+												<td className='px-6 py-4'>
+													<span
+														className='inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border'
+														style={{
+															color: diffColor.color,
+															background: diffColor.bg,
+															borderColor: diffColor.border,
+														}}
+													>
 														{problem.difficulty}
 													</span>
 												</td>
@@ -423,6 +509,128 @@ const AdminDashboard: React.FC = () => {
 								className='px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition duration-200 shadow-md shadow-red-900/30'
 							>
 								Delete
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
+
+			{showBulkModal && (
+				<div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn'>
+					<div className='bg-dark-layer-1 border border-gray-800 rounded-2xl p-6 max-w-2xl w-full mx-4 shadow-2xl transform scale-100 transition-all duration-300' style={{ background: "var(--bg-dark-layer-1)", borderColor: "var(--border-default)" }}>
+						<h3 className='text-xl font-bold text-white mb-2' style={{ color: "var(--text-primary)" }}>Bulk Edit Execution Policy</h3>
+						<p className='text-gray-400 text-xs mb-6' style={{ color: "var(--text-muted)" }}>
+							Update execution profiles and resource limits for the <span className='text-brand-orange font-bold'>{selectedProblemIds.length}</span> selected problem(s).
+						</p>
+
+						<div className='grid grid-cols-1 md:grid-cols-2 gap-6 mb-6'>
+							<div>
+								<label htmlFor='bulkProfile' className='text-xs font-bold block mb-2' style={{ color: "var(--text-secondary)" }}>
+									Execution Profile
+								</label>
+								<select
+									id='bulkProfile'
+									value={bulkProfile}
+									onChange={(e) => setBulkProfile(e.target.value)}
+									className='border outline-none rounded p-2 text-xs w-full focus:border-brand-orange transition shadow-sm'
+									style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+								>
+									<option value='fast'>Fast (Short algorithmic problems)</option>
+									<option value='normal'>Normal (Standard competitive programming)</option>
+									<option value='long'>Long (Heavy computations)</option>
+									<option value='machine_learning'>Machine Learning (Model training / AI challenges)</option>
+									<option value='custom'>Custom (Expose individual limits)</option>
+								</select>
+							</div>
+
+							{/* Preview */}
+							<div className='p-4 rounded-lg border' style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)" }}>
+								<span className='text-xs font-bold uppercase block mb-3' style={{ color: "var(--brand-orange)" }}>
+									Effective Limits Preview
+								</span>
+								<div className='grid grid-cols-2 gap-y-1.5 text-xs'>
+									<div style={{ color: "var(--text-secondary)" }}>Timeout:</div>
+									<div className='font-mono font-bold' style={{ color: "var(--text-primary)" }}>
+										{bulkProfile === "custom" ? bulkTimeoutMs : (bulkProfile === "fast" ? 1000 : (bulkProfile === "long" ? 15000 : (bulkProfile === "machine_learning" ? 60000 : 5000)))} ms
+									</div>
+									
+									<div style={{ color: "var(--text-secondary)" }}>Memory:</div>
+									<div className='font-mono font-bold' style={{ color: "var(--text-primary)" }}>
+										{bulkProfile === "custom" ? bulkMemoryLimitMb : (bulkProfile === "fast" ? 64 : (bulkProfile === "long" ? 512 : (bulkProfile === "machine_learning" ? 2048 : 256)))} MB
+									</div>
+
+									<div style={{ color: "var(--text-secondary)" }}>Max Output:</div>
+									<div className='font-mono font-bold' style={{ color: "var(--text-primary)" }}>
+										{bulkProfile === "custom" ? bulkMaxOutputSizeChars : (bulkProfile === "fast" ? 16384 : (bulkProfile === "long" ? 262144 : (bulkProfile === "machine_learning" ? 1048576 : 65536)))} chars
+									</div>
+								</div>
+							</div>
+						</div>
+
+						{bulkProfile === "custom" && (
+							<div className='grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 rounded-lg border animate-scale-up' style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)" }}>
+								<div>
+									<label htmlFor='bulkTimeoutMs' className='text-xs font-bold block mb-1' style={{ color: "var(--text-secondary)" }}>
+										Timeout (ms)
+									</label>
+									<input
+										type='number'
+										id='bulkTimeoutMs'
+										value={bulkTimeoutMs}
+										onChange={(e) => setBulkTimeoutMs(Number(e.target.value) || 0)}
+										className='border outline-none rounded p-2 text-xs w-full focus:border-brand-orange'
+										style={{ background: "var(--bg-surface)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+									/>
+								</div>
+
+								<div>
+									<label htmlFor='bulkMemoryLimitMb' className='text-xs font-bold block mb-1' style={{ color: "var(--text-secondary)" }}>
+										Memory (MB)
+									</label>
+									<input
+										type='number'
+										id='bulkMemoryLimitMb'
+										value={bulkMemoryLimitMb}
+										onChange={(e) => setBulkMemoryLimitMb(Number(e.target.value) || 0)}
+										className='border outline-none rounded p-2 text-xs w-full focus:border-brand-orange'
+										style={{ background: "var(--bg-surface)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+									/>
+								</div>
+
+								<div>
+									<label htmlFor='bulkMaxOutputSizeChars' className='text-xs font-bold block mb-1' style={{ color: "var(--text-secondary)" }}>
+										Max Output (chars)
+									</label>
+									<input
+										type='number'
+										id='bulkMaxOutputSizeChars'
+										value={bulkMaxOutputSizeChars}
+										onChange={(e) => setBulkMaxOutputSizeChars(Number(e.target.value) || 0)}
+										className='border outline-none rounded p-2 text-xs w-full focus:border-brand-orange'
+										style={{ background: "var(--bg-surface)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+									/>
+								</div>
+							</div>
+						)}
+
+						<div className='flex justify-end gap-3'>
+							<button
+								type='button'
+								onClick={() => setShowBulkModal(false)}
+								className='px-4 py-2 hover:bg-dark-fill-2 text-gray-300 rounded-lg text-sm font-medium transition duration-200 border border-border-default'
+								style={{ background: "var(--bg-surface)", borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
+							>
+								Cancel
+							</button>
+							<button
+								type='button'
+								onClick={handleApplyBulkEdit}
+								disabled={bulkSubmitting}
+								className='px-5 py-2 bg-brand-orange hover:bg-brand-orange-s text-white rounded-lg text-sm font-semibold transition duration-200 shadow-md flex items-center gap-2 disabled:opacity-50'
+								style={{ background: "var(--brand-orange)", color: "var(--bg-base)" }}
+							>
+								{bulkSubmitting && <FaSpinner className='animate-spin' size={12} />}
+								Apply to Selected
 							</button>
 						</div>
 					</div>

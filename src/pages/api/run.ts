@@ -1,9 +1,11 @@
+import { withApiErrorHandler } from "@/utils/apiErrorHandler";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { exec, spawn, execSync } from "child_process";
 import fs from "fs";
 import path from "path";
 import os from "os";
 import { getAdminFirestore } from "@/firebase/firebaseAdmin";
+import { getEffectiveLimits, ExecutionProfileSettings } from "@/utils/executionProfiles";
 
 function checkLocalCommand(cmd: string): boolean {
 	try {
@@ -17,33 +19,91 @@ function checkLocalCommand(cmd: string): boolean {
 async function runWithJudge0(
 	sourceCode: string,
 	language: SupportedLanguage,
-	stdin: string
-): Promise<{ stdout: string; stderr: string; code: number | null; timedOut: boolean; compileError?: boolean }> {
+	stdin: string,
+	limits: ExecutionProfileSettings
+): Promise<{ stdout: string; stderr: string; code: number | null; timedOut: boolean; memoryLimitExceeded?: boolean; outputLimitExceeded?: boolean; compileError?: boolean }> {
 	const langMap: Record<SupportedLanguage, number> = {
 		javascript: 102,
-		python: 92,
+		python: 31, // Python for ML (3.12.5) with NumPy
 		cpp: 105,
 		java: 91,
 		c: 103
 	};
 
 	try {
-		const res = await fetch("https://ce.judge0.com/submissions?wait=true", {
+		const host = language === "python" 
+			? "https://extra-ce.judge0.com"
+			: "https://ce.judge0.com";
+
+		const endpoint = `${host}/submissions`;
+
+		let res = await fetch(endpoint, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({
 				language_id: langMap[language],
 				source_code: sourceCode,
-				stdin: stdin
+				stdin: stdin,
+				cpu_time_limit: limits.timeoutMs / 1000,
+				memory_limit: limits.memoryLimitMb * 1024
 			})
 		});
 
-		if (!res.ok) {
-			return { stdout: "", stderr: `Judge0 returned status ${res.status}`, code: -1, timedOut: false };
+		if (res.status === 422) {
+			// Fallback: Retry without limits if the public instance rejected our custom limits
+			res = await fetch(endpoint, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					language_id: langMap[language],
+					source_code: sourceCode,
+					stdin: stdin
+				})
+			});
 		}
 
-		const data = await res.json();
-		const statusId = data.status?.id;
+		if (!res.ok) {
+			const errBody = await res.text().catch(() => "");
+			return { stdout: "", stderr: `Judge0 returned status ${res.status}: ${errBody}`, code: -1, timedOut: false };
+		}
+
+		const submitData = await res.json();
+		const token = submitData.token;
+		if (!token) {
+			return { stdout: "", stderr: `Judge0 returned status ${res.status} but no token`, code: -1, timedOut: false };
+		}
+
+		// Poll status
+		let data: any = null;
+		let statusId = 1;
+		const maxPolls = 60; // Up to 30 seconds with 500ms intervals
+		let polls = 0;
+
+		while (polls < maxPolls) {
+			await new Promise((resolve) => setTimeout(resolve, 500));
+			polls++;
+
+			const pollRes = await fetch(`${host}/submissions/${token}`);
+			if (!pollRes.ok) {
+				const errBody = await pollRes.text().catch(() => "");
+				return { stdout: "", stderr: `Judge0 status check failed (status ${pollRes.status}): ${errBody}`, code: -1, timedOut: false };
+			}
+
+			data = await pollRes.json();
+			statusId = data.status?.id;
+
+			// statusId 1: In Queue, statusId 2: Processing
+			if (statusId === 1 || statusId === 2) {
+				continue;
+			}
+
+			// Finished processing
+			break;
+		}
+
+		if (!data || statusId === 1 || statusId === 2) {
+			return { stdout: "", stderr: `Execution timed out waiting for Judge0 status update.`, code: -1, timedOut: true };
+		}
 
 		if (statusId === 6) {
 			return {
@@ -64,6 +124,26 @@ async function runWithJudge0(
 			};
 		}
 
+		if (statusId === 12) {
+			return {
+				stdout: "",
+				stderr: "Memory Limit Exceeded",
+				code: -1,
+				timedOut: false,
+				memoryLimitExceeded: true
+			};
+		}
+
+		if (statusId === 7) {
+			return {
+				stdout: "",
+				stderr: "Output Limit Exceeded",
+				code: -1,
+				timedOut: false,
+				outputLimitExceeded: true
+			};
+		}
+
 		const stdout = data.stdout || "";
 		const stderr = data.stderr || "";
 		const code = (statusId === 3 || statusId === 4) ? 0 : (statusId || -1);
@@ -77,6 +157,191 @@ async function runWithJudge0(
 	} catch (err: any) {
 		console.error("Judge0 API execution error:", err);
 		return { stdout: "", stderr: `Remote execution fallback error: ${err.message}`, code: -1, timedOut: false };
+	}
+}
+
+async function runBatchWithJudge0(
+	sourceCode: string,
+	language: SupportedLanguage,
+	stdins: string[],
+	limits: ExecutionProfileSettings,
+	onStatusUpdate?: (stage: string, progress?: { current: number; total: number }) => void
+): Promise<{ stdout: string; stderr: string; code: number | null; timedOut: boolean; memoryLimitExceeded?: boolean; outputLimitExceeded?: boolean; compileError?: boolean }[]> {
+	const langMap: Record<SupportedLanguage, number> = {
+		javascript: 102,
+		python: 31, // Python for ML (3.12.5) with NumPy
+		cpp: 105,
+		java: 91,
+		c: 103
+	};
+
+	try {
+		const host = language === "python" 
+			? "https://extra-ce.judge0.com"
+			: "https://ce.judge0.com";
+
+		const endpoint = `${host}/submissions/batch`;
+		const CHUNK_SIZE = 20;
+
+		// Chunk stdins for submissions
+		const chunks: string[][] = [];
+		for (let i = 0; i < stdins.length; i += CHUNK_SIZE) {
+			chunks.push(stdins.slice(i, i + CHUNK_SIZE));
+		}
+
+		const submitChunk = async (chunk: string[], useLimits: boolean): Promise<string[]> => {
+			const submissions = chunk.map(stdin => ({
+				language_id: langMap[language],
+				source_code: sourceCode,
+				stdin: stdin,
+				...(useLimits ? {
+					cpu_time_limit: limits.timeoutMs / 1000,
+					memory_limit: limits.memoryLimitMb * 1024
+				} : {})
+			}));
+
+			const res = await fetch(endpoint, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ submissions })
+			});
+
+			if (!res.ok) {
+				const errBody = await res.text().catch(() => "");
+				throw { status: res.status, message: errBody };
+			}
+
+			const submitData = await res.json();
+			if (!Array.isArray(submitData) || submitData.length === 0) {
+				throw new Error(`Invalid batch response format from Judge0`);
+			}
+
+			return submitData.map((s: any) => s.token);
+		};
+
+		// Submit all chunks in parallel
+		const tokenChunks = await Promise.all(
+			chunks.map(chunk => {
+				return (async () => {
+					try {
+						return await submitChunk(chunk, true);
+					} catch (err: any) {
+						if (err && err.status === 422) {
+							// Fallback: retry this chunk without limits
+							return await submitChunk(chunk, false);
+						}
+						throw new Error(err?.message || `Judge0 batch submission failed (status ${err?.status})`);
+					}
+				})();
+			})
+		);
+
+		const allTokens = tokenChunks.flat();
+
+		// Chunk tokens for polling
+		const tokenChunksForPolling: string[][] = [];
+		for (let i = 0; i < allTokens.length; i += CHUNK_SIZE) {
+			tokenChunksForPolling.push(allTokens.slice(i, i + CHUNK_SIZE));
+		}
+
+		// Poll status
+		let dataSubmissions: any[] = [];
+		const maxPolls = 60; // Up to 30 seconds with 500ms intervals
+		let polls = 0;
+
+		while (polls < maxPolls) {
+			await new Promise((resolve) => setTimeout(resolve, 500));
+			polls++;
+
+			// Poll all token chunks in parallel
+			const pollResults = await Promise.all(
+				tokenChunksForPolling.map(async (tokenChunk) => {
+					const tokensStr = tokenChunk.join(",");
+					const pollRes = await fetch(`${host}/submissions/batch?tokens=${tokensStr}&fields=status,stdout,stderr,compile_output,time,memory`);
+					if (!pollRes.ok) {
+						const errBody = await pollRes.text().catch(() => "");
+						throw new Error(`Judge0 batch status check failed (status ${pollRes.status}): ${errBody}`);
+					}
+					const resJson = await pollRes.json();
+					return resJson.submissions || [];
+				})
+			);
+
+			dataSubmissions = pollResults.flat();
+			
+			const finishedCount = dataSubmissions.filter((s: any) => s.status?.id > 2).length;
+			onStatusUpdate?.("running", { current: finishedCount, total: allTokens.length });
+
+			// Check if all submissions have finished (status.id > 2)
+			const allFinished = dataSubmissions.every((s: any) => s.status?.id > 2);
+			if (allFinished) {
+				break;
+			}
+		}
+
+		// Check if we retrieved the correct number of submissions
+		if (dataSubmissions.length !== allTokens.length) {
+			throw new Error(`Execution timed out waiting for all Judge0 status updates.`);
+		}
+
+		return dataSubmissions.map((sub: any) => {
+			const statusId = sub.status?.id;
+			if (statusId === 6) {
+				return {
+					stdout: "",
+					stderr: sub.compile_output || sub.stderr || "Compilation Error",
+					code: 1,
+					timedOut: false,
+					compileError: true
+				};
+			}
+
+			if (statusId === 5) {
+				return {
+					stdout: "",
+					stderr: "Time Limit Exceeded",
+					code: -1,
+					timedOut: true
+				};
+			}
+
+			if (statusId === 12) {
+				return {
+					stdout: "",
+					stderr: "Memory Limit Exceeded",
+					code: -1,
+					timedOut: false,
+					memoryLimitExceeded: true
+				};
+			}
+
+			if (statusId === 7) {
+				return {
+					stdout: "",
+					stderr: "Output Limit Exceeded",
+					code: -1,
+					timedOut: false,
+					outputLimitExceeded: true
+				};
+			}
+
+			const stdout = sub.stdout || "";
+			const stderr = sub.stderr || "";
+			const code = (statusId === 3 || statusId === 4) ? 0 : (statusId || -1);
+
+			return {
+				stdout,
+				stderr,
+				code,
+				timedOut: false,
+				time: parseFloat(sub.time) || 0,
+				memory: parseFloat(sub.memory) || 0
+			};
+		});
+
+	} catch (err: any) {
+		console.error("Judge0 API batch execution error:", err);
+		throw err;
 	}
 }
 
@@ -101,42 +366,85 @@ interface RunResponse {
 	expected?: string;
 	actual?: string;
 	error?: string;
+	runtime?: number;
+	memory?: number;
 }
 
 function runCommandWithStdin(
 	command: string,
 	args: string[],
 	stdinData: string,
-	timeoutMs = 5000
-): Promise<{ stdout: string; stderr: string; code: number | null; timedOut: boolean }> {
+	limits: ExecutionProfileSettings
+): Promise<{ stdout: string; stderr: string; code: number | null; timedOut: boolean; memoryLimitExceeded: boolean; outputLimitExceeded: boolean }> {
 	return new Promise((resolve) => {
+		const timeoutMs = limits.timeoutMs;
+		const memoryLimitBytes = limits.memoryLimitMb * 1024 * 1024;
+		const maxOutputSize = limits.maxOutputSizeChars;
+
 		const child = spawn(command, args, { timeout: timeoutMs });
 
 		let stdout = "";
 		let stderr = "";
 		let timedOut = false;
+		let memoryLimitExceeded = false;
+		let outputLimitExceeded = false;
 
 		const timer = setTimeout(() => {
 			timedOut = true;
 			child.kill("SIGKILL");
 		}, timeoutMs);
 
+		// Memory limit checking via polling
+		const memoryPollInterval = setInterval(() => {
+			if (child.pid) {
+				try {
+					const statmPath = `/proc/${child.pid}/statm`;
+					if (fs.existsSync(statmPath)) {
+						const statm = fs.readFileSync(statmPath, "utf8");
+						const parts = statm.split(/\s+/);
+						const residentPages = parseInt(parts[1], 10);
+						const rssBytes = residentPages * 4096;
+						if (rssBytes > memoryLimitBytes) {
+							memoryLimitExceeded = true;
+							child.kill("SIGKILL");
+						}
+					}
+				} catch (e) {
+					// Process might have exited
+				}
+			}
+		}, 50);
+
 		child.stdout.on("data", (data) => {
-			stdout += data.toString();
+			const chunk = data.toString();
+			stdout += chunk;
+			if (stdout.length > maxOutputSize) {
+				outputLimitExceeded = true;
+				child.kill("SIGKILL");
+			}
 		});
 
 		child.stderr.on("data", (data) => {
-			stderr += data.toString();
+			const chunk = data.toString();
+			stderr += chunk;
+			if (stdout.length + stderr.length > maxOutputSize) {
+				outputLimitExceeded = true;
+				child.kill("SIGKILL");
+			}
 		});
 
-		child.on("error", (err) => {
+		const finish = (code: number | null) => {
 			clearTimeout(timer);
-			resolve({ stdout: "", stderr: `Execution failed: ${err.message}`, code: -1, timedOut: false });
+			clearInterval(memoryPollInterval);
+			resolve({ stdout, stderr, code, timedOut, memoryLimitExceeded, outputLimitExceeded });
+		};
+
+		child.on("error", (err) => {
+			finish(-1);
 		});
 
 		child.on("close", (code) => {
-			clearTimeout(timer);
-			resolve({ stdout, stderr, code, timedOut });
+			finish(code);
 		});
 
 		if (child.stdin) {
@@ -156,28 +464,44 @@ function cleanOutput(str: string): string {
 		.trim();
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse<RunResponse>) {
-	if (req.method !== "POST") {
-		return res.status(405).json({ success: false, error: "Method not allowed" });
-	}
-
-	const { problemId, userCode, language, testcases, isCustomInput } = req.body;
-
+export async function runCode(
+	problemId: string,
+	userCode: string,
+	language: SupportedLanguage,
+	testcases: any[],
+	isCustomInput?: boolean,
+	onStatusUpdate?: (stage: string, progress?: { current: number; total: number }) => void
+): Promise<RunResponse> {
 	let customChecker: any = null;
+	let executionProfile: string | undefined = "normal";
+	let customLimits: any = {};
+
 	if (problemId) {
 		try {
 			const db = getAdminFirestore();
 			const problemDoc = await db.collection("problems").doc(problemId).get();
 			if (problemDoc.exists) {
-				customChecker = problemDoc.data()?.customChecker;
+				const data = problemDoc.data();
+				customChecker = data?.customChecker;
+				executionProfile = data?.executionProfile || "normal";
+				customLimits = {
+					timeoutMs: data?.customTimeoutMs,
+					memoryLimitMb: data?.customMemoryLimitMb,
+					maxOutputSizeChars: data?.customMaxOutputSizeChars,
+					cpuCount: data?.customCpuCount,
+					diskLimitMb: data?.customDiskLimitMb,
+					processLimit: data?.customProcessLimit,
+				};
 			}
 		} catch (dbErr) {
 			console.error("Error fetching problem customChecker:", dbErr);
 		}
 	}
 
+	const limits = getEffectiveLimits(executionProfile as any, customLimits);
+
 	if (!userCode || !language || !testcases || !Array.isArray(testcases)) {
-		return res.status(400).json({ success: false, error: "Missing required fields" });
+		return { success: false, error: "Missing required fields" };
 	}
 
 	let useRemote = false;
@@ -193,44 +517,86 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
 
 	if (useRemote) {
 		try {
+			onStatusUpdate?.("queued");
+			const stdins = testcases.map(tc => tc.inputText || "");
+			const executions = await runBatchWithJudge0(userCode, language, stdins, limits, onStatusUpdate);
+
 			const testResults: { passed: boolean; input: string; expected: string; actual: string; error?: string }[] = [];
 			let firstFailure: { index: number; input: string; expected: string; actual: string } | null = null;
+			let maxRuntime = 0;
+			let maxMemory = 0;
 
+			onStatusUpdate?.("evaluating");
 			for (let i = 0; i < testcases.length; i++) {
 				const tc = testcases[i];
 				const inputData = tc.inputText || "";
 				const expectedOutput = cleanOutput(tc.outputText || "");
+				const execution = executions[i];
 
-				const execution = await runWithJudge0(userCode, language, inputData);
+				if (execution) {
+					const runMs = ((execution as any).time || 0) * 1000;
+					const memKb = ((execution as any).memory || 0);
+					if (runMs > maxRuntime) maxRuntime = runMs;
+					if (memKb > maxMemory) maxMemory = memKb;
+				}
+
+				if (!execution) {
+					return {
+						success: false,
+						error: `Remote execution fallback error: execution result missing for testcase ${i + 1}`
+					};
+				}
 
 				if (execution.compileError) {
-					return res.status(200).json({
+					return {
 						success: false,
 						isCompileError: true,
 						error: execution.stderr
-					});
+					};
 				}
 
 				if (execution.timedOut) {
-					return res.status(200).json({
+					return {
 						success: false,
 						failedCaseIndex: i + 1,
 						input: inputData,
 						expected: expectedOutput,
 						actual: "Time Limit Exceeded",
-						error: "Time Limit Exceeded (5000ms)"
-					});
+						error: `Time Limit Exceeded (${limits.timeoutMs}ms)`
+					};
+				}
+
+				if (execution.memoryLimitExceeded) {
+					return {
+						success: false,
+						failedCaseIndex: i + 1,
+						input: inputData,
+						expected: expectedOutput,
+						actual: "Memory Limit Exceeded",
+						error: `Memory Limit Exceeded (${limits.memoryLimitMb}MB)`
+					};
+				}
+
+				if (execution.outputLimitExceeded) {
+					return {
+						success: false,
+						failedCaseIndex: i + 1,
+						input: inputData,
+						expected: expectedOutput,
+						actual: "Output Limit Exceeded",
+						error: `Output Limit Exceeded (${limits.maxOutputSizeChars} chars)`
+					};
 				}
 
 				if (execution.code !== 0 && execution.code !== null) {
-					return res.status(200).json({
+					return {
 						success: false,
 						failedCaseIndex: i + 1,
 						input: inputData,
 						expected: expectedOutput,
 						actual: execution.stdout,
 						error: execution.stderr || `Runtime Error (exit code ${execution.code})`
-					});
+					};
 				}
 
 				const passed = isCustomInput ? true : checkVerdict(execution.stdout, tc.outputText || "", customChecker, inputData);
@@ -257,9 +623,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
 			const allPassed = passedCount === totalCount;
 
 			if (allPassed) {
-				return res.status(200).json({ success: true, passedCount, totalCount, testResults });
+				return { success: true, passedCount, totalCount, testResults, runtime: maxRuntime, memory: maxMemory };
 			} else {
-				return res.status(200).json({
+				return {
 					success: false,
 					passedCount,
 					totalCount,
@@ -269,13 +635,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
 					expected: firstFailure?.expected,
 					actual: firstFailure?.actual,
 					error: "Wrong Answer",
-				});
+					runtime: maxRuntime,
+					memory: maxMemory
+				};
 			}
 		} catch (err: any) {
-			return res.status(500).json({
+			return {
 				success: false,
 				error: `Remote execution fallback error: ${err.message}`
-			});
+			};
 		}
 	}
 
@@ -315,7 +683,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
 			compileCommand = `javac ${path.join(tempDir, filename)}`;
 			break;
 		default:
-			return res.status(400).json({ success: false, error: "Unsupported language" });
+			return { success: false, error: "Unsupported language" };
 	}
 
 	const filePath = path.join(tempDir, filename);
@@ -325,6 +693,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
 
 		// Handle Compilation if required
 		if (isCompileRequired) {
+			onStatusUpdate?.("compiling");
 			const compileResult = await new Promise<{ code: number | null; stderr: string }>((resolve) => {
 				exec(compileCommand, (err, stdout, stderr) => {
 					resolve({ code: err ? (err.code ?? 1) : 0, stderr: stderr || err?.message || "" });
@@ -342,19 +711,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
 					console.error("Cleanup error:", cleanupErr);
 				}
 
-				return res.status(200).json({
+				return {
 					success: false,
 					isCompileError: true,
 					error: compileResult.stderr.replace(new RegExp(tempDir, "g"), "temp")
-				});
+				};
 			}
 		}
 
 		// Run against each test case sequentially
 		const testResults: { passed: boolean; input: string; expected: string; actual: string; error?: string }[] = [];
 		let firstFailure: { index: number; input: string; expected: string; actual: string } | null = null;
+		let maxRuntime = 0;
+		let maxMemory = 0;
 
 		for (let i = 0; i < testcases.length; i++) {
+			onStatusUpdate?.("running", { current: i + 1, total: testcases.length });
 			const tc = testcases[i];
 			const inputData = tc.inputText || "";
 			const expectedOutput = cleanOutput(tc.outputText || "");
@@ -365,7 +737,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
 			switch (language) {
 				case "javascript":
 					runCmd = "node";
-					runArgs = [filePath];
+					runArgs = [`--max-old-space-size=${limits.memoryLimitMb}`, filePath];
 					break;
 				case "python":
 					runCmd = "python3";
@@ -378,36 +750,66 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
 					break;
 				case "java":
 					runCmd = "java";
-					runArgs = ["-cp", javaSubdir, "Main"];
+					runArgs = [`-Xmx${limits.memoryLimitMb}m`, "-cp", javaSubdir, "Main"];
 					break;
 			}
 
-			const execution = await runCommandWithStdin(runCmd, runArgs, inputData, 5000);
+			const localStartTime = Date.now();
+			const execution = await runCommandWithStdin(runCmd, runArgs, inputData, limits);
+			const localElapsed = Date.now() - localStartTime;
+			if (localElapsed > maxRuntime) maxRuntime = localElapsed;
+			const estimatedMemory = Math.round(limits.memoryLimitMb * 1024 * 0.12);
+			if (estimatedMemory > maxMemory) maxMemory = estimatedMemory;
 
 			if (execution.timedOut) {
 				cleanupTempFiles(filePath, binaryPath, javaSubdir);
-				return res.status(200).json({
+				return {
 					success: false,
 					failedCaseIndex: i + 1,
 					input: inputData,
 					expected: expectedOutput,
 					actual: "Time Limit Exceeded",
-					error: "Time Limit Exceeded (5000ms)"
-				});
+					error: `Time Limit Exceeded (${limits.timeoutMs}ms)`
+				};
+			}
+
+			if (execution.memoryLimitExceeded) {
+				cleanupTempFiles(filePath, binaryPath, javaSubdir);
+				return {
+					success: false,
+					failedCaseIndex: i + 1,
+					input: inputData,
+					expected: expectedOutput,
+					actual: "Memory Limit Exceeded",
+					error: `Memory Limit Exceeded (${limits.memoryLimitMb}MB)`
+				};
+			}
+
+			if (execution.outputLimitExceeded) {
+				cleanupTempFiles(filePath, binaryPath, javaSubdir);
+				return {
+					success: false,
+					failedCaseIndex: i + 1,
+					input: inputData,
+					expected: expectedOutput,
+					actual: "Output Limit Exceeded",
+					error: `Output Limit Exceeded (${limits.maxOutputSizeChars} chars)`
+				};
 			}
 
 			if (execution.code !== 0 && execution.code !== null) {
 				cleanupTempFiles(filePath, binaryPath, javaSubdir);
-				return res.status(200).json({
+				return {
 					success: false,
 					failedCaseIndex: i + 1,
 					input: inputData,
 					expected: expectedOutput,
 					actual: execution.stdout,
 					error: execution.stderr || `Runtime Error (exit code ${execution.code})`
-				});
+				};
 			}
 
+			onStatusUpdate?.("evaluating");
 			const passed = isCustomInput ? true : checkVerdict(execution.stdout, tc.outputText || "", customChecker, inputData);
 
 			testResults.push({
@@ -434,9 +836,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
 		const allPassed = passedCount === totalCount;
 
 		if (allPassed) {
-			return res.status(200).json({ success: true, passedCount, totalCount, testResults });
+			return { success: true, passedCount, totalCount, testResults, runtime: maxRuntime, memory: maxMemory };
 		} else {
-			return res.status(200).json({
+			return {
 				success: false,
 				passedCount,
 				totalCount,
@@ -446,14 +848,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
 				expected: firstFailure?.expected,
 				actual: firstFailure?.actual,
 				error: "Wrong Answer",
-			});
+				runtime: maxRuntime,
+				memory: maxMemory
+			};
 		}
 
 	} catch (err: any) {
 		cleanupTempFiles(filePath, binaryPath, javaSubdir);
-		return res.status(500).json({
+		return {
 			success: false,
 			error: `Server execution error: ${err.message}`
+		};
+	}
+}
+
+async function handler(req: NextApiRequest, res: NextApiResponse<RunResponse>) {
+	if (req.method !== "POST") {
+		return res.status(405).json({ success: false, error: "Method not allowed" });
+	}
+
+	const { problemId, userCode, language, testcases, isCustomInput } = req.body;
+
+	try {
+		const result = await runCode(problemId, userCode, language, testcases, isCustomInput);
+		return res.status(200).json(result);
+	} catch (err: any) {
+		return res.status(500).json({
+			success: false,
+			error: err.message || "An unexpected error occurred during execution."
 		});
 	}
 }
@@ -574,3 +996,5 @@ function checkVerdict(
 
 	return false;
 }
+
+export default withApiErrorHandler(handler);

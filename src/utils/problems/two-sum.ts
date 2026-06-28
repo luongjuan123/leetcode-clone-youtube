@@ -78,6 +78,5 @@ export const twoSum: Problem = {
 </li>`,
 	handlerFunction: "() => true",
 	starterCode: ``,
-	order: 1,
 	starterFunctionName: "",
 };

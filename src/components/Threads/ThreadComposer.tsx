@@ -4,6 +4,7 @@ import { threadComposerState } from "@/atoms/threadComposerAtom";
 import { useAuthState } from "react-firebase-hooks/auth";
 import { auth, firestore } from "@/firebase/firebase";
 import { collection, addDoc, getDocs, doc, getDoc } from "firebase/firestore";
+import { clientSendNotification } from "@/utils/clientNotificationService";
 import {
 	FaTimes,
 	FaImage,
@@ -14,9 +15,18 @@ import {
 	FaTrash,
 	FaSpinner,
 	FaPollH,
+	FaBold,
+	FaItalic,
+	FaLink,
+	FaKeyboard,
+	FaEdit,
+	FaEye,
+	FaUndo
 } from "react-icons/fa";
 import GifPicker from "./GifPicker";
+import EmojiPicker from "./EmojiPicker";
 import Avatar from "./Avatar";
+import BeastCodeSelect from "@/components/UI/BeastCodeSelect";
 
 interface AttachmentFile {
 	name: string;
@@ -34,6 +44,8 @@ interface AttachmentProblem {
 	language: string;
 	status: string;
 	timestamp: number;
+	attempts?: number;
+	solved?: number;
 }
 
 interface PollDraft {
@@ -50,7 +62,49 @@ interface ThreadDraft {
 	submittedProblem: AttachmentProblem | null;
 	showPollBuilder?: boolean;
 	showGifPicker?: boolean;
+	showEmojiPicker?: boolean;
+	previewMode?: boolean;
 }
+
+// XSS-Safe simple markdown parser
+const escapeHtml = (text: string) => {
+	return text
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#039;");
+};
+
+const parseMarkdown = (rawText: string) => {
+	if (!rawText) return "";
+	let html = escapeHtml(rawText);
+
+	// Headers
+	html = html.replace(/^### (.*?)$/gm, "<h5 class='text-xs font-bold uppercase tracking-wider mt-2 mb-1'>$1</h5>");
+	html = html.replace(/^## (.*?)$/gm, "<h4 class='text-sm font-bold mt-3 mb-1.5'>$1</h4>");
+	html = html.replace(/^# (.*?)$/gm, "<h3 class='text-base font-black mt-4 mb-2'>$1</h3>");
+
+	// Code blocks
+	html = html.replace(/```([\s\S]*?)```/gm, "<pre class='bg-[var(--bg-code)] border border-[var(--border-code)] p-3 rounded-xl font-mono text-xs text-[var(--text-code)] overflow-x-auto my-2.5 whitespace-pre'><code>$1</code></pre>");
+
+	// Inline code
+	html = html.replace(/`([^`\n]+)`/g, "<code class='bg-[var(--bg-code)] text-[var(--brand-orange)] font-mono text-xs px-1.5 py-0.5 rounded'>$1</code>");
+
+	// Bold
+	html = html.replace(/\*\*([^*]+)\*\*/g, "<strong class='font-black text-[var(--text-primary)]'>$1</strong>");
+
+	// Italic
+	html = html.replace(/\*([^*]+)\*/g, "<em class='italic'>$1</em>");
+
+	// Links
+	html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, "<a href='$2' target='_blank' rel='noopener noreferrer' class='text-[var(--brand-orange)] hover:underline font-bold'>$1</a>");
+
+	// Linebreaks
+	html = html.replace(/\n/g, "<br />");
+
+	return html;
+};
 
 const ThreadComposer: React.FC = () => {
 	const [composer, setComposer] = useRecoilState(threadComposerState);
@@ -62,13 +116,13 @@ const ThreadComposer: React.FC = () => {
 	const [error, setError] = useState<string | null>(null);
 	const [success, setSuccess] = useState<string | null>(null);
 
-	// Clear error and success when the composer opens or closes
-	useEffect(() => {
-		if (composer.isOpen) {
-			setError(null);
-			setSuccess(null);
-		}
-	}, [composer.isOpen]);
+	const [quotedThread, setQuotedThread] = useState<any>(null);
+	const [loadingQuoted, setLoadingQuoted] = useState(false);
+
+	const [hasRecoverableDraft, setHasRecoverableDraft] = useState(false);
+
+	// Textarea refs mapping to support cursor formatting insertions
+	const textareaRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
 
 	// Thread Chain Drafts
 	const [drafts, setDrafts] = useState<ThreadDraft[]>([
@@ -99,6 +153,82 @@ const ThreadComposer: React.FC = () => {
 	// Refs for inputs
 	const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
 	const photoInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
+
+	// Check if there is an autosaved draft in localStorage on mount
+	useEffect(() => {
+		if (user) {
+			const saved = localStorage.getItem(`beastcode_composer_draft_${user.uid}`);
+			if (saved) {
+				setHasRecoverableDraft(true);
+			}
+		}
+	}, [user, composer.isOpen]);
+
+	// Autosave drafts to localStorage whenever they change
+	useEffect(() => {
+		if (user && composer.isOpen && drafts.some(d => d.content.trim() || d.photos.length > 0 || d.gif)) {
+			localStorage.setItem(
+				`beastcode_composer_draft_${user.uid}`,
+				JSON.stringify(drafts)
+			);
+		}
+	}, [drafts, user, composer.isOpen]);
+
+	// Recover saved draft
+	const recoverDraft = () => {
+		if (!user) return;
+		try {
+			const saved = localStorage.getItem(`beastcode_composer_draft_${user.uid}`);
+			if (saved) {
+				setDrafts(JSON.parse(saved));
+				setHasRecoverableDraft(false);
+				setSuccess("Draft restored successfully!");
+				setTimeout(() => setSuccess(null), 2000);
+			}
+		} catch (e) {
+			console.error("Failed to recover draft:", e);
+		}
+	};
+
+	// Clear saved draft from localStorage
+	const clearSavedDraft = () => {
+		if (user) {
+			localStorage.removeItem(`beastcode_composer_draft_${user.uid}`);
+			setHasRecoverableDraft(false);
+		}
+	};
+
+	// Clear error and success when the composer opens or closes
+	useEffect(() => {
+		if (composer.isOpen) {
+			setError(null);
+			setSuccess(null);
+
+			// Load quote if any
+			const pendingId = sessionStorage.getItem("pendingQuoteId");
+			if (pendingId) {
+				setLoadingQuoted(true);
+				const fetchQuoted = async () => {
+					try {
+						const docSnap = await getDoc(doc(firestore, "threads", pendingId));
+						if (docSnap.exists()) {
+							setQuotedThread({ id: docSnap.id, ...docSnap.data() });
+						}
+					} catch (e) {
+						console.error(e);
+					} finally {
+						setLoadingQuoted(false);
+					}
+				};
+				fetchQuoted();
+			} else {
+				setQuotedThread(null);
+			}
+		} else {
+			setQuotedThread(null);
+			sessionStorage.removeItem("pendingQuoteId");
+		}
+	}, [composer.isOpen]);
 
 	// Fetch current user details and users list for autocomplete
 	useEffect(() => {
@@ -131,10 +261,10 @@ const ThreadComposer: React.FC = () => {
 	}, [user, composer.isOpen]);
 
 	// Auto-expand textarea
-	const adjustTextareaHeight = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-		const target = e.target;
-		target.style.height = "auto";
-		target.style.height = `${target.scrollHeight}px`;
+	const adjustTextareaHeight = (element: HTMLTextAreaElement | null) => {
+		if (!element) return;
+		element.style.height = "auto";
+		element.style.height = `${element.scrollHeight}px`;
 	};
 
 	const addDraftToChain = () => {
@@ -159,7 +289,7 @@ const ThreadComposer: React.FC = () => {
 	const handleContentChange = (index: number, val: string, e: React.ChangeEvent<HTMLTextAreaElement>) => {
 		setError(null);
 		setSuccess(null);
-		adjustTextareaHeight(e);
+		adjustTextareaHeight(e.target);
 		setDrafts((prev) => {
 			const copy = [...prev];
 			copy[index].content = val;
@@ -184,6 +314,54 @@ const ThreadComposer: React.FC = () => {
 		setMentionSearch("");
 		setActiveDraftIdx(-1);
 		setMentionTriggerPos(-1);
+	};
+
+	// Markdown Insertion Helper
+	const formatText = (index: number, type: "bold" | "italic" | "link" | "code") => {
+		const txtArea = textareaRefs.current[index];
+		if (!txtArea) return;
+
+		const start = txtArea.selectionStart;
+		const end = txtArea.selectionEnd;
+		const text = txtArea.value;
+		const selectedText = text.substring(start, end);
+
+		let formatted = "";
+		let cursorOffset = 0;
+
+		switch (type) {
+			case "bold":
+				formatted = `**${selectedText || "bold text"}**`;
+				cursorOffset = selectedText ? formatted.length : 2;
+				break;
+			case "italic":
+				formatted = `*${selectedText || "italic text"}*`;
+				cursorOffset = selectedText ? formatted.length : 1;
+				break;
+			case "link":
+				formatted = `[${selectedText || "link text"}](https://)`;
+				cursorOffset = selectedText ? formatted.length + 10 : 1;
+				break;
+			case "code":
+				formatted = selectedText.includes("\n")
+					? `\`\`\`\n${selectedText}\n\`\`\``
+					: `\`${selectedText || "code"}\``;
+				cursorOffset = selectedText ? formatted.length : 1;
+				break;
+		}
+
+		const newText = text.substring(0, start) + formatted + text.substring(end);
+		setDrafts((prev) => {
+			const copy = [...prev];
+			copy[index].content = newText;
+			return copy;
+		});
+
+		// Refocus and place cursor correctly
+		setTimeout(() => {
+			txtArea.focus();
+			txtArea.setSelectionRange(start + cursorOffset, start + cursorOffset);
+		}, 50);
 	};
 
 	const handleInsertMention = (user: any) => {
@@ -212,7 +390,7 @@ const ThreadComposer: React.FC = () => {
 				const image = new Image();
 				image.onload = () => {
 					const canvas = document.createElement("canvas");
-					const max_size = 800;
+					const max_size = 1200; // higher fidelity
 					let width = image.width;
 					let height = image.height;
 					if (width > height) {
@@ -230,7 +408,7 @@ const ThreadComposer: React.FC = () => {
 					canvas.height = height;
 					const ctx = canvas.getContext("2d");
 					ctx?.drawImage(image, 0, 0, width, height);
-					const dataUrl = canvas.toDataURL("image/jpeg", 0.6);
+					const dataUrl = canvas.toDataURL("image/jpeg", 0.75); // higher quality
 					resolve(dataUrl);
 				};
 				image.src = readerEvent.target?.result as string;
@@ -239,7 +417,7 @@ const ThreadComposer: React.FC = () => {
 		});
 	};
 
-	// Paste Clipboard Event
+	// Clipboard Paste Event
 	const handlePaste = async (index: number, e: React.ClipboardEvent<HTMLTextAreaElement>) => {
 		const items = e.clipboardData?.items;
 		if (!items) return;
@@ -257,6 +435,7 @@ const ThreadComposer: React.FC = () => {
 						return copy;
 					});
 					setSuccess("Image pasted from clipboard!");
+					setTimeout(() => setSuccess(null), 2000);
 				} catch (err) {
 					console.error("Paste image error:", err);
 				}
@@ -285,8 +464,8 @@ const ThreadComposer: React.FC = () => {
 				}
 			} else {
 				// Attach file
-				if (file.size > 150 * 1024) {
-					setError("File size must be under 150KB.");
+				if (file.size > 2 * 1024 * 1024) { // limit file size to 2MB
+					setError("File size must be under 2MB.");
 					continue;
 				}
 				const reader = new FileReader();
@@ -319,8 +498,8 @@ const ThreadComposer: React.FC = () => {
 		setError(null);
 		setSuccess(null);
 		Array.from(files).forEach((file) => {
-			if (file.size > 150 * 1024) {
-				setError("File size must be under 150KB.");
+			if (file.size > 2 * 1024 * 1024) {
+				setError("File size must be under 2MB.");
 				return;
 			}
 			const reader = new FileReader();
@@ -443,7 +622,7 @@ const ThreadComposer: React.FC = () => {
 						list.push({ id: docSnap.id, ...data });
 					}
 				});
-				list.sort((a, b) => a.timestamp - b.timestamp);
+				list.sort((a, b) => b.timestamp - a.timestamp);
 				setUserSubmissions(list);
 			} catch (e) {
 				console.error(e);
@@ -453,7 +632,7 @@ const ThreadComposer: React.FC = () => {
 		}
 	};
 
-	const handleAttachSubmission = () => {
+	const handleAttachSubmission = async () => {
 		if (showSubmissionSelectorFor === null || !selectedProblemId || selectedSubIndex === -1) {
 			setError("Please select a problem and attempt.");
 			return;
@@ -464,6 +643,19 @@ const ThreadComposer: React.FC = () => {
 		const problemSubs = userSubmissions.filter((s) => s.problemId === selectedProblemId);
 		const targetSub = problemSubs[selectedSubIndex];
 
+		let attempts = 0;
+		let solved = 0;
+		try {
+			const probDoc = await getDoc(doc(firestore, "problems", selectedProblemId));
+			if (probDoc.exists()) {
+				const probData = probDoc.data();
+				attempts = probData.attempts || 0;
+				solved = probData.solved || 0;
+			}
+		} catch (e) {
+			console.error("Error fetching problem stats for attachment:", e);
+		}
+
 		const formatted: AttachmentProblem = {
 			problemId: selectedProblemId,
 			problemTitle: targetSub.problemTitle || selectedProblemId,
@@ -473,6 +665,8 @@ const ThreadComposer: React.FC = () => {
 			language: targetSub.language || "",
 			status: targetSub.status || "",
 			timestamp: targetSub.timestamp || Date.now(),
+			attempts,
+			solved,
 		};
 
 		setDrafts((prev) => {
@@ -493,17 +687,14 @@ const ThreadComposer: React.FC = () => {
 	const triggerNotification = async (toUid: string, type: "like" | "repost" | "reply", threadId: string) => {
 		if (!user || toUid === user.uid) return;
 		try {
-			const authorName = currentUserProfile?.displayName || user.displayName || user.email?.split("@")[0] || "Anonymous";
-			const authorAvatar = currentUserProfile?.avatarUrl || user.photoURL || "";
-			await addDoc(collection(firestore, "notifications"), {
-				toUid,
-				fromUid: user.uid,
-				fromDisplayName: authorName,
-				fromAvatarUrl: authorAvatar,
-				type,
-				threadId,
-				createdAt: Date.now(),
-				read: false,
+			const authorName = user.displayName || user.email?.split("@")[0] || "Anonymous";
+			await clientSendNotification("THREAD_REPLY", toUid, {
+				placeholders: {
+					threadTitle: "your thread",
+					replierName: authorName,
+				},
+				ctaUrl: `/threads?threadId=${threadId}`,
+				metadata: { threadId }
 			});
 		} catch (error) {
 			console.error("Notification trigger error:", error);
@@ -533,6 +724,12 @@ const ThreadComposer: React.FC = () => {
 
 		if (!hasContent) {
 			setError("Thread content cannot be empty.");
+			return;
+		}
+
+		// Check limits
+		if (drafts.some((d) => d.content.length > 280)) {
+			setError("A single post in the thread cannot exceed 280 characters.");
 			return;
 		}
 
@@ -585,6 +782,7 @@ const ThreadComposer: React.FC = () => {
 					mentions.push(match[1]);
 				}
 
+				const pendingQuoteId = sessionStorage.getItem("pendingQuoteId");
 				const postData: any = {
 					uid: user.uid,
 					displayName: authorName,
@@ -600,7 +798,7 @@ const ThreadComposer: React.FC = () => {
 					hashtags,
 					mentions,
 					parentThreadId: previousThreadId || "", // empty string if top level
-					quotedThreadId: "", // if we added quote support later
+					quotedThreadId: (i === 0 && pendingQuoteId) ? pendingQuoteId : "",
 				};
 
 				if (draft.submittedProblem) {
@@ -625,7 +823,11 @@ const ThreadComposer: React.FC = () => {
 				}
 			}
 
+			// Clear draft since it is successfully published
+			clearSavedDraft();
+
 			setSuccess("Published successfully!");
+			sessionStorage.removeItem("pendingQuoteId");
 			setTimeout(() => {
 				setComposer({ isOpen: false });
 				// Reset drafts
@@ -640,7 +842,7 @@ const ThreadComposer: React.FC = () => {
 					},
 				]);
 				setSuccess(null);
-			}, 1200);
+			}, 1000);
 		} catch (e) {
 			console.error("Composer publish error:", e);
 			setError("Failed to post thread chain.");
@@ -657,23 +859,49 @@ const ThreadComposer: React.FC = () => {
 		}
 	};
 
+	// Global shortcut handling inside textareas
+	const handleTextareaKeyDown = (idx: number, e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+		// Ctrl + Enter or Cmd + Enter to publish
+		if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+			e.preventDefault();
+			handlePublish();
+		}
+	};
+
 	return (
 		<div
 			onClick={handleOverlayClick}
-			className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in'
+			className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-fade-in"
 		>
-			<div className='bg-white dark:bg-dark-layer-1 border border-slate-200 dark:border-slate-800/60 rounded-3xl w-full max-w-xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden animate-scale-up'>
+			<div className="bg-[var(--bg-elevated)] border border-[var(--border-strong)] rounded-3xl w-full max-w-xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden animate-scale-up">
 				{/* Header */}
-				<div className='flex justify-between items-center px-6 py-4 border-b border-slate-200 dark:border-slate-800/60 select-none'>
-					<h3 className='text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider'>
-						{composer.parentThreadId ? `Reply to @${composer.replyToDisplayName}` : "New Thread"}
-					</h3>
-					<button
-						onClick={() => setComposer({ isOpen: false })}
-						className='text-slate-500 hover:text-slate-900 dark:text-gray-500 dark:hover:text-white transition duration-150 p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-dark-fill-3 dark:hover:bg-dark-fill-2 rounded-full'
-					>
-						<FaTimes size={14} />
-					</button>
+				<div className="flex justify-between items-center px-6 py-4 border-b border-[var(--border-subtle)] select-none">
+					<div className="flex items-center gap-2">
+						<h3 className="text-sm font-black tracking-widest text-[var(--text-primary)] uppercase">
+							{composer.parentThreadId ? `Reply to @${composer.replyToDisplayName}` : "New Thread"}
+						</h3>
+						<span className="text-[10px] text-[var(--text-muted)] font-bold flex items-center gap-1">
+							<FaKeyboard size={10} /> Ctrl+Enter to post
+						</span>
+					</div>
+					<div className="flex items-center gap-2">
+						{hasRecoverableDraft && (
+							<button
+								onClick={recoverDraft}
+								className="flex items-center gap-1 text-[10px] font-black text-[var(--brand-orange)] border border-[var(--brand-orange)]/30 hover:border-[var(--brand-orange)] px-3 py-1.5 rounded-full transition bg-[var(--brand-glow)] hover:scale-102 active:scale-98"
+								title="Restore previous draft"
+							>
+								<FaUndo size={9} />
+								<span>Recover Draft</span>
+							</button>
+						)}
+						<button
+							onClick={() => setComposer({ isOpen: false })}
+							className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition p-1.5 bg-[var(--bg-dark-fill-3)] hover:bg-[var(--bg-hover)] rounded-full"
+						>
+							<FaTimes size={13} />
+						</button>
+					</div>
 				</div>
 
 				{error && (
@@ -682,22 +910,23 @@ const ThreadComposer: React.FC = () => {
 					</div>
 				)}
 				{success && (
-					<div className="mx-6 mt-4 bg-green-500/10 border border-green-500/20 text-green-455 text-xs px-4 py-2.5 rounded-xl animate-fade-in shrink-0">
+					<div className="mx-6 mt-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-455 text-xs px-4 py-2.5 rounded-xl animate-fade-in shrink-0">
 						{success}
 					</div>
 				)}
 
 				{/* Chain Area */}
-				<div className='flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin'>
+				<div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin">
 					{drafts.map((draft, idx) => {
 						const isLast = idx === drafts.length - 1;
 						const count = draft.content.length;
-						const nearLimit = count > 240;
+						const nearLimit = count > 200;
+						const percentage = Math.min((count / 280) * 100, 100);
 
 						return (
-							<div key={idx} className='relative flex gap-4 items-start'>
-									{/* Left Column (Avatar & line connector) */}
-								<div className='flex flex-col items-center shrink-0 h-full relative'>
+							<div key={idx} className="relative flex gap-4 items-start">
+								{/* Left Column (Avatar & line connector) */}
+								<div className="flex flex-col items-center shrink-0 h-full relative">
 									<Avatar
 										src={currentUserProfile?.avatarUrl}
 										displayName={currentUserProfile?.displayName || user?.displayName || "Me"}
@@ -706,44 +935,121 @@ const ThreadComposer: React.FC = () => {
 
 									{/* Connector line connecting chain items */}
 									{!isLast && (
-										<div className='absolute top-[40px] bottom-[-30px] w-[2px] bg-slate-200 dark:bg-gray-800 z-0' />
+										<div className="absolute top-[40px] bottom-[-30px] w-[2px] bg-[var(--border-strong)] z-0" />
 									)}
 								</div>
 
 								{/* Right Column (Draft details) */}
-								<div className='flex-grow min-w-0 space-y-3'>
-									<div className='flex items-center justify-between mb-1'>
-										<span className='font-bold text-sm text-slate-900 dark:text-white'>
+								<div className="flex-grow min-w-0 space-y-3">
+									<div className="flex items-center justify-between mb-1">
+										<span className="font-bold text-sm text-[var(--text-primary)]">
 											{currentUserProfile?.displayName || user?.displayName || "Me"}
 										</span>
-										{drafts.length > 1 && (
-											<button
-												type='button'
-												onClick={() => removeDraftFromChain(idx)}
-												className='text-gray-500 hover:text-red-400 transition p-1 hover:bg-dark-fill-3 rounded'
-												title='Remove from chain'
-											>
-												<FaTrash size={11} />
-											</button>
-										)}
+										<div className="flex items-center gap-2">
+											{/* Edit / Preview Tabs */}
+											<div className="flex rounded-lg bg-[var(--bg-dark-fill-3)] p-0.5 border border-[var(--border-subtle)]">
+												<button
+													type="button"
+													onClick={() => setDrafts(prev => {
+														const c = [...prev];
+														c[idx].previewMode = false;
+														return c;
+													})}
+													className={`p-1.5 rounded-md text-[10px] font-bold flex items-center gap-1 transition ${!draft.previewMode ? "bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-sm" : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"}`}
+												>
+													<FaEdit size={10} /> Edit
+												</button>
+												<button
+													type="button"
+													onClick={() => setDrafts(prev => {
+														const c = [...prev];
+														c[idx].previewMode = true;
+														return c;
+													})}
+													className={`p-1.5 rounded-md text-[10px] font-bold flex items-center gap-1 transition ${draft.previewMode ? "bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-sm" : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"}`}
+												>
+													<FaEye size={10} /> Preview
+												</button>
+											</div>
+
+											{drafts.length > 1 && (
+												<button
+													type="button"
+													onClick={() => removeDraftFromChain(idx)}
+													className="text-[var(--text-muted)] hover:text-red-400 transition p-1.5 hover:bg-[var(--bg-hover)] rounded-lg"
+													title="Remove from chain"
+												>
+													<FaTrash size={11} />
+												</button>
+											)}
+										</div>
 									</div>
 
-									{/* Input box */}
-									<div className='relative'>
-										<textarea
-											value={draft.content}
-											onChange={(e) => handleContentChange(idx, e.target.value, e)}
-											onPaste={(e) => handlePaste(idx, e)}
-											onDragOver={(e) => e.preventDefault()}
-											onDrop={(e) => handleDrop(idx, e)}
-											placeholder={idx === 0 ? (composer.parentThreadId ? "Post a reply..." : "What's new?") : "Add to thread..."}
-											rows={2}
-											className='w-full !bg-transparent text-slate-900 dark:text-gray-200 placeholder-slate-400 dark:placeholder-slate-500 !border-0 !p-0 !ring-0 !outline-none !shadow-none text-[14.5px] leading-relaxed resize-none'
-										/>
+									{/* Formatting helper bar (only in Edit mode) */}
+									{!draft.previewMode && (
+										<div className="flex items-center gap-1.5 bg-[var(--bg-dark-fill-3)] px-2.5 py-1 rounded-lg border border-[var(--border-subtle)] w-fit">
+											<button
+												type="button"
+												onClick={() => formatText(idx, "bold")}
+												className="p-1 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] text-[var(--text-muted)] rounded transition"
+												title="Bold (Ctrl+B)"
+											>
+												<FaBold size={10} />
+											</button>
+											<button
+												type="button"
+												onClick={() => formatText(idx, "italic")}
+												className="p-1 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] text-[var(--text-muted)] rounded transition"
+												title="Italic (Ctrl+I)"
+											>
+												<FaItalic size={10} />
+											</button>
+											<button
+												type="button"
+												onClick={() => formatText(idx, "link")}
+												className="p-1 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] text-[var(--text-muted)] rounded transition"
+												title="Insert Link"
+											>
+												<FaLink size={10} />
+											</button>
+											<button
+												type="button"
+												onClick={() => formatText(idx, "code")}
+												className="p-1 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] text-[var(--text-muted)] rounded transition"
+												title="Code Block"
+											>
+												<FaCode size={10} />
+											</button>
+										</div>
+									)}
+
+									{/* Input box / Preview container */}
+									<div className="relative">
+										{draft.previewMode ? (
+											<div
+												className="w-full bg-[var(--bg-dark-fill-3)] border border-[var(--border-subtle)] p-3 rounded-xl min-h-[70px] text-sm text-[var(--text-primary)] overflow-y-auto select-text"
+												dangerouslySetInnerHTML={{ __html: parseMarkdown(draft.content) || "<span class='text-[var(--text-muted)] italic'>Nothing to preview.</span>" }}
+											/>
+										) : (
+											<textarea
+												ref={(el) => {
+													textareaRefs.current[idx] = el;
+												}}
+												value={draft.content}
+												onChange={(e) => handleContentChange(idx, e.target.value, e)}
+												onKeyDown={(e) => handleTextareaKeyDown(idx, e)}
+												onPaste={(e) => handlePaste(idx, e)}
+												onDragOver={(e) => e.preventDefault()}
+												onDrop={(e) => handleDrop(idx, e)}
+												placeholder={idx === 0 ? (composer.parentThreadId ? "Post a reply..." : "What's new? Support Markdown formatting...") : "Add to thread..."}
+												rows={2}
+												className="w-full !bg-transparent text-[var(--text-primary)] placeholder:text-[var(--text-muted)] !border-0 !p-0 !ring-0 !outline-none !shadow-none text-[14.5px] leading-relaxed resize-none"
+											/>
+										)}
 
 										{/* Mentions Dropdown */}
 										{activeDraftIdx === idx && mentionSearch !== "" && (
-											<div className='absolute z-50 left-0 bg-white dark:bg-dark-layer-2 border border-slate-200 dark:border-slate-800/60 rounded-xl shadow-2xl w-56 max-h-40 overflow-y-auto mt-1 p-1 scrollbar-thin select-none'>
+											<div className="absolute z-50 left-0 bg-[var(--bg-elevated)] border border-[var(--border-strong)] rounded-xl shadow-2xl w-56 max-h-40 overflow-y-auto mt-1 p-1 scrollbar-thin select-none">
 												{allUsers
 													.filter(
 														(u) =>
@@ -755,16 +1061,16 @@ const ThreadComposer: React.FC = () => {
 														<div
 															key={u.uid}
 															onClick={() => handleInsertMention(u)}
-															className='flex items-center gap-2.5 px-3 py-2 hover:bg-dark-fill-2 rounded-lg cursor-pointer transition text-xs font-semibold'
+															className="flex items-center gap-2.5 px-3 py-2 hover:bg-[var(--bg-hover)] rounded-lg cursor-pointer transition text-xs font-semibold"
 														>
 															<Avatar
 																src={u.avatarUrl}
 																displayName={u.displayName}
 																size={22}
 															/>
-															<div className='truncate'>
-																<p className='text-slate-950 dark:text-white'>{u.displayName}</p>
-																<p className='text-[10px] text-slate-500 dark:text-gray-500'>@{u.username}</p>
+															<div className="truncate">
+																<p className="text-[var(--text-primary)]">{u.displayName}</p>
+																<p className="text-[10px] text-[var(--text-muted)]">@{u.username}</p>
 															</div>
 														</div>
 													))}
@@ -772,21 +1078,40 @@ const ThreadComposer: React.FC = () => {
 										)}
 									</div>
 
-									{/* Character counter (appears near limit) */}
-									{nearLimit && (
-										<span className={`text-[10px] block text-right font-mono ${count > 280 ? "text-red-500 font-bold" : "text-gray-500"}`}>
-											{count} / 280
-										</span>
-									)}
+									{/* circular char counter */}
+									<div className="flex justify-end items-center gap-2 select-none">
+										{nearLimit && (
+											<span className={`text-[10px] font-mono ${count > 280 ? "text-red-500 font-bold" : "text-[var(--text-muted)]"}`}>
+												{count} / 280
+											</span>
+										)}
+										<div className="relative w-5 h-5 shrink-0 flex items-center justify-center">
+											<svg className="w-full h-full" viewBox="0 0 20 20">
+												<circle cx="10" cy="10" r="7.5" fill="none" stroke="var(--border-subtle)" strokeWidth="1.5" />
+												<circle
+													cx="10"
+													cy="10"
+													r="7.5"
+													fill="none"
+													stroke={count > 280 ? "var(--color-error)" : count > 240 ? "var(--color-warning)" : "var(--brand-orange)"}
+													strokeWidth="1.5"
+													strokeDasharray={2 * Math.PI * 7.5}
+													strokeDashoffset={2 * Math.PI * 7.5 * (1 - percentage / 100)}
+													transform="rotate(-90 10 10)"
+													className="transition-all duration-150"
+												/>
+											</svg>
+										</div>
+									</div>
 
 									{/* Photos Grid */}
 									{draft.photos.length > 0 && (
-										<div className='grid grid-cols-3 gap-2 border border-slate-200 dark:border-slate-800/40 p-2 rounded-xl bg-slate-50 dark:bg-dark-fill-3'>
+										<div className="grid grid-cols-3 gap-2 border border-[var(--border-subtle)] p-2 rounded-xl bg-[var(--bg-dark-fill-3)]">
 											{draft.photos.map((photo, pIdx) => (
-												<div key={pIdx} className='relative group aspect-video rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800/40 bg-slate-100 dark:bg-black/40'>
-													<img src={photo} className='w-full h-full object-cover' />
+												<div key={pIdx} className="relative group aspect-video rounded-lg overflow-hidden border border-[var(--border-subtle)] bg-[var(--bg-dark-fill-3)]">
+													<img src={photo} className="w-full h-full object-cover" />
 													<button
-														type='button'
+														type="button"
 														onClick={() =>
 															setDrafts((prev) => {
 																const copy = [...prev];
@@ -794,7 +1119,7 @@ const ThreadComposer: React.FC = () => {
 																return copy;
 															})
 														}
-														className='absolute top-1 right-1 bg-red-600/90 text-white rounded-full p-1 shadow-lg hover:bg-red-700 transition duration-150'
+														className="absolute top-1 right-1 bg-red-600/90 hover:bg-red-700 text-white rounded-full p-1 shadow-lg transition duration-150"
 													>
 														<FaTimes size={8} />
 													</button>
@@ -805,10 +1130,10 @@ const ThreadComposer: React.FC = () => {
 
 									{/* GIF Embedded */}
 									{draft.gif && (
-										<div className='relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800/40 bg-slate-100 dark:bg-black/30 max-w-sm aspect-video'>
-											<img src={draft.gif} className='w-full h-full object-cover' />
+										<div className="relative rounded-xl overflow-hidden border border-[var(--border-subtle)] bg-[var(--bg-dark-fill-3)] max-w-sm aspect-video">
+											<img src={draft.gif} className="w-full h-full object-cover" />
 											<button
-												type='button'
+												type="button"
 												onClick={() =>
 													setDrafts((prev) => {
 														const copy = [...prev];
@@ -816,7 +1141,7 @@ const ThreadComposer: React.FC = () => {
 														return copy;
 													})
 												}
-												className='absolute top-2 right-2 bg-black/70 hover:bg-black text-white rounded-full p-1.5 transition'
+												className="absolute top-2 right-2 bg-black/70 hover:bg-black text-white rounded-full p-1.5 transition"
 											>
 												<FaTimes size={10} />
 											</button>
@@ -825,13 +1150,13 @@ const ThreadComposer: React.FC = () => {
 
 									{/* Files Attachments */}
 									{draft.files.length > 0 && (
-										<div className='flex flex-wrap gap-2 border border-slate-200 dark:border-slate-800/40 p-2 rounded-xl bg-slate-50 dark:bg-dark-fill-3'>
+										<div className="flex flex-wrap gap-2 border border-[var(--border-subtle)] p-2 rounded-xl bg-[var(--bg-dark-fill-3)]">
 											{draft.files.map((file, fIdx) => (
-												<div key={fIdx} className='flex items-center gap-1.5 bg-slate-100 dark:bg-dark-fill-3 border border-slate-200 dark:border-slate-800/40 px-2.5 py-1 rounded-full text-[10px] text-slate-600 dark:text-gray-300'>
-													<FaPaperclip size={10} className='text-brand-orange' />
-													<span className='truncate max-w-[80px]'>{file.name}</span>
+												<div key={fIdx} className="flex items-center gap-1.5 bg-[var(--bg-hover)] border border-[var(--border-subtle)] px-2.5 py-1 rounded-full text-[10px] text-[var(--text-secondary)]">
+													<FaPaperclip size={10} className="text-[var(--brand-orange)]" />
+													<span className="truncate max-w-[80px]">{file.name}</span>
 													<button
-														type='button'
+														type="button"
 														onClick={() =>
 															setDrafts((prev) => {
 																const copy = [...prev];
@@ -839,7 +1164,7 @@ const ThreadComposer: React.FC = () => {
 																return copy;
 															})
 														}
-														className='text-gray-500 hover:text-red-400'
+														className="text-[var(--text-muted)] hover:text-red-400 ml-1"
 													>
 														<FaTimes size={10} />
 													</button>
@@ -848,18 +1173,55 @@ const ThreadComposer: React.FC = () => {
 										</div>
 									)}
 
+									{/* Quoted Post Preview in Composer */}
+									{idx === 0 && quotedThread && (
+										<div className="relative border border-[var(--border-subtle)] rounded-xl p-4 bg-[var(--bg-dark-fill-3)] overflow-hidden w-full mt-1">
+											{loadingQuoted ? (
+												<div className="h-12 bg-[var(--bg-dark-fill-2)] rounded animate-pulse w-full" />
+											) : (
+												<div className="space-y-2 w-full pr-6">
+													<div className="flex items-center gap-2 min-w-0">
+														<Avatar src={quotedThread.avatarUrl} displayName={quotedThread.displayName} size={20} />
+														<span className="font-bold text-xs text-[var(--text-primary)] truncate">{quotedThread.displayName}</span>
+													</div>
+													{quotedThread.content && (
+														<p className="text-xs text-[var(--text-secondary)] line-clamp-2 leading-relaxed break-words max-w-full">
+															{quotedThread.content}
+														</p>
+													)}
+												</div>
+											)}
+											<button
+												type="button"
+												onClick={() => {
+													sessionStorage.removeItem("pendingQuoteId");
+													setQuotedThread(null);
+												}}
+												className="absolute top-3.5 right-3.5 text-[var(--text-muted)] hover:text-red-400 transition"
+												title="Remove Quote"
+											>
+												<FaTimes size={14} />
+											</button>
+										</div>
+									)}
+
 									{/* Problem Submission Card */}
 									{draft.submittedProblem && (
-										<div className='flex items-center justify-between bg-brand-orange/5 border border-brand-orange/20 px-3.5 py-2.5 rounded-xl text-xs text-gray-300'>
-											<div className='flex items-center gap-2'>
-												<FaCode className='text-brand-orange' />
-												<span className='font-semibold'>{draft.submittedProblem.problemTitle}</span>
-												<span className='text-[10px] bg-brand-orange/15 text-brand-orange px-2 py-0.5 rounded'>
+										<div className="flex items-center justify-between bg-[var(--brand-glow)] border border-[var(--brand-orange)]/25 px-3.5 py-2.5 rounded-xl text-xs text-[var(--text-secondary)]">
+											<div className="flex items-center gap-2 flex-wrap">
+												<FaCode className="text-[var(--brand-orange)]" />
+												<span className="font-semibold">{draft.submittedProblem.problemTitle}</span>
+												<span className="text-[10px] bg-[var(--brand-orange)]/15 text-[var(--brand-orange)] px-2 py-0.5 rounded font-bold font-mono">
 													Attempt {draft.submittedProblem.submissionIndex}
 												</span>
+												{draft.submittedProblem.attempts !== undefined && draft.submittedProblem.attempts > 0 && (
+													<span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-bold font-mono border border-emerald-500/20">
+														{Math.round(((draft.submittedProblem.solved ?? 0) / draft.submittedProblem.attempts) * 100)}% success
+													</span>
+												)}
 											</div>
 											<button
-												type='button'
+												type="button"
 												onClick={() =>
 													setDrafts((prev) => {
 														const copy = [...prev];
@@ -867,7 +1229,7 @@ const ThreadComposer: React.FC = () => {
 														return copy;
 													})
 												}
-												className='text-gray-500 hover:text-red-400 transition'
+												className="text-[var(--text-muted)] hover:text-red-400 transition"
 											>
 												<FaTimes size={14} />
 											</button>
@@ -876,39 +1238,39 @@ const ThreadComposer: React.FC = () => {
 
 									{/* Poll Builder View */}
 									{draft.showPollBuilder && draft.poll && (
-										<div className='bg-slate-50 dark:bg-dark-fill-3 border border-slate-200 dark:border-slate-800/40 rounded-xl p-3.5 space-y-3 max-w-sm animate-fade-in'>
-											<div className='flex justify-between items-center mb-1'>
-												<span className='text-[10px] font-bold text-slate-500 dark:text-gray-400 uppercase tracking-wider'>Create Poll</span>
+										<div className="bg-[var(--bg-dark-fill-3)] border border-[var(--border-subtle)] rounded-xl p-3.5 space-y-3 max-w-sm animate-fade-in">
+											<div className="flex justify-between items-center mb-1">
+												<span className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Create Poll</span>
 												<button
-													type='button'
+													type="button"
 													onClick={() => handleRemovePoll(idx)}
-													className='text-[9px] font-bold text-red-400 hover:underline uppercase'
+													className="text-[9px] font-bold text-red-400 hover:underline uppercase"
 												>
 													Remove Poll
 												</button>
 											</div>
 											<input
-												type='text'
+												type="text"
 												value={draft.poll.question}
 												onChange={(e) => handlePollQuestionChange(idx, e.target.value)}
-												placeholder='Ask a question...'
-												className='w-full bg-slate-100 dark:bg-dark-fill-3 border border-slate-200 dark:border-slate-800/40 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-gray-500 rounded-lg p-2 text-xs outline-none focus:border-brand-orange'
+												placeholder="Ask a question..."
+												className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] rounded-lg p-2 text-xs outline-none focus:border-[var(--brand-orange)]"
 											/>
-											<div className='space-y-2'>
+											<div className="space-y-2">
 												{draft.poll.options.map((opt, oIdx) => (
-													<div key={oIdx} className='flex gap-2 items-center'>
+													<div key={oIdx} className="flex gap-2 items-center">
 														<input
-															type='text'
+															type="text"
 															value={opt}
 															onChange={(e) => handlePollOptionChange(idx, oIdx, e.target.value)}
 															placeholder={`Choice ${oIdx + 1}`}
-															className='flex-1 bg-slate-100 dark:bg-dark-fill-3 border border-slate-200 dark:border-slate-800/40 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-gray-500 rounded-lg p-2 text-xs outline-none focus:border-brand-orange font-medium'
+															className="flex-1 bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] rounded-lg p-2 text-xs outline-none focus:border-[var(--brand-orange)] font-medium"
 														/>
 														{draft.poll!.options.length > 2 && (
 															<button
-																type='button'
+																type="button"
 																onClick={() => handleRemovePollOption(idx, oIdx)}
-																className='text-gray-500 hover:text-red-400 transition'
+																className="text-[var(--text-muted)] hover:text-red-400 transition"
 															>
 																<FaTimes size={11} />
 															</button>
@@ -918,9 +1280,9 @@ const ThreadComposer: React.FC = () => {
 											</div>
 											{draft.poll.options.length < 4 && (
 												<button
-													type='button'
+													type="button"
 													onClick={() => handleAddPollOption(idx)}
-													className='text-[10px] text-brand-orange hover:underline font-bold flex items-center gap-1 mt-1'
+													className="text-[10px] text-[var(--brand-orange)] hover:underline font-bold flex items-center gap-1 mt-1"
 												>
 													<FaPlus size={8} /> Add Choice
 												</button>
@@ -930,70 +1292,71 @@ const ThreadComposer: React.FC = () => {
 
 									{/* Inline Submission Selector */}
 									{showSubmissionSelectorFor === idx && (
-										<div className='bg-slate-50 dark:bg-dark-layer-2 border border-slate-200 dark:border-slate-800/80 rounded-xl p-4 space-y-3 animate-fade-in'>
-											<h4 className='text-xs font-bold text-slate-700 dark:text-gray-300 uppercase tracking-wider'>Attach Problem Submission</h4>
+										<div className="bg-[var(--bg-elevated)] border border-[var(--border-strong)] rounded-xl p-4 space-y-3 animate-fade-in">
+											<h4 className="text-xs font-bold text-[var(--text-primary)] uppercase tracking-wider">Attach Problem Submission</h4>
 											{loadingSubmissions ? (
-												<p className='text-xs text-gray-550 italic animate-pulse'>Loading attempts...</p>
+												<p className="text-xs text-[var(--text-muted)] italic animate-pulse">Loading attempts...</p>
 											) : userSubmissions.length === 0 ? (
-												<p className='text-xs text-gray-550 italic'>No submissions found.</p>
+												<p className="text-xs text-[var(--text-muted)] italic">No submissions found.</p>
 											) : (
-												<div className='grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs'>
+												<div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
 													<div>
-														<label className='block text-[10px] text-slate-500 dark:text-gray-500 font-bold mb-1 uppercase'>Select Problem</label>
-														<select
+														<label className="block text-[10px] text-[var(--text-muted)] font-bold mb-1.5 uppercase">Select Problem</label>
+														<BeastCodeSelect
+															options={Array.from(new Set(userSubmissions.map((s) => s.problemId))).map((pid) => {
+																const sub = userSubmissions.find((s) => s.problemId === pid);
+																return {
+																	value: pid,
+																	label: sub?.problemTitle || pid,
+																};
+															})}
 															value={selectedProblemId}
-															onChange={(e) => {
-																setSelectedProblemId(e.target.value);
+															onChange={(val) => {
+																setSelectedProblemId(val);
 																setSelectedSubIndex(-1);
 															}}
-															className='w-full bg-white dark:bg-dark-layer-1 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-800/80 rounded-lg p-2 transition-all duration-200 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20'
-														>
-															<option className='bg-white dark:bg-dark-layer-1 text-slate-900 dark:text-slate-200' value=''>-- Choose --</option>
-															{Array.from(new Set(userSubmissions.map((s) => s.problemId))).map((pid) => (
-																<option className='bg-white dark:bg-dark-layer-1 text-slate-900 dark:text-slate-200' key={pid} value={pid}>
-																	{userSubmissions.find((s) => s.problemId === pid)?.problemTitle || pid}
-																</option>
-															))}
-														</select>
+															placeholder="-- Choose --"
+															searchable
+														/>
 													</div>
 													{selectedProblemId && (
 														<div>
-															<label className='block text-[10px] text-slate-500 dark:text-gray-500 font-bold mb-1 uppercase'>Select Attempt</label>
-															<select
-																value={selectedSubIndex}
-																onChange={(e) => setSelectedSubIndex(parseInt(e.target.value))}
-																className='w-full bg-white dark:bg-dark-layer-1 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-800/80 rounded-lg p-2 transition-all duration-200 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 font-mono'
-															>
-																<option className='bg-white dark:bg-dark-layer-1 text-slate-900 dark:text-slate-200' value={-1}>-- Choose --</option>
-																{userSubmissions
+															<label className="block text-[10px] text-[var(--text-muted)] font-bold mb-1.5 uppercase">Select Attempt</label>
+															<BeastCodeSelect
+																options={userSubmissions
 																	.filter((s) => s.problemId === selectedProblemId)
-																	.map((sub, sIdx) => (
-																		<option className='bg-white dark:bg-dark-layer-1 text-slate-900 dark:text-slate-200' key={sub.id} value={sIdx}>
-																			Attempt {sIdx + 1} ({sub.status})
-																		</option>
-																	))}
-															</select>
+																	.map((sub, sIdx) => ({
+																		value: String(sIdx),
+																		label: `Attempt ${sIdx + 1} (${sub.status})`,
+																	}))
+																}
+																value={selectedSubIndex === -1 ? "" : String(selectedSubIndex)}
+																onChange={(val) => {
+																	setSelectedSubIndex(val === "" ? -1 : parseInt(val));
+																}}
+																placeholder="-- Choose --"
+															/>
 														</div>
 													)}
 												</div>
 											)}
-											<div className='flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800/40 text-xs'>
+											<div className="flex justify-end gap-2 pt-2 border-t border-[var(--border-subtle)] text-xs">
 												<button
-													type='button'
+													type="button"
 													onClick={() => {
 														setShowSubmissionSelectorFor(null);
 														setSelectedProblemId("");
 														setSelectedSubIndex(-1);
 													}}
-													className='px-3.5 py-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 bg-slate-100 dark:bg-dark-fill-3 hover:bg-slate-200 dark:hover:bg-dark-fill-2 transition font-semibold'
+													className="px-3.5 py-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-dark-fill-3)] hover:bg-[var(--bg-hover)] transition font-semibold"
 												>
 													Cancel
 												</button>
 												<button
-													type='button'
+													type="button"
 													onClick={handleAttachSubmission}
 													disabled={!selectedProblemId || selectedSubIndex === -1}
-													className='px-4 py-1.5 rounded-lg text-white bg-brand-orange hover:bg-brand-orange-s transition disabled:bg-dark-fill-3 disabled:text-slate-500 font-semibold'
+													className="px-4 py-1.5 rounded-lg bc-btn-brand transition disabled:bg-[var(--bg-dark-fill-3)] disabled:text-[var(--text-muted)] font-semibold"
 												>
 													Attach Code
 												</button>
@@ -1002,51 +1365,93 @@ const ThreadComposer: React.FC = () => {
 									)}
 
 									{/* Action Row */}
-									<div className='flex items-center gap-3 text-slate-400 dark:text-gray-500 pt-1'>
+									<div className="flex items-center gap-3.5 text-[var(--text-muted)] pt-1 select-none">
 										{/* Attach Photo Button */}
-										<label className='cursor-pointer hover:text-slate-900 dark:hover:text-white transition p-1.5 hover:bg-slate-100 dark:hover:bg-dark-fill-3 rounded' title='Add Photo'>
-											<FaImage size={13.5} />
+										<label className="cursor-pointer hover:text-[var(--text-primary)] p-1.5 hover:bg-[var(--bg-hover)] rounded-lg transition" title="Add Photo">
+											<FaImage size={14} />
 											<input
 												ref={(el) => {
 													photoInputRefs.current[idx] = el;
 												}}
-												type='file'
-												accept='image/*'
+												type="file"
+												accept="image/*"
 												multiple
-												className='hidden'
+												className="hidden"
 												onChange={(e) => handlePhotoSelect(idx, e)}
 											/>
 										</label>
 
 										{/* Attach File Button */}
-										<label className='cursor-pointer hover:text-slate-900 dark:hover:text-white transition p-1.5 hover:bg-slate-100 dark:hover:bg-dark-fill-3 rounded' title='Add File'>
-											<FaPaperclip size={13.5} />
+										<label className="cursor-pointer hover:text-[var(--text-primary)] p-1.5 hover:bg-[var(--bg-hover)] rounded-lg transition" title="Add File">
+											<FaPaperclip size={14} />
 											<input
 												ref={(el) => {
 													fileInputRefs.current[idx] = el;
 												}}
-												type='file'
+												type="file"
 												multiple
-												className='hidden'
+												className="hidden"
 												onChange={(e) => handleFileSelect(idx, e)}
 											/>
 										</label>
 
-										{/* GIF Picker Trigger */}
-										<div className='relative'>
+										{/* Emoji Picker Trigger */}
+										<div className="relative">
 											<button
-												type='button'
+												type="button"
+												onClick={() =>
+													setDrafts((prev) => {
+														const copy = [...prev];
+														copy[idx].showEmojiPicker = !copy[idx].showEmojiPicker;
+														copy[idx].showGifPicker = false;
+														return copy;
+													})
+												}
+												className="hover:text-[var(--text-primary)] p-1.5 hover:bg-[var(--bg-hover)] rounded-lg transition"
+												title="Insert Emoji"
+											>
+												<FaSmile size={14} />
+											</button>
+											{draft.showEmojiPicker && (
+												<EmojiPicker
+													onSelect={(emoji) => {
+														setDrafts((prev) => {
+															const copy = [...prev];
+															const txtArea = textareaRefs.current[idx];
+															const cursor = txtArea ? txtArea.selectionStart : copy[idx].content.length;
+															const text = copy[idx].content;
+															copy[idx].content = text.substring(0, cursor) + emoji + text.substring(cursor);
+															copy[idx].showEmojiPicker = false;
+															return copy;
+														});
+													}}
+													onClose={() =>
+														setDrafts((prev) => {
+															const copy = [...prev];
+															copy[idx].showEmojiPicker = false;
+															return copy;
+														})
+													}
+												/>
+											)}
+										</div>
+
+										{/* GIF Picker Trigger */}
+										<div className="relative">
+											<button
+												type="button"
 												onClick={() =>
 													setDrafts((prev) => {
 														const copy = [...prev];
 														copy[idx].showGifPicker = !copy[idx].showGifPicker;
+														copy[idx].showEmojiPicker = false;
 														return copy;
 													})
 												}
-												className='hover:text-slate-900 dark:hover:text-white transition p-1.5 hover:bg-slate-100 dark:hover:bg-dark-fill-3 rounded'
-												title='Add GIF'
+												className="hover:text-[var(--text-primary)] p-1.5 hover:bg-[var(--bg-hover)] rounded-lg transition text-xs font-black"
+												title="Add GIF"
 											>
-												<FaSmile size={13.5} />
+												GIF
 											</button>
 											{draft.showGifPicker && (
 												<GifPicker
@@ -1071,23 +1476,23 @@ const ThreadComposer: React.FC = () => {
 
 										{/* Poll Creator Trigger */}
 										<button
-											type='button'
+											type="button"
 											onClick={() => handleOpenPollBuilder(idx)}
 											disabled={!!draft.poll}
-											className='hover:text-slate-900 dark:hover:text-white transition disabled:opacity-30 p-1.5 hover:bg-slate-100 dark:hover:bg-dark-fill-3 rounded'
-											title='Add Poll'
+											className="hover:text-[var(--text-primary)] p-1.5 hover:bg-[var(--bg-hover)] rounded-lg transition disabled:opacity-30"
+											title="Add Poll"
 										>
-											<FaPollH size={13.5} />
+											<FaPollH size={14} />
 										</button>
 
 										{/* Attach solved problem */}
 										<button
-											type='button'
+											type="button"
 											onClick={() => handleOpenSubmissionSelector(idx)}
-											className='hover:text-slate-900 dark:hover:text-white transition p-1.5 hover:bg-slate-100 dark:hover:bg-dark-fill-3 rounded'
-											title='Attach Leetcode Solution'
+											className="hover:text-[var(--text-primary)] p-1.5 hover:bg-[var(--bg-hover)] rounded-lg transition"
+											title="Attach Leetcode Solution"
 										>
-											<FaCode size={13.5} />
+											<FaCode size={14} />
 										</button>
 									</div>
 								</div>
@@ -1097,35 +1502,35 @@ const ThreadComposer: React.FC = () => {
 				</div>
 
 				{/* Footer Options & Post Button */}
-				<div className='px-6 py-4 bg-slate-50 dark:bg-dark-layer-2 border-t border-slate-200 dark:border-slate-800/60 flex justify-between items-center select-none'>
+				<div className="px-6 py-4 bg-[var(--bg-dark-layer-1)] border-t border-[var(--border-subtle)] flex justify-between items-center select-none">
 					{/* Add thread to chain button */}
 					{!composer.parentThreadId ? (
 						<button
 							onClick={addDraftToChain}
-							className='flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-900 dark:text-gray-400 dark:hover:text-white transition'
+							className="flex items-center gap-1.5 text-xs font-black text-[var(--brand-orange)] hover:scale-102 active:scale-98 transition"
 						>
-							<FaPlus size={10} className='text-brand-orange' />
+							<FaPlus size={10} />
 							<span>Add to thread</span>
 						</button>
 					) : (
 						<div />
 					)}
 
-					<div className='flex gap-3'>
+					<div className="flex gap-3">
 						<button
 							onClick={() => setComposer({ isOpen: false })}
-							className='bg-slate-100 hover:bg-slate-200 dark:bg-dark-fill-3 dark:hover:bg-dark-fill-2 text-slate-700 dark:text-white text-xs font-semibold px-5 py-2.5 rounded-full transition'
+							className="bg-[var(--bg-dark-fill-3)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] text-xs font-bold px-5 py-2.5 rounded-full transition"
 						>
 							Cancel
 						</button>
 						<button
 							onClick={handlePublish}
 							disabled={submitting}
-							className='bg-brand-orange hover:bg-brand-orange-s text-white text-xs font-bold px-6 py-2.5 rounded-full transition shadow-lg flex items-center gap-2 disabled:opacity-50'
+							className="bc-btn-brand text-xs font-black px-6 py-2.5 rounded-full transition shadow-lg flex items-center gap-2 disabled:opacity-50"
 						>
 							{submitting ? (
 								<>
-									<FaSpinner className='animate-spin' size={12} />
+									<FaSpinner className="animate-spin" size={12} />
 									<span>Posting...</span>
 								</>
 							) : (

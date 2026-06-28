@@ -33,6 +33,9 @@ import PollComponent from "./PollComponent";
 import Avatar from "./Avatar";
 import ThreadMedia from "./ThreadMedia";
 import { useRouter } from "next/router";
+import { useUserProfile } from "@/hooks/useUserProfile";
+import { clientSendNotification } from "@/utils/clientNotificationService";
+
 
 interface AttachmentFile {
 	name: string;
@@ -50,6 +53,8 @@ interface AttachmentProblem {
 	language: string;
 	status: string;
 	timestamp: number;
+	attempts?: number;
+	solved?: number;
 }
 
 interface Thread {
@@ -93,6 +98,16 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 	const commentFeedback = useRecoilValue(threadCommentFeedbackAtom);
 	const router = useRouter();
 
+	// Fetch real-time/latest profile of the author to show the newest uploaded avatar/displayName
+	const { profile: authorProfile } = useUserProfile(thread.uid);
+	const avatarUrl = authorProfile?.avatarUrl || thread.avatarUrl;
+	const displayName = authorProfile?.displayName || thread.displayName;
+
+	// Fetch real-time/latest profile of the logged-in user to show the newest uploaded avatar/displayName in notifications
+	const { profile: loggedInProfile } = useUserProfile(user?.uid);
+	const currentUserAvatar = loggedInProfile?.avatarUrl || user?.photoURL || "";
+	const currentUserDisplayName = loggedInProfile?.displayName || user?.displayName || user?.email?.split("@")[0] || "Anonymous";
+
 	const isJustPosted = commentFeedback.justPosted?.id === thread.id || thread.id.startsWith("temp-");
 
 	// Likes Optimistic UI State
@@ -110,6 +125,10 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 
 	// Context Fetching
 	const [quotedThread, setQuotedThread] = useState<Thread | null>(null);
+	const { profile: quotedProfile } = useUserProfile(quotedThread?.uid);
+	const quotedAvatarUrl = quotedProfile?.avatarUrl || quotedThread?.avatarUrl;
+	const quotedDisplayName = quotedProfile?.displayName || quotedThread?.displayName;
+
 	const [loadingQuote, setLoadingQuote] = useState(false);
 	const [subReplies, setSubReplies] = useState<Thread[]>([]);
 
@@ -289,17 +308,13 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 				await updateDoc(threadRef, { likes: updatedLikes });
 
 				if (newLiked && thread.uid !== user.uid) {
-					const authorName = user.displayName || user.email?.split("@")[0] || "Anonymous";
-					const authorAvatar = user.photoURL || "";
-					await addDoc(collection(firestore, "notifications"), {
-						toUid: thread.uid,
-						fromUid: user.uid,
-						fromDisplayName: authorName,
-						fromAvatarUrl: authorAvatar,
-						type: "like",
-						threadId: thread.id,
-						createdAt: Date.now(),
-						read: false,
+					await clientSendNotification("THREAD_LIKE", thread.uid, {
+						placeholders: {
+							threadTitle: thread.content ? (thread.content.length > 30 ? thread.content.substring(0, 30) + "..." : thread.content) : "Thread",
+							replierName: currentUserDisplayName,
+						},
+						ctaUrl: `/threads?threadId=${thread.id}`,
+						metadata: { threadId: thread.id }
 					});
 				}
 			}
@@ -358,13 +373,10 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 		setShowRepostDropdown(false);
 		setRepostStatus("loading");
 		try {
-			const authorName = user.displayName || user.email?.split("@")[0] || "Anonymous";
-			const authorAvatar = user.photoURL || "";
-
 			await addDoc(collection(firestore, "threads"), {
 				uid: user.uid,
-				displayName: authorName,
-				avatarUrl: authorAvatar,
+				displayName: currentUserDisplayName,
+				avatarUrl: currentUserAvatar,
 				content: "",
 				createdAt: Date.now(),
 				likes: [],
@@ -375,15 +387,13 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 			});
 
 			if (thread.uid !== user.uid) {
-				await addDoc(collection(firestore, "notifications"), {
-					toUid: thread.uid,
-					fromUid: user.uid,
-					fromDisplayName: authorName,
-					fromAvatarUrl: authorAvatar,
-					type: "repost",
-					threadId: thread.id,
-					createdAt: Date.now(),
-					read: false,
+				await clientSendNotification("THREAD_QUOTE", thread.uid, {
+					placeholders: {
+						threadTitle: thread.content ? (thread.content.length > 30 ? thread.content.substring(0, 30) + "..." : thread.content) : "Thread",
+						replierName: currentUserDisplayName,
+					},
+					ctaUrl: `/threads?threadId=${thread.id}`,
+					metadata: { threadId: thread.id }
 				});
 			}
 
@@ -406,7 +416,7 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 		setComposer({
 			isOpen: true,
 			parentThreadId: "",
-			replyToDisplayName: thread.displayName,
+			replyToDisplayName: displayName,
 		});
 		sessionStorage.setItem("pendingQuoteId", thread.id);
 	};
@@ -449,10 +459,10 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 	}, [thread.id]);
 	return (
 		<div
-			className={`w-full max-w-[700px] mx-auto border border-slate-200/80 dark:border-slate-800/70 bg-white dark:bg-dark-layer-1 hover:bg-slate-50/50 dark:hover:bg-dark-hover transition-all duration-300 ease-out rounded-2xl p-5 relative select-none box-sizing-border-box overflow-hidden ${
-				isJustPosted ? "bg-purple-50/40 border-purple-200/60 dark:bg-slate-800/50 dark:border-slate-700/50 shadow-lg" : "shadow-sm dark:shadow-none"
+			className={`w-full max-w-[700px] mx-auto bc-surface border-gray-850 hover:bg-dark-hover transition-all duration-300 ease-out rounded-2xl p-5 relative select-none box-sizing-border-box overflow-hidden ${
+				isJustPosted ? "border-brand-orange/30 bg-brand-orange/5 shadow-lg" : "shadow-sm dark:shadow-none"
 			} ${
-				highlighted && !isJustPosted ? "border-brand-orange bg-amber-50/20 dark:bg-dark-layer-2/50" : ""
+				highlighted && !isJustPosted ? "border-brand-orange bg-brand-orange/5" : ""
 			} ${deleting ? "opacity-40 pointer-events-none" : ""}`}
 		>
 			<div className='flex gap-4 items-start w-full'>
@@ -461,8 +471,8 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 					<Link href={`/profile?uid=${thread.uid}`}>
 						<div className='cursor-pointer'>
 							<Avatar
-								src={thread.avatarUrl}
-								displayName={thread.displayName}
+								src={avatarUrl}
+								displayName={displayName}
 								size={48}
 							/>
 						</div>
@@ -470,7 +480,7 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 
 					{/* Reply Connector Line */}
 					{showConnectorLine && (
-						<div className='w-[2px] bg-slate-200 dark:bg-slate-800 absolute top-14 bottom-0 left-1/2 -translate-x-1/2 z-0 opacity-40' />
+						<div className='w-[2px] bg-dark-fill-3 absolute top-14 bottom-0 left-1/2 -translate-x-1/2 z-0 opacity-40' />
 					)}
 				</div>
 
@@ -480,14 +490,14 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 					<div className='flex items-center justify-between min-w-0 select-none'>
 						<div className='flex items-center gap-1.5 min-w-0'>
 							<Link href={`/profile?uid=${thread.uid}`}>
-								<span className='font-bold text-[14.5px] text-slate-900 dark:text-slate-100 hover:text-brand-orange hover:underline cursor-pointer transition truncate block max-w-[160px] md:max-w-[220px]'>
-									{thread.displayName}
+								<span className='font-bold text-[14.5px] text-dark-gray-8 hover:text-brand-orange hover:underline cursor-pointer transition truncate block max-w-[160px] md:max-w-[220px]'>
+									{displayName}
 								</span>
 							</Link>
 							<FaCheckCircle className='text-brand-orange shrink-0' size={12} title='Verified Developer' />
 						</div>
 
-						<div className='flex items-center gap-2.5 text-slate-400 dark:text-slate-500 text-xs shrink-0 font-mono'>
+						<div className='flex items-center gap-2.5 text-bc-muted text-xs shrink-0 font-mono'>
 							<span>{timeAgo}</span>
 
 							{/* Options trigger */}
@@ -497,24 +507,24 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 										e.stopPropagation();
 										setShowOptions(!showOptions);
 									}}
-									className='p-1.5 hover:bg-slate-100 dark:hover:bg-dark-fill-3/60 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded-full transition relative'
+									className='p-1.5 hover:bg-dark-fill-3 text-bc-muted hover:text-dark-gray-8 rounded-full transition relative'
 								>
 									<FaEllipsisH size={13} />
 									{loginTooltipTarget === "bookmark" && (
-										<span className='absolute -top-7 right-0 bg-slate-900 dark:bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded shadow border border-slate-700 dark:border-gray-750 font-semibold whitespace-nowrap z-10 animate-fade-in'>
+										<span className='absolute -top-7 right-0 bg-dark-elevated text-dark-gray-8 text-[10px] px-2 py-0.5 rounded shadow border border-gray-850 font-semibold whitespace-nowrap z-10 animate-fade-in'>
 											Sign in first
 										</span>
 									)}
 								</button>
 								{showOptions && (
-									<div className='absolute right-0 top-7 z-50 bg-white dark:bg-dark-layer-1 border border-slate-200 dark:border-slate-800/60 rounded-2xl shadow-lg dark:shadow-2xl p-1.5 w-40 animate-fade-in'>
+									<div className='absolute right-0 top-7 z-50 bc-surface border-gray-850 rounded-2xl shadow-lg dark:shadow-2xl p-1.5 w-40 animate-fade-in'>
 										<button
 											onClick={(e) => {
 												e.stopPropagation();
 												handleShare();
 												setShowOptions(false);
 											}}
-											className='flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-600 dark:text-gray-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-hover rounded-xl w-full text-left'
+											className='flex items-center gap-2 px-3 py-2 text-xs font-semibold text-dark-gray-7 hover:text-dark-gray-8 hover:bg-dark-hover rounded-xl w-full text-left'
 										>
 											<FaExternalLinkAlt size={11} /> Copy Link
 										</button>
@@ -524,7 +534,7 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 												handleBookmarkToggle(e);
 												setShowOptions(false);
 											}}
-											className='flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-600 dark:text-gray-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-hover rounded-xl w-full text-left'
+											className='flex items-center gap-2 px-3 py-2 text-xs font-semibold text-dark-gray-7 hover:text-dark-gray-8 hover:bg-dark-hover rounded-xl w-full text-left'
 										>
 											<FaBookmark size={11} /> {isBookmarked ? "Unbookmark" : "Bookmark"}
 										</button>
@@ -535,7 +545,7 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 													handleDeleteThread();
 													setShowOptions(false);
 												}}
-												className='flex items-center gap-2 px-3 py-2 text-xs font-semibold text-red-500 dark:text-red-400 hover:text-red-655 dark:hover:text-red-300 hover:bg-red-55/10 dark:hover:bg-red-950/20 rounded-xl w-full text-left border-t border-slate-200 dark:border-slate-800/60 mt-1'
+												className='flex items-center gap-2 px-3 py-2 text-xs font-semibold text-bc-error hover:text-bc-error hover:bg-bc-error/10 rounded-xl w-full text-left border-t border-gray-850 mt-1'
 											>
 												<FaTrash size={11} /> Delete
 											</button>
@@ -548,7 +558,7 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 
 					{/* Main Text Content */}
 					{thread.content && (
-						<p className='text-[14.5px] leading-relaxed text-slate-800 dark:text-slate-200 select-text whitespace-pre-wrap break-words overflow-hidden max-w-full'>
+						<p className='text-[14.5px] leading-relaxed text-dark-gray-8 select-text whitespace-pre-wrap break-words overflow-hidden max-w-full'>
 							{parseText(thread.content)}
 						</p>
 					)}
@@ -572,57 +582,66 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 
 					{/* Quoted Post Embed */}
 					{thread.quotedThreadId && (
-						<div className='border border-slate-200/80 dark:border-slate-800/40 rounded-xl p-4 bg-slate-50 dark:bg-dark-layer-2 hover:border-slate-300 dark:hover:border-slate-700 transition w-full mt-1 overflow-hidden'>
-							{loadingQuote ? (
-								<div className='h-12 bg-dark-fill-3/10 rounded animate-pulse w-full' />
-							) : quotedThread ? (
-								<div className='space-y-2 w-full'>
-									<div className='flex items-center gap-2 min-w-0'>
-										<Avatar src={quotedThread.avatarUrl} displayName={quotedThread.displayName} size={20} />
-										<span className='font-bold text-xs text-slate-900 dark:text-slate-200 truncate'>{quotedThread.displayName}</span>
-										<FaCheckCircle className='text-brand-orange shrink-0' size={10} />
+						<Link href={`/threads?threadId=${thread.quotedThreadId}`} className='block w-full'>
+							<div className='border border-gray-850 rounded-xl p-4 bg-dark-layer-2 hover:border-gray-750 transition w-full mt-1 overflow-hidden cursor-pointer'>
+								{loadingQuote ? (
+									<div className='h-12 bg-dark-fill-3/10 rounded animate-pulse w-full' />
+								) : quotedThread ? (
+									<div className='space-y-2 w-full'>
+										<div className='flex items-center gap-2 min-w-0'>
+											<Avatar src={quotedAvatarUrl} displayName={quotedDisplayName} size={20} />
+											<span className='font-bold text-xs text-dark-gray-8 truncate'>{quotedDisplayName}</span>
+											<FaCheckCircle className='text-brand-orange shrink-0' size={10} />
+										</div>
+										<p className='text-xs text-dark-gray-7 line-clamp-2 leading-relaxed select-text break-words max-w-full'>
+											{quotedThread.content}
+										</p>
 									</div>
-									<p className='text-xs text-slate-655 dark:text-slate-400 line-clamp-2 leading-relaxed select-text break-words max-w-full'>
-										{quotedThread.content}
-									</p>
-								</div>
-							) : (
-								<p className='text-xs text-gray-500 italic select-none'>Quoted content deleted.</p>
-							)}
-						</div>
+								) : (
+									<p className='text-xs text-bc-muted italic select-none'>Quoted content deleted.</p>
+								)}
+							</div>
+						</Link>
 					)}
 
 					{/* Simple Repost Embed */}
 					{thread.repostedThreadId && (
-						<div className='bg-green-50/30 dark:bg-[#182a1b]/10 border border-green-200 dark:border-green-950/30 rounded-xl p-4 mt-1 w-full hover:border-green-300 dark:hover:border-green-900/40 transition overflow-hidden'>
-							<div className='flex items-center gap-1.5 text-[11px] text-green-600 dark:text-green-400 font-semibold mb-2 select-none'>
-								<FaRetweet size={12} />
-								<span>Reposted</span>
+						<Link href={`/threads?threadId=${thread.repostedThreadId}`} className='block w-full'>
+							<div className='bg-dark-green-s/10 border border-dark-green-s/30 rounded-xl p-4 mt-1 w-full hover:border-dark-green-s/50 transition overflow-hidden cursor-pointer'>
+								<div className='flex items-center gap-1.5 text-[11px] text-dark-green-s font-semibold mb-2 select-none'>
+									<FaRetweet size={12} />
+									<span>Reposted</span>
+								</div>
+								<RepostEmbed threadId={thread.repostedThreadId} />
 							</div>
-							<RepostEmbed threadId={thread.repostedThreadId} />
-						</div>
+						</Link>
 					)}
 
 					{/* Solved Code Submissions */}
 					{thread.submittedProblem && (
-						<div className='border border-slate-200 dark:border-slate-800/40 rounded-xl bg-slate-50 dark:bg-dark-layer-2 overflow-hidden w-full mt-1'>
+						<div className='border border-gray-850 rounded-xl bg-dark-layer-2 overflow-hidden w-full mt-1'>
 							<div
 								onClick={() => setShowCode(!showCode)}
-								className='flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-slate-100 dark:hover:bg-dark-hover transition select-none'
+								className='flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-dark-hover transition select-none'
 							>
-								<div className='flex items-center gap-2 text-xs text-slate-700 dark:text-gray-300 min-w-0'>
+								<div className='flex items-center gap-2 text-xs text-dark-gray-7 min-w-0'>
 									<FaCode className='text-brand-orange shrink-0' size={13} />
 									<span className='font-bold truncate'>{thread.submittedProblem.problemTitle}</span>
-									<span className='text-[10px] bg-brand-orange/15 text-brand-orange px-2 py-0.5 rounded font-mono shrink-0'>
+									<span className='text-[10px] bg-brand-orange/15 text-brand-orange px-2 py-0.5 rounded font-mono shrink-0 font-bold'>
 										{thread.submittedProblem.language}
 									</span>
+									{thread.submittedProblem.attempts !== undefined && thread.submittedProblem.attempts > 0 && (
+										<span className='text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-mono shrink-0 font-bold'>
+											{Math.round(((thread.submittedProblem.solved ?? 0) / thread.submittedProblem.attempts) * 100)}% success
+										</span>
+									)}
 								</div>
 								<span className='text-[10px] text-brand-orange font-bold hover:underline shrink-0'>
 									{showCode ? "Hide Code" : "Show Code"}
 								</span>
 							</div>
 							{showCode && (
-								<pre className='p-4 text-xs font-mono bg-slate-950 dark:bg-dark-layer-2 text-slate-250 dark:text-gray-300 overflow-x-auto border-t border-slate-200 dark:border-slate-800/40 max-h-56 select-text whitespace-pre scrollbar-thin'>
+								<pre className='p-4 text-xs font-mono bg-dark-layer-2 text-dark-gray-7 overflow-x-auto border-t border-gray-850 max-h-56 select-text whitespace-pre scrollbar-thin'>
 									<code>{thread.submittedProblem.code}</code>
 								</pre>
 							)}
@@ -630,7 +649,7 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 					)}
 
 					{/* Actions row: Icons size 20x20, gap 20px, aligned vertically */}
-					<div className='flex items-center gap-[20px] text-slate-400 dark:text-slate-500 select-none pt-1 min-h-[32px]'>
+					<div className='flex items-center gap-[20px] text-bc-muted select-none pt-1 min-h-[32px]'>
 						{/* Like */}
 						<button
 							onClick={handleLikeToggle}
@@ -642,7 +661,7 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 							<FaHeart size={20} className={isLiked ? "scale-105" : ""} />
 							{likesCount > 0 && <span className='text-xs font-bold font-mono self-center'>{likesCount}</span>}
 							{loginTooltipTarget === "like" && (
-								<span className='absolute -top-7 left-1/2 -translate-x-1/2 bg-slate-900 dark:bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded shadow border border-slate-700 dark:border-gray-750 font-semibold whitespace-nowrap z-10 animate-fade-in'>
+								<span className='absolute -top-7 left-1/2 -translate-x-1/2 bg-dark-elevated text-dark-gray-8 text-[10px] px-2 py-0.5 rounded shadow border border-gray-850 font-semibold whitespace-nowrap z-10 animate-fade-in'>
 									Sign in first
 								</span>
 							)}
@@ -660,7 +679,7 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 								setComposer({
 									isOpen: true,
 									parentThreadId: thread.id,
-									replyToDisplayName: thread.displayName,
+									replyToDisplayName: displayName,
 								});
 							}}
 							className='flex items-center gap-1.5 hover:text-brand-orange hover:scale-105 transition duration-150 p-1.5 rounded-full hover:bg-brand-orange/5 shrink-0 relative'
@@ -668,7 +687,7 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 						>
 							<FaComment size={20} />
 							{loginTooltipTarget === "reply" && (
-								<span className='absolute -top-7 left-1/2 -translate-x-1/2 bg-slate-900 dark:bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded shadow border border-slate-700 dark:border-gray-750 font-semibold whitespace-nowrap z-10 animate-fade-in'>
+								<span className='absolute -top-7 left-1/2 -translate-x-1/2 bg-dark-elevated text-dark-gray-8 text-[10px] px-2 py-0.5 rounded shadow border border-gray-850 font-semibold whitespace-nowrap z-10 animate-fade-in'>
 									Sign in first
 								</span>
 							)}
@@ -681,13 +700,13 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 									e.stopPropagation();
 									setShowRepostDropdown(!showRepostDropdown);
 								}}
-								className={`flex items-center gap-1 hover:text-green-500 hover:scale-105 transition duration-150 p-1.5 rounded-full hover:bg-green-500/5 shrink-0 relative ${
-									repostStatus === "success" ? "text-green-500" : repostStatus === "error" ? "text-rose-500" : ""
+								className={`flex items-center gap-1 hover:text-dark-green-s hover:scale-105 transition duration-150 p-1.5 rounded-full hover:bg-dark-green-s/5 shrink-0 relative ${
+									repostStatus === "success" ? "text-dark-green-s" : repostStatus === "error" ? "text-bc-error" : ""
 								}`}
 								title='Repost / Quote'
 							>
 								{repostStatus === "loading" ? (
-									<svg className='animate-spin w-5 h-5 text-green-500' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+									<svg className='animate-spin w-5 h-5 text-dark-green-s' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
 										<circle cx='12' cy='12' r='10' stroke='currentColor' strokeWidth='2' opacity='0.3' />
 										<path d='M12 2a10 10 0 0110 10' strokeWidth='2' strokeLinecap='round' />
 									</svg>
@@ -695,29 +714,29 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 									<FaRetweet size={20} className={repostStatus === "success" ? "scale-110" : ""} />
 								)}
 								{repostStatus === "success" && (
-									<span className='absolute -top-7 left-1/2 -translate-x-1/2 bg-slate-900 dark:bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded shadow border border-slate-700 dark:border-gray-750 font-semibold whitespace-nowrap z-10 animate-fade-in'>
+									<span className='absolute -top-7 left-1/2 -translate-x-1/2 bg-dark-elevated text-dark-gray-8 text-[10px] px-2 py-0.5 rounded shadow border border-gray-850 font-semibold whitespace-nowrap z-10 animate-fade-in'>
 										Reposted!
 									</span>
 								)}
 								{repostStatus === "error" && (
-									<span className='absolute -top-7 left-1/2 -translate-x-1/2 bg-rose-600 dark:bg-rose-950 text-white text-[10px] px-2 py-0.5 rounded shadow border-rose-500 dark:border-rose-800 font-semibold whitespace-nowrap z-10 animate-fade-in'>
+									<span className='absolute -top-7 left-1/2 -translate-x-1/2 bg-bc-error text-dark-gray-8 text-[10px] px-2 py-0.5 rounded shadow border border-bc-error/50 font-semibold whitespace-nowrap z-10 animate-fade-in'>
 										Failed!
 									</span>
 								)}
 								{loginTooltipTarget === "repost" && (
-									<span className='absolute -top-7 left-1/2 -translate-x-1/2 bg-slate-900 dark:bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded shadow border border-slate-700 dark:border-gray-750 font-semibold whitespace-nowrap z-10 animate-fade-in'>
+									<span className='absolute -top-7 left-1/2 -translate-x-1/2 bg-dark-elevated text-dark-gray-8 text-[10px] px-2 py-0.5 rounded shadow border border-gray-850 font-semibold whitespace-nowrap z-10 animate-fade-in'>
 										Sign in first
 									</span>
 								)}
 							</button>
 							{showRepostDropdown && (
-								<div className='absolute left-0 bottom-7 z-50 bg-white dark:bg-dark-layer-1 border border-slate-200 dark:border-slate-800/60 rounded-2xl shadow-lg dark:shadow-2xl p-1.5 w-36 animate-fade-in'>
+								<div className='absolute left-0 bottom-7 z-50 bc-surface border-gray-850 rounded-2xl shadow-lg dark:shadow-2xl p-1.5 w-36 animate-fade-in'>
 									<button
 										onClick={(e) => {
 											e.stopPropagation();
 											handleSimpleRepost();
 										}}
-										className='flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-650 dark:text-gray-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-hover rounded-xl w-full text-left'
+										className='flex items-center gap-2 px-3 py-2 text-xs font-semibold text-dark-gray-7 hover:text-dark-gray-8 hover:bg-dark-hover rounded-xl w-full text-left'
 									>
 										<FaRetweet size={12} /> Simple Repost
 									</button>
@@ -726,7 +745,7 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 											e.stopPropagation();
 											handleQuoteRepost();
 										}}
-										className='flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-650 dark:text-gray-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-hover rounded-xl w-full text-left'
+										className='flex items-center gap-2 px-3 py-2 text-xs font-semibold text-dark-gray-7 hover:text-dark-gray-8 hover:bg-dark-hover rounded-xl w-full text-left'
 									>
 										<FaComment size={12} /> Quote Post
 									</button>
@@ -740,12 +759,12 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 								e.stopPropagation();
 								handleShare();
 							}}
-							className='hover:text-blue-400 hover:scale-105 transition duration-150 p-1.5 rounded-full hover:bg-blue-500/5 shrink-0 relative'
+							className='hover:text-dark-blue-s hover:scale-105 transition duration-150 p-1.5 rounded-full hover:bg-dark-blue-s/5 shrink-0 relative'
 							title='Share'
 						>
 							<FaPaperPlane size={20} />
 							{copied && (
-								<span className='absolute -top-7 left-1/2 -translate-x-1/2 bg-slate-900 dark:bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded shadow border border-slate-700 dark:border-gray-750 font-semibold whitespace-nowrap z-10 animate-fade-in'>
+								<span className='absolute -top-7 left-1/2 -translate-x-1/2 bg-dark-elevated text-dark-gray-8 text-[10px] px-2 py-0.5 rounded shadow border border-gray-850 font-semibold whitespace-nowrap z-10 animate-fade-in'>
 									Copied!
 								</span>
 							)}
@@ -754,7 +773,7 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 
 					{/* View count */}
 					{thread.viewCount !== undefined && thread.viewCount > 0 && (
-						<div className='flex items-center gap-1 text-[10px] text-slate-500 dark:text-gray-600 font-mono select-none pt-0.5'>
+						<div className='flex items-center gap-1 text-[10px] text-bc-muted font-mono select-none pt-0.5'>
 							<FaEye size={9} />
 							<span>{thread.viewCount} {thread.viewCount === 1 ? "view" : "views"}</span>
 						</div>
@@ -770,14 +789,14 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 										key={idx}
 										src={url}
 										alt='Replier avatar'
-										className='w-5 h-5 rounded-full object-cover border border-[#121212] shadow-sm relative'
+										className='w-5 h-5 rounded-full object-cover border border-dark-layer-2 shadow-sm relative'
 										style={{ zIndex: 10 - idx }}
 									/>
 								))}
 							</div>
 
 							<Link href={`/threads?threadId=${thread.id}`}>
-								<span className='text-[12px] text-slate-500 dark:text-slate-400 hover:text-brand-orange hover:underline font-semibold cursor-pointer transition'>
+								<span className='text-[12px] text-dark-gray-7 hover:text-brand-orange hover:underline font-semibold cursor-pointer transition'>
 									{totalRepliesCount} {totalRepliesCount === 1 ? "reply" : "replies"} · View conversation
 								</span>
 							</Link>
@@ -792,6 +811,10 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 const RepostEmbed: React.FC<{ threadId: string }> = ({ threadId }) => {
 	const [thread, setThread] = useState<Thread | null>(null);
 	const [loading, setLoading] = useState(true);
+
+	const { profile: repostProfile } = useUserProfile(thread?.uid);
+	const avatarUrl = repostProfile?.avatarUrl || thread?.avatarUrl;
+	const displayName = repostProfile?.displayName || thread?.displayName;
 
 	useEffect(() => {
 		const fetchThread = async () => {
@@ -814,18 +837,18 @@ const RepostEmbed: React.FC<{ threadId: string }> = ({ threadId }) => {
 	}
 
 	if (!thread) {
-		return <p className='text-xs text-gray-650 italic select-none'>Repost unavailable.</p>;
+		return <p className='text-xs text-bc-muted italic select-none'>Repost unavailable.</p>;
 	}
 
 	return (
 		<div className='space-y-1.5 w-full'>
 			<div className='flex items-center gap-2 min-w-0'>
-				<Avatar src={thread.avatarUrl} displayName={thread.displayName} size={20} />
-				<span className='font-bold text-xs text-slate-900 dark:text-slate-200 truncate'>{thread.displayName}</span>
+				<Avatar src={avatarUrl} displayName={displayName} size={20} />
+				<span className='font-bold text-xs text-dark-gray-8 truncate'>{displayName}</span>
 				<FaCheckCircle className='text-brand-orange shrink-0' size={10} />
 			</div>
 			{thread.content && (
-				<p className='text-xs text-slate-650 dark:text-slate-400 line-clamp-3 leading-relaxed select-text break-words max-w-full'>
+				<p className='text-xs text-dark-gray-7 line-clamp-3 leading-relaxed select-text break-words max-w-full'>
 					{thread.content}
 				</p>
 			)}

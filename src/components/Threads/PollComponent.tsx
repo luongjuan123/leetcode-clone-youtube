@@ -1,12 +1,12 @@
 import React, { useMemo, useState } from "react";
 import { useAuthState } from "react-firebase-hooks/auth";
 import { auth, firestore } from "@/firebase/firebase";
-import { doc, updateDoc, getDoc } from "firebase/firestore";
+import { doc, updateDoc } from "firebase/firestore";
 import { FaCheckCircle } from "react-icons/fa";
 
 interface PollOption {
 	text: string;
-	votes: string[]; // UIDs of users who voted for this option
+	votes: string[];
 }
 
 interface Poll {
@@ -19,8 +19,8 @@ interface PollComponentProps {
 	threadId: string;
 	poll: Poll;
 	isReply?: boolean;
-	replyId?: string; // If this poll is inside a reply
-	repliesList?: any[]; // The replies array from parent thread (so we can update it)
+	replyId?: string;
+	repliesList?: any[];
 }
 
 const PollComponent: React.FC<PollComponentProps> = ({
@@ -57,22 +57,19 @@ const PollComponent: React.FC<PollComponentProps> = ({
 		try {
 			const threadRef = doc(firestore, "threads", threadId);
 
-			let updatedOptions = poll.options.map((opt, idx) => {
+			const updatedOptions = poll.options.map((opt, idx) => {
 				const votes = opt.votes ? [...opt.votes] : [];
 				const userIndex = votes.indexOf(user.uid);
 
-				// Remove vote if already voted for this option
 				if (userIndex > -1) {
 					votes.splice(userIndex, 1);
 				}
 
-				// Add vote if this is the clicked option
 				if (idx === optionIndex) {
 					if (userIndex === -1) {
 						votes.push(user.uid);
 					}
 				} else {
-					// Remove user vote from other options (single-choice poll)
 					const otherIndex = votes.indexOf(user.uid);
 					if (otherIndex > -1) {
 						votes.splice(otherIndex, 1);
@@ -83,12 +80,11 @@ const PollComponent: React.FC<PollComponentProps> = ({
 			});
 
 			if (isReply && replyId) {
-				// Update inside replies array
 				const updatedReplies = repliesList.map((rep) => {
 					if (rep.id === replyId) {
 						return {
 							...rep,
-							submittedProblem: rep.submittedProblem || null, // Preserve compatibility
+							submittedProblem: rep.submittedProblem || null,
 							poll: { ...poll, options: updatedOptions },
 						};
 					}
@@ -99,7 +95,6 @@ const PollComponent: React.FC<PollComponentProps> = ({
 					replies: updatedReplies,
 				});
 			} else {
-				// Update top-level thread poll
 				await updateDoc(threadRef, {
 					poll: { ...poll, options: updatedOptions },
 				});
@@ -112,8 +107,8 @@ const PollComponent: React.FC<PollComponentProps> = ({
 	};
 
 	return (
-		<div className='bg-slate-50 dark:bg-dark-layer-2 border border-slate-200 dark:border-slate-800/40 rounded-xl p-4 space-y-3 mt-2 max-w-md'>
-			<h4 className='text-sm font-bold text-slate-900 dark:text-gray-200 leading-snug'>{poll.question}</h4>
+		<div className='bg-dark-layer-2 border border-gray-850/60 rounded-xl p-4 space-y-3 mt-2 max-w-md'>
+			<h4 className='text-sm font-bold text-dark-gray-8 leading-snug'>{poll.question}</h4>
 			<div className='space-y-2.5'>
 				{poll.options.map((option, idx) => {
 					const optVotes = option.votes?.length || 0;
@@ -128,11 +123,10 @@ const PollComponent: React.FC<PollComponentProps> = ({
 								hasVoted
 									? isUserVote
 										? "border-brand-orange bg-brand-orange/5"
-										: "border-slate-200 dark:border-slate-800/60 bg-slate-100/50 dark:bg-dark-fill-3/5"
-									: "border-slate-200 hover:border-slate-300 dark:border-slate-800/60 dark:hover:border-slate-700 bg-slate-100 hover:bg-slate-200 dark:bg-dark-fill-3/15 dark:hover:bg-dark-fill-3/25"
+										: "border-gray-850 bg-dark-fill-3/50"
+									: "border-gray-850 hover:border-brand-orange/40 bg-dark-fill-3 hover:bg-dark-fill-2"
 							}`}
 						>
-							{/* Percentage Indicator Background Bar */}
 							{hasVoted && (
 								<div
 									className={`absolute left-0 top-0 bottom-0 transition-all duration-700 ease-out ${
@@ -142,26 +136,26 @@ const PollComponent: React.FC<PollComponentProps> = ({
 								/>
 							)}
 
-							<span className='relative z-10 text-xs font-semibold text-slate-700 dark:text-gray-300 group-hover:text-slate-950 dark:group-hover:text-white transition duration-150 flex items-center gap-2'>
+							<span className='relative z-10 text-xs font-semibold text-dark-gray-8 group-hover:text-dark-gray-8 transition duration-150 flex items-center gap-2'>
 								{option.text}
 								{hasVoted && isUserVote && <FaCheckCircle className='text-brand-orange' size={12} />}
 							</span>
 
 							{hasVoted && (
-								<span className='relative z-10 text-xs font-mono font-bold text-slate-500 dark:text-gray-400 group-hover:text-slate-950 dark:group-hover:text-white transition duration-150'>
-									{percentage}% <span className='text-[10px] text-slate-400 dark:text-slate-500 font-normal'>({optVotes})</span>
+								<span className='relative z-10 text-xs font-mono font-bold text-dark-gray-7 transition duration-150'>
+									{percentage}% <span className='text-[10px] text-bc-muted font-normal'>({optVotes})</span>
 								</span>
 							)}
 						</div>
 					);
 				})}
 			</div>
-			<div className='flex justify-between items-center text-[10px] text-slate-500 dark:text-gray-500 font-semibold px-1 pt-1'>
+			<div className='flex justify-between items-center text-[10px] text-dark-gray-7 font-semibold px-1 pt-1'>
 				<span>{totalVotes} {totalVotes === 1 ? "vote" : "votes"}</span>
 				{errorMsg ? (
-					<span className='text-rose-400 font-bold transition duration-300'>{errorMsg}</span>
+					<span className='text-bc-error font-bold transition duration-300'>{errorMsg}</span>
 				) : hasVoted ? (
-					<span className='text-brand-orange font-bold animate-pulse'>✓ Voted</span>
+					<span className='text-brand-orange font-bold'>Voted</span>
 				) : null}
 			</div>
 		</div>

@@ -1,5 +1,5 @@
 import Topbar from "@/components/Topbar/Topbar";
-import TabsNavigation from "@/components/TabsNavigation/TabsNavigation";
+
 import Leaderboard from "@/components/Leaderboard/Leaderboard";
 import useHasMounted from "@/hooks/useHasMounted";
 
@@ -14,7 +14,7 @@ export default function RankingsPage() {
 				<Topbar />
 				
 				{/* Shared Tab Navigation */}
-				<TabsNavigation />
+
 
 				{/* Rankings Content */}
 				<div className='px-6'>
