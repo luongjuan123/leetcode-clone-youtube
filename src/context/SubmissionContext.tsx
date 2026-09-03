@@ -223,9 +223,13 @@ export const SubmissionProvider: React.FC<{ problemId: string; contestId?: strin
 
 		// 3. Make POST request to trigger compilation and execution on server
 		try {
+			const idToken = await user.getIdToken();
 			const res = await fetch("/api/submit", {
 				method: "POST",
-				headers: { "Content-Type": "application/json" },
+				headers: { 
+					"Content-Type": "application/json",
+					"Authorization": `Bearer ${idToken}`
+				},
 				body: JSON.stringify({
 					uid: user.uid,
 					username: user.displayName || user.email?.split("@")[0] || "Anonymous",
@@ -279,9 +283,13 @@ export const SubmissionProvider: React.FC<{ problemId: string; contestId?: strin
 				? [{ inputText: customInputText, outputText: "", isSample: true }]
 				: (problem.examples || []).filter((ex) => ex.isSample);
 
+			const idToken = user ? await user.getIdToken() : "";
 			const res = await fetch("/api/run", {
 				method: "POST",
-				headers: { "Content-Type": "application/json" },
+				headers: { 
+					"Content-Type": "application/json",
+					...(idToken ? { "Authorization": `Bearer ${idToken}` } : {})
+				},
 				body: JSON.stringify({
 					problemId: problem.id,
 					userCode,

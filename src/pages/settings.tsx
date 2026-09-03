@@ -4,11 +4,13 @@ import Topbar from "@/components/Topbar/Topbar";
 import { auth, firestore } from "@/firebase/firebase";
 import { useAuthState } from "react-firebase-hooks/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
-import { FaPalette, FaUserCog, FaSave, FaUser, FaCamera, FaBell, FaKey } from "react-icons/fa";
+import { FaPalette, FaUserCog, FaSave, FaUser, FaCamera, FaBell, FaKey, FaCheckCircle } from "react-icons/fa";
 import useHasMounted from "@/hooks/useHasMounted";
 import { getFriendlyErrorMessage } from "@/utils/errorFilter";
 import NotificationPreferences from "@/components/Notification/NotificationPreferences";
 import ChangePasswordForm from "@/components/Settings/ChangePasswordForm";
+import CountrySelector from "@/components/UI/CountrySelector";
+import { getCountryCode, COUNTRIES } from "@/utils/countryData";
 
 interface UserProfile {
 	displayName: string;
@@ -93,7 +95,7 @@ export default function SettingsPage() {
 						bio: data.bio || "",
 						avatarUrl: data.avatarUrl || "",
 						showStudentInfo: data.showStudentInfo !== false,
-						country: data.country || "United States",
+						country: getCountryCode(data.country || "US"),
 						notificationPreferences: {
 							reminders: data.notificationPreferences?.reminders !== false,
 							achievements: data.notificationPreferences?.achievements !== false,
@@ -146,6 +148,14 @@ export default function SettingsPage() {
 		if (!user) return;
 		setLoading(true);
 		setFeedback(null);
+
+		// Validate country code
+		const countryCode = profile.country || "US";
+		if (!COUNTRIES.some((c) => c.code === countryCode.toUpperCase())) {
+			setFeedback({ type: "error", text: "Invalid country code selected." });
+			setLoading(false);
+			return;
+		}
 
 		try {
 			const userRef = doc(firestore, "users", user.uid);
@@ -298,7 +308,7 @@ export default function SettingsPage() {
 									onChange={handleAvatarChange}
 								/>
 								{avatarBase64 && (
-									<span className='text-[10px] text-green-400 font-medium'>✓ New avatar ready — save to apply</span>
+									<span className='text-[10px] text-green-400 font-medium flex items-center gap-1'><FaCheckCircle size={10} /> New avatar ready — save to apply</span>
 								)}
 							</div>
 
@@ -353,23 +363,10 @@ export default function SettingsPage() {
 									<label htmlFor='country' className='text-sm font-semibold block mb-2' style={{ color: "var(--text-secondary)" }}>
 										Country
 									</label>
-									<select
-										value={profile.country || "United States"}
-										onChange={(e) => setProfile((p) => ({ ...p, country: e.target.value }))}
-										id='country'
-										className='outline-none sm:text-sm rounded-lg focus:ring-1 focus:ring-brand-orange focus:border-brand-orange block w-full p-3 cursor-pointer'
-										style={{ background: "var(--bg-dark-fill-3)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}
-									>
-										<option value="United States">🇺🇸 United States</option>
-										<option value="Canada">🇨🇦 Canada</option>
-										<option value="United Kingdom">🇬🇧 United Kingdom</option>
-										<option value="Vietnam">🇻🇳 Vietnam</option>
-										<option value="Singapore">🇸🇬 Singapore</option>
-										<option value="Australia">🇦🇺 Australia</option>
-										<option value="Germany">🇩🇪 Germany</option>
-										<option value="France">🇫🇷 France</option>
-										<option value="Japan">🇯🇵 Japan</option>
-									</select>
+									<CountrySelector
+										value={profile.country || "US"}
+										onChange={(code) => setProfile((p) => ({ ...p, country: code }))}
+									/>
 								</div>
 
 								<div>

@@ -7,14 +7,14 @@ interface GifPickerProps {
 }
 
 const CATEGORIES = [
-	{ id: "coding", label: "💻 Coding", query: "coding developer" },
-	{ id: "typing", label: "⌨️ Typing", query: "typing keyboard" },
-	{ id: "debugging", label: "🐛 Debugging", query: "debugging computer" },
-	{ id: "mindblown", label: "🤯 Mindblown", query: "mind blown" },
-	{ id: "congrats", label: "🎉 Congrats", query: "congrats celebration" },
-	{ id: "funny", label: "😂 Funny", query: "funny meme" },
-	{ id: "sad", label: "😢 Sad", query: "sad crying" },
-	{ id: "fire", label: "🔥 Fire", query: "fire coding" },
+	{ id: "coding", label: "Coding", query: "coding developer" },
+	{ id: "typing", label: "Typing", query: "typing keyboard" },
+	{ id: "debugging", label: "Debugging", query: "debugging computer" },
+	{ id: "mindblown", label: "Mindblown", query: "mind blown" },
+	{ id: "congrats", label: "Congrats", query: "congrats celebration" },
+	{ id: "funny", label: "Funny", query: "funny meme" },
+	{ id: "sad", label: "Sad", query: "sad crying" },
+	{ id: "fire", label: "Fire", query: "fire coding" },
 ];
 
 const GIPHY_API_KEY = "dc6zaTOxFJmzC"; // Public beta API key

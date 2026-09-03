@@ -362,7 +362,7 @@ const SearchableProblemPicker: React.FC<SearchableProblemPickerProps> = ({
 						<div className="flex-1 overflow-y-auto space-y-2.5 pr-2">
 							{paginatedProblems.length === 0 ? (
 								<div className="flex flex-col items-center justify-center h-48 text-center" style={{ color: "var(--text-muted)" }}>
-									<span className="text-2xl mb-1">🔍</span>
+									<FaSearch size={24} className="text-gray-500 mb-2" />
 									<p className="text-sm font-semibold">No problems match your query.</p>
 								</div>
 							) : (
@@ -396,7 +396,7 @@ const SearchableProblemPicker: React.FC<SearchableProblemPickerProps> = ({
 														onClick={(e) => toggleFavorite(prob.id, e)}
 														className={`transition ${isFav ? "text-yellow-400 scale-110" : "text-gray-500 hover:text-yellow-400"}`}
 													>
-														★
+														<FaStar size={12} />
 													</button>
 													<span className="font-semibold text-xs text-white truncate">{prob.title}</span>
 													<span className="text-[10px] font-mono text-gray-500">#{prob.id}</span>

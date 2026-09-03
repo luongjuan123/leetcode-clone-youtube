@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { BsCheckCircle } from "react-icons/bs";
 import { AiFillYoutube } from "react-icons/ai";
 import { IoClose } from "react-icons/io5";
+import { FiSearch } from "react-icons/fi";
 import YouTube from "react-youtube";
 import { collection, doc, getDoc, getDocs, orderBy, query } from "firebase/firestore";
 import { auth, firestore } from "@/firebase/firebase";
@@ -112,7 +113,7 @@ const ProblemsTable: React.FC<ProblemsTableProps> = ({
 					<tr>
 						<td colSpan={6} className="px-6 py-14 text-center" style={{ color: "var(--text-muted)" }}>
 							<div className="flex flex-col items-center gap-3">
-								<span className="text-3xl">🔍</span>
+								<FiSearch size={28} className="text-gray-500" />
 								<p className="text-sm font-semibold">No problems match &ldquo;{searchQuery}&rdquo;</p>
 								<p className="text-xs" style={{ color: "var(--text-muted)" }}>Try a different keyword or clear your search.</p>
 							</div>
@@ -292,9 +293,9 @@ function useGetProblems(setLoadingProblems: React.Dispatch<React.SetStateAction<
 				const tmp: DBProblem[] = [];
 				querySnapshot.forEach((doc) => {
 					const data = doc.data();
-					const dbTags = data.tags && Array.isArray(data.tags) && data.tags.length > 0
+					const dbTags = data.tags && Array.isArray(data.tags)
 						? data.tags
-						: (data.category ? [data.category] : ["Array"]);
+						: [];
 					tmp.push({ id: doc.id, ...data, tags: dbTags } as DBProblem);
 				});
 				setProblems(tmp);
@@ -304,7 +305,7 @@ function useGetProblems(setLoadingProblems: React.Dispatch<React.SetStateAction<
 					id: p.id,
 					title: p.title,
 					difficulty: p.difficulty,
-					tags: [p.category],
+					tags: p.category ? [p.category.toLowerCase().replace(/\s+/g, "-")] : [],
 					videoId: p.videoId,
 					likes: 0,
 					dislikes: 0,

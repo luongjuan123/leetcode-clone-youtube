@@ -3,6 +3,9 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { getAdminFirestore } from "@/firebase/firebaseAdmin";
 import { FieldValue } from "firebase-admin/firestore";
 import { runCode } from "./run";
+import { calculateExperience } from "@/utils/experienceConfig";
+import { withAuthAndModeration } from "@/utils/authMiddleware";
+import { getRedisClient } from "@/utils/redis";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
 	if (req.method !== "POST") {
@@ -126,6 +129,17 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 				memory: executionResult.memory || 0
 			});
 
+			if (contestId) {
+				try {
+					const redis = getRedisClient();
+					if (redis) {
+						await redis.set(`contest:${contestId}:dirty`, "true", "EX", 15);
+					}
+				} catch (redisErr) {
+					console.error("Error setting contest dirty flag in Redis:", redisErr);
+				}
+			}
+
 			// Update user/problem solve status
 			if (executionResult.success) {
 				// Get user doc to check if problem was already solved
@@ -139,22 +153,47 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 					const problemSnap = await db.collection("problems").doc(problemId).get();
 					const difficulty = (problemSnap.data()?.difficulty || "Easy").toLowerCase();
 
-					let points = 1;
-					let diffField = "easyCount";
-					if (difficulty === "medium") {
-						points = 3;
-						diffField = "mediumCount";
+					let easyCount = userData.easyCount || 0;
+					let mediumCount = userData.mediumCount || 0;
+					let hardCount = userData.hardCount || 0;
+					let mlCount = userData.mlCount || 0;
+
+					if (difficulty === "easy") {
+						easyCount++;
+					} else if (difficulty === "medium") {
+						mediumCount++;
 					} else if (difficulty === "hard") {
-						points = 5;
-						diffField = "hardCount";
+						hardCount++;
+					} else if (difficulty === "ml") {
+						mlCount++;
 					}
+
+					const contestParticipation = userData.contestParticipation || 0;
+					const contestWins = userData.contestWins || 0;
+
+					// Recalculate experience using config
+					const expInfo = calculateExperience({
+						easySolved: easyCount,
+						mediumSolved: mediumCount,
+						hardSolved: hardCount,
+						mlSolved: mlCount,
+						contestParticipation,
+						contestWins,
+					});
+
+					const xp = expInfo.score;
+					const experienceLevel = expInfo.currentTier.name;
 
 					// Update user solvedProblems, solve counts, score and XP
 					await userRef.update({
 						solvedProblems: FieldValue.arrayUnion(problemId),
-						[diffField]: FieldValue.increment(1),
-						score: FieldValue.increment(points),
-						xp: FieldValue.increment(points * 10)
+						easyCount,
+						mediumCount,
+						hardCount,
+						mlCount,
+						score: xp,
+						xp,
+						experienceLevel,
 					}).catch(err => console.error("Error updating user stats:", err));
 				}
 
@@ -191,4 +230,4 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 	}
 }
 
-export default withApiErrorHandler(handler);
+export default withApiErrorHandler(withAuthAndModeration(handler));

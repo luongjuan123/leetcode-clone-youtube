@@ -76,7 +76,7 @@ function StripeCardForm({ amount }: { amount: number }) {
 		return (
 			<div className="flex flex-col items-center justify-center py-8 text-center space-y-3">
 				<div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[#10b981] flex items-center justify-center text-xl animate-bounce">
-					✓
+					<FaCheck size={16} />
 				</div>
 				<h4 className="text-md font-bold" style={{ color: "var(--text-primary)" }}>
 					Thank You for Your Support!
@@ -339,7 +339,7 @@ function MockCardForm({ amount }: { amount: number }) {
 		return (
 			<div className="flex flex-col items-center justify-center py-8 text-center space-y-3">
 				<div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[#10b981] flex items-center justify-center text-xl animate-bounce">
-					✓
+					<FaCheck size={16} />
 				</div>
 				<h4 className="text-md font-bold" style={{ color: "var(--text-primary)" }}>
 					Mock Payment Succeeded!

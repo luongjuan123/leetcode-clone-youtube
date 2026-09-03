@@ -5,9 +5,8 @@ import { RecoilRoot } from "recoil";
 import React, { useEffect, useState } from "react";
 import { useAuthState } from "react-firebase-hooks/auth";
 import { auth, firestore } from "@/firebase/firebase";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import ProfileSetupModal from "@/components/Modals/ProfileSetupModal";
-import EmailVerificationModal from "@/components/Modals/EmailVerificationModal";
 import { useRouter } from "next/router";
 import ErrorBoundary from "@/components/ErrorBoundary/ErrorBoundary";
 import { RealtimeNotificationProvider } from "@/context/RealtimeNotificationProvider";
@@ -35,80 +34,117 @@ if (typeof window !== "undefined" && isProduction) {
 function GlobalAuthAndProfileCheck() {
 	const [user, loading] = useAuthState(auth);
 	const router = useRouter();
-	const [showVerificationModal, setShowVerificationModal] = useState(false);
 	const [showProfileModal, setShowProfileModal] = useState(false);
+
+	// Routes exempt from all auth guards
+	const isVerifyPage = router.pathname === "/verify-email";
+	const isExemptPage =
+		router.pathname === "/auth" ||
+		router.pathname === "/suspended" ||
+		router.pathname === "/account-appeal" ||
+		isVerifyPage ||
+		router.pathname === "/unsubscribe" ||
+		router.pathname === "/reset-password" ||
+		router.pathname === "/error";
 
 	useEffect(() => {
 		if (loading) return;
 
-		if (!user || router.pathname === "/auth") {
-			setShowVerificationModal(false);
+		// ── Unverified user session guard ─────────────────────────────────────────
+		// If there is an authenticated user but the email is not yet verified,
+		// intercept navigation to any protected path and force them to /verify-email.
+		if (user && !user.emailVerified && !isExemptPage) {
+			router.replace("/verify-email");
+			return;
+		}
+
+		if (!user || isExemptPage) {
 			setShowProfileModal(false);
 			return;
 		}
 
-		// 1. Check email verification
-		if (!user.emailVerified) {
-			setShowVerificationModal(true);
-			setShowProfileModal(false);
-			return;
-		} else {
-			setShowVerificationModal(false);
-		}
-
-		// 2. Check profile fields in Firestore
-		const checkProfile = async () => {
+		const checkModerationAndProfile = async () => {
 			try {
+				// 1. Check moderation status
+				const modRef = doc(firestore, "userModeration", user.uid);
+				const modSnap = await getDoc(modRef);
+
+				if (modSnap.exists()) {
+					const modData = modSnap.data();
+					if (modData.status === "BANNED") {
+						// Check if temporary ban is expired
+						if (modData.expiresAt && Date.now() > modData.expiresAt) {
+							const idToken = await user.getIdToken(true);
+							const res = await fetch("/api/auth/check-status", {
+								method: "POST",
+								headers: {
+									"Content-Type": "application/json",
+									"Authorization": `Bearer ${idToken}`
+								}
+							});
+							if (res.ok) {
+								window.location.reload();
+								return;
+							}
+						}
+						router.push("/suspended");
+						return;
+					}
+
+					if (modData.status === "PENDING_DELETION" || modData.status === "APPEALED") {
+						router.push("/account-appeal");
+						return;
+					}
+				}
+
+				// 2. Ensure the /users/{uid} document exists (lazy provision check)
 				const userRef = doc(firestore, "users", user.uid);
 				const userSnap = await getDoc(userRef);
 
 				if (!userSnap.exists()) {
-					await setDoc(userRef, {
-						uid: user.uid,
-						email: user.email,
-						displayName: user.displayName || "Anonymous User",
-						createdAt: Date.now(),
-						updatedAt: Date.now(),
-						likedProblems: [],
-						dislikedProblems: [],
-						solvedProblems: [],
-						starredProblems: [],
-						showStudentInfo: true,
-					});
-					setShowProfileModal(true);
-				} else {
-					const data = userSnap.data();
-					const hasCompleteProfile =
-						data.displayName &&
-						data.studentId &&
-						data.school &&
-						data.faculty &&
-						data.class &&
-						data.username &&
-						data.experienceLevel;
-
-					if (!hasCompleteProfile) {
-						setShowProfileModal(true);
-					} else {
-						setShowProfileModal(false);
+					// Document missing — call the provision endpoint to create it atomically.
+					// This handles edge cases where the user verified email on another device.
+					try {
+						const token = await user.getIdToken(true);
+						await fetch("/api/auth/provision", {
+							method: "POST",
+							headers: { Authorization: `Bearer ${token}` },
+						});
+					} catch {
+						// Non-critical: will retry on next navigation
 					}
+					setShowProfileModal(true);
+					return;
 				}
+
+				const data = userSnap.data();
+
+				if (data.status === "PENDING_DELETION" || data.status === "APPEALED") {
+					router.push("/account-appeal");
+					return;
+				}
+
+				// 3. Profile completeness check — show setup modal if missing required fields
+				const hasCompleteProfile =
+					data.displayName &&
+					data.studentId &&
+					data.school &&
+					data.faculty &&
+					data.class &&
+					data.username &&
+					data.experienceLevel;
+
+				setShowProfileModal(!hasCompleteProfile);
 			} catch (e) {
-				console.error("Error checking user profile setup:", e);
+				console.error("Error in auth and moderation check:", e);
 			}
 		};
 
-		checkProfile();
+		checkModerationAndProfile();
 	}, [user, loading, router.pathname]);
 
 	return (
 		<>
-			{showVerificationModal && (
-				<EmailVerificationModal
-					isOpen={showVerificationModal}
-					onClose={() => setShowVerificationModal(false)}
-				/>
-			)}
 			{showProfileModal && (
 				<ProfileSetupModal
 					isOpen={showProfileModal}

@@ -41,6 +41,38 @@ const NAV_TABS = [
 	{ name: "Threads",   path: "/threads",   icon: <FaStream size={14} />, exact: false },
 ];
 
+interface RankInfo {
+	name: string;
+	color: string;
+	minScore: number;
+}
+
+const RANK_TIERS: RankInfo[] = [
+	{ name: "Newbie", color: "#94a3b8", minScore: 0 },
+	{ name: "Beginner", color: "#22c55e", minScore: 5 },
+	{ name: "Apprentice", color: "#14b8a6", minScore: 15 },
+	{ name: "Intermediate", color: "#3b82f6", minScore: 30 },
+	{ name: "Advanced", color: "#6366f1", minScore: 50 },
+	{ name: "Expert", color: "#a855f7", minScore: 85 },
+	{ name: "Master", color: "#ec4899", minScore: 130 },
+	{ name: "Grandmaster", color: "#ef4444", minScore: 190 },
+	{ name: "Legend", color: "#f59e0b", minScore: 270 },
+	{ name: "Mythic", color: "#d946ef", minScore: 370 },
+];
+
+const getRankAndXP = (score: number) => {
+	let currentRank = RANK_TIERS[0];
+	for (let i = 0; i < RANK_TIERS.length; i++) {
+		if (score >= RANK_TIERS[i].minScore) {
+			currentRank = RANK_TIERS[i];
+		}
+	}
+	const level = Math.floor(score / 10) + 1;
+	const currentXP = score % 10;
+	const xpPercent = currentXP * 10;
+	return { currentRank, level, xpPercent };
+};
+
 const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 	const [user]         = useAuthState(auth);
 	const setAuthModal   = useSetRecoilState(authModalState);
@@ -50,21 +82,28 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 	const [mobileOpen,   setMobileOpen]   = useState(false);
 	const dropdownRef    = useRef<HTMLDivElement>(null);
 	const mobileRef      = useRef<HTMLDivElement>(null);
-	const [avatarUrl, setAvatarUrl]       = useState<string | null>(null);
+	const [userData, setUserData]         = useState<{ avatarUrl: string | null; score: number } | null>(null);
 	const [activeTheme, setActiveTheme]   = useState("default");
 	const [scrolled, setScrolled]         = useState(false);
 	const [dbProblemIds, setDbProblemIds] = useState<string[]>([]);
+	const { currentRank, level, xpPercent } = getRankAndXP(userData?.score || 0);
 
 	// Notification dropdown states
 	const { notifications, markAllAsRead, markAsRead } = useNotifications();
 	const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
 	const notifDropdownRef = useRef<HTMLDivElement>(null);
 
-	/* ── avatar subscription ── */
+	/* ── user subscription (avatar & score/rank tier) ── */
 	useEffect(() => {
-		if (!user) { setAvatarUrl(null); return; }
+		if (!user) { setUserData(null); return; }
 		const unsub = onSnapshot(doc(firestore, "users", user.uid), (snap) => {
-			if (snap.exists()) setAvatarUrl(snap.data().avatarUrl || null);
+			if (snap.exists()) {
+				const data = snap.data();
+				setUserData({
+					avatarUrl: data.avatarUrl || null,
+					score: data.score || 0,
+				});
+			}
 		});
 		return () => unsub();
 	}, [user]);
@@ -127,10 +166,11 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 		return () => document.removeEventListener("mousedown", handler);
 	}, []);
 
-	/* ── close mobile/notif on route change ── */
+	/* ── close mobile/notif/profile dropdown on route change ── */
 	useEffect(() => {
 		setMobileOpen(false);
 		setNotifDropdownOpen(false);
+		setDropdownOpen(false);
 	}, [router.pathname]);
 
 	const markAllNotifsRead = async () => {
@@ -169,12 +209,12 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 			? router.pathname === "/" || router.pathname === "/problems"
 			: router.pathname.startsWith(tab.path);
 
-	/* ── nav background: always derived from CSS variable, never `bg-white` ── */
+	/* ── nav background: glassmorphic header ── */
 	const navStyle: React.CSSProperties = {
-		background:    scrolled ? "var(--bg-dark-layer-2)" : "var(--bg-dark-layer-2)",
-		borderBottom:  scrolled ? "1px solid var(--border-subtle)" : "1px solid transparent",
-		backdropFilter: scrolled ? "blur(12px)" : "none",
-		WebkitBackdropFilter: scrolled ? "blur(12px)" : "none",
+		background:    "rgba(10, 10, 12, 0.75)",
+		borderBottom:  "1px solid var(--border-default)",
+		backdropFilter: "blur(12px) saturate(180%)",
+		WebkitBackdropFilter: "blur(12px) saturate(180%)",
 		fontFamily: "var(--font-sans)",
 		transition: "border-color 200ms ease, backdrop-filter 200ms ease",
 	};
@@ -188,7 +228,7 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 		`flex items-center justify-center w-10 h-10 rounded-xl transition-all duration-150 cursor-pointer ${
 			active
 				? "text-brand-orange bg-brand-orange/10"
-				: "text-dark-gray-6 hover:text-dark-gray-8 hover:bg-dark-fill-3"
+				: "text-text-secondary hover:text-text-primary hover:bg-dark-fill-3"
 		}`;
 
 	const notifActive = router.pathname === "/notifications";
@@ -218,7 +258,7 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 									<Link
 										key={tab.name}
 										href={tab.path}
-										className={`${tabCls(active)} border ${active ? "glow-active border-brand-orange text-brand-orange bg-brand-orange/5" : "border-transparent text-text-secondary hover:text-text-primary hover:bg-dark-fill-3"}`}
+										className={`${tabCls(active)} border ${active ? "glow-active border-brand-orange bg-brand-orange/5" : "border-transparent text-text-secondary hover:text-text-primary hover:bg-dark-fill-3"}`}
 										aria-current={active ? "page" : undefined}
 									>
 										{active && (
@@ -227,8 +267,16 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 												style={{ background: "var(--brand-orange)" }}
 											/>
 										)}
-										{tab.icon && <span className="flex-shrink-0">{tab.icon}</span>}
-										{tab.name}
+										{tab.icon && (
+											<span className={`flex-shrink-0 ${active ? "text-[var(--brand-orange)]" : ""}`}>
+												{tab.icon}
+											</span>
+										)}
+										{active ? (
+											<span className="text-brand-gradient">{tab.name}</span>
+										) : (
+											<span>{tab.name}</span>
+										)}
 									</Link>
 								);
 							})}
@@ -430,7 +478,7 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 						{/* Support */}
 						<Link
 							href="/qr"
-							className="hidden sm:flex items-center justify-center w-10 h-10 rounded-xl transition-all duration-150 text-text-muted hover:text-brand-orange hover:bg-brand-glow"
+							className="hidden sm:flex items-center justify-center w-10 h-10 rounded-xl transition-all duration-150 text-text-secondary hover:text-brand-orange hover:bg-brand-glow"
 							title="Support"
 						>
 							<FaCoffee size={16} />
@@ -466,33 +514,72 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 							<div className="relative" ref={dropdownRef}>
 								<button
 									onClick={() => setDropdownOpen(!dropdownOpen)}
-									className="flex items-center p-0.5 rounded-full transition-all duration-150 cursor-pointer"
-									style={{ outline: dropdownOpen ? "2px solid var(--border-accent)" : "2px solid transparent", outlineOffset: "1px" }}
+									className="flex items-center gap-3 bg-[var(--bg-dark-layer-1)] px-3 py-1.5 rounded-2xl border border-[var(--border-default)] select-none transition-all duration-150 hover:border-[var(--brand-orange)] hover:shadow-brand-glow"
 									aria-label="Account menu"
 									aria-expanded={dropdownOpen}
 									aria-haspopup="true"
 								>
-									{avatarUrl ? (
-										<img
-											src={avatarUrl}
-											alt="Avatar"
-											className="w-9 h-9 rounded-full object-cover"
-											style={{ border: "2px solid var(--border-accent)" }}
-										/>
-									) : (
-										<div
-											className="w-9 h-9 rounded-full flex items-center justify-center"
-											style={{ background: "var(--bg-dark-fill-3)", border: "2px solid var(--border-accent)", color: "var(--text-muted)" }}
+									{/* Avatar Image with Numerical Level Overlay */}
+									<div className="relative w-9 h-9 flex-shrink-0">
+										{userData?.avatarUrl ? (
+											<img
+												src={userData.avatarUrl}
+												alt="Avatar"
+												className="w-9 h-9 rounded-full object-cover"
+												style={{ border: `2px solid ${currentRank.color}` }}
+											/>
+										) : (
+											<div
+												className="w-9 h-9 rounded-full flex items-center justify-center"
+												style={{ background: "var(--bg-dark-layer-2)", border: `2px solid ${currentRank.color}`, color: "var(--text-muted)" }}
+											>
+												<FaUser size={14} />
+											</div>
+										)}
+										{/* Numerical Level Index Overlay Badge */}
+										<span 
+											className="absolute -bottom-1 -right-1 flex h-4 w-4 rounded-full items-center justify-center text-[8px] font-black text-white border border-[var(--bg-dark-layer-1)]"
+											style={{ background: currentRank.color }}
 										>
-											<FaUser size={14} />
+											{level}
+										</span>
+									</div>
+
+									{/* User Details & XP Bar */}
+									<div className="hidden sm:flex flex-col text-left">
+										<div className="flex items-center gap-2">
+											<span className="text-xs font-bold text-[var(--text-primary)] truncate max-w-[80px]">
+												{user.displayName || "User"}
+											</span>
+											<span 
+												className="px-1.5 py-0.5 rounded-full text-[8px] font-black tracking-wide border uppercase"
+												style={{
+													borderColor: currentRank.color,
+													color: currentRank.color,
+													background: `${currentRank.color}15`,
+												}}
+											>
+												{currentRank.name}
+											</span>
 										</div>
-									)}
+										{/* XP Progress Linear Tracker */}
+										<div className="w-24 h-1.5 bg-[var(--bg-dark-layer-2)] rounded-full overflow-hidden mt-1 border border-[var(--border-subtle)] relative">
+											<div 
+												className="h-full rounded-full transition-all duration-500 ease-out" 
+												style={{ 
+													width: `${xpPercent}%`,
+													background: currentRank.color,
+													boxShadow: `0 0 8px ${currentRank.color}`,
+												}}
+											/>
+										</div>
+									</div>
 								</button>
 
 								{/* ── DROPDOWN PANEL ── */}
 								{dropdownOpen && (
 									<div
-										className="absolute top-[calc(100%+8px)] right-0 w-52 rounded-xl overflow-hidden animate-fade-in"
+										className="absolute top-[calc(100%+8px)] right-0 w-52 rounded-xl overflow-hidden animate-fade-in z-[100]"
 										style={{
 											background: "var(--bg-elevated)",
 											border: "1px solid var(--border-default)",
@@ -505,8 +592,8 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 											className="flex items-center gap-3 px-4 py-3"
 											style={{ borderBottom: "1px solid var(--border-subtle)" }}
 										>
-											{avatarUrl ? (
-												<img src={avatarUrl} alt="Avatar" className="w-8 h-8 rounded-full object-cover flex-shrink-0" style={{ border: "1px solid var(--border-accent)" }} />
+											{userData?.avatarUrl ? (
+												<img src={userData.avatarUrl} alt="Avatar" className="w-8 h-8 rounded-full object-cover flex-shrink-0" style={{ border: `1px solid ${currentRank.color}` }} />
 											) : (
 												<div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: "var(--bg-dark-fill-3)", border: "1px solid var(--border-subtle)", color: "var(--text-muted)" }}>
 													<FaUser size={12} />

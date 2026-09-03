@@ -1,10 +1,9 @@
 import { authModalState } from "@/atoms/authModalAtom";
-import { auth, firestore } from "@/firebase/firebase";
+import { auth } from "@/firebase/firebase";
 import { useEffect, useState } from "react";
 import { useSetRecoilState } from "recoil";
 import { useCreateUserWithEmailAndPassword, useSignInWithGoogle, useSignInWithGithub } from "react-firebase-hooks/auth";
 import { useRouter } from "next/router";
-import { doc, setDoc, getDoc } from "firebase/firestore";
 import { FaGoogle, FaGithub, FaEye, FaEyeSlash, FaSpinner } from "react-icons/fa";
 import { sendEmailVerification, updateProfile } from "firebase/auth";
 import { translateFirebaseError } from "@/utils/authErrors";
@@ -95,61 +94,44 @@ const Signup: React.FC<SignupProps> = () => {
 				console.error("Error updating profile display name:", profileErr);
 			}
 
-			// Send verification email
+			// Send verification email — NO Firestore writes happen here.
+			// The /users/{uid} document is created lazily by /api/auth/provision
+			// only AFTER the user proves ownership of their email address.
 			try {
 				await sendEmailVerification(newUser.user);
 			} catch (emailErr) {
 				console.error("Error sending email verification on signup:", emailErr);
 			}
 
-			// Do NOT initialize user doc in Firestore here.
-			// It will be created in _app.tsx only AFTER verification is completed.
-			router.push("/");
-		} catch (err: any) {
-			// Handled by useEffect matching firebase hooks state
+			setAuthModalState((prev) => ({ ...prev, isOpen: false }));
+			router.push("/verify-email");
+		} catch (err: unknown) {
+			// Handled by the error useEffect below
+			void err;
 		}
 	};
 
 	useEffect(() => {
-		if (user || googleUser || githubUser) {
-			// Check if we need to write the user doc (for OAuth registration)
-			const checkAndCreateUserDoc = async (uid: string, email: string | null, name: string | null) => {
-				try {
-					const docRef = doc(firestore, "users", uid);
-					const docSnap = await getDoc(docRef);
-					if (!docSnap.exists()) {
-						await setDoc(docRef, {
-							uid,
-							email: email || "",
-							displayName: name || "Anonymous User",
-							studentId: "",
-							school: "BeastCode University",
-							faculty: "",
-							class: "",
-							createdAt: Date.now(),
-							updatedAt: Date.now(),
-							likedProblems: [],
-							dislikedProblems: [],
-							solvedProblems: [],
-							starredProblems: [],
-							showStudentInfo: true,
-						});
-					}
-				} catch (e) {
-					console.error("Error creating user doc on OAuth redirect:", e);
-				}
-			};
+		// Handle OAuth sign-in completion (Google / GitHub)
+		const currUser = googleUser?.user || githubUser?.user;
+		if (!currUser) return;
 
-			const currUser = user?.user || googleUser?.user || githubUser?.user;
-			if (currUser) {
-				// Only create user doc here if email is verified (e.g. OAuth providers)
-				if (currUser.emailVerified) {
-					checkAndCreateUserDoc(currUser.uid, currUser.email, currUser.displayName);
-				}
-				setAuthModalState((prev) => ({ ...prev, isOpen: false }));
-				router.push("/");
+		// For OAuth providers the email is always pre-verified — call provision directly.
+		const provisionOAuthUser = async () => {
+			try {
+				const token = await currUser.getIdToken(true);
+				await fetch("/api/auth/provision", {
+					method: "POST",
+					headers: { Authorization: `Bearer ${token}` },
+				});
+			} catch (provErr) {
+				console.error("OAuth provision error:", provErr);
 			}
-		}
+			setAuthModalState((prev) => ({ ...prev, isOpen: false }));
+			router.push("/");
+		};
+
+		provisionOAuthUser();
 	}, [user, googleUser, githubUser, router, setAuthModalState]);
 
 	useEffect(() => {

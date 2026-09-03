@@ -424,7 +424,15 @@ export default function ContestsPage() {
 								Upcoming Scheduled Contests
 							</h2>
 							{upcoming.length === 0 ? (
-								<p className='text-sm text-gray-500 italic py-4 pl-2 border-l border-border-subtle'>No scheduled contests at this time. Stay tuned!</p>
+								<div className="flex flex-col items-center justify-center p-8 rounded-2xl border border-dashed text-center gap-3" style={{ borderColor: "var(--border-subtle)", background: "rgba(255, 255, 255, 0.01)" }}>
+									<div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: "var(--bg-dark-fill-3)", color: "var(--text-secondary)" }}>
+										<FaCalendarAlt size={20} />
+									</div>
+									<div className="space-y-1">
+										<p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>No Scheduled Contests</p>
+										<p className="text-xs max-w-xs mx-auto" style={{ color: "var(--text-muted)" }}>There are no upcoming contests scheduled right now. Stay tuned for future announcements!</p>
+									</div>
+								</div>
 							) : (
 								<div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
 									{upcoming.map((c) => {
@@ -489,7 +497,15 @@ export default function ContestsPage() {
 								Past Contests & Archives
 							</h2>
 							{past.length === 0 ? (
-								<p className='text-sm text-gray-500 italic py-4 pl-2 border-l border-border-subtle'>No archived contests yet.</p>
+								<div className="flex flex-col items-center justify-center p-8 rounded-2xl border border-dashed text-center gap-3" style={{ borderColor: "var(--border-subtle)", background: "rgba(255, 255, 255, 0.01)" }}>
+									<div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: "var(--bg-dark-fill-3)", color: "var(--text-secondary)" }}>
+										<FaHistory size={20} />
+									</div>
+									<div className="space-y-1">
+										<p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>No Archived Contests</p>
+										<p className="text-xs max-w-xs mx-auto" style={{ color: "var(--text-muted)" }}>The contest archives are currently empty. Completed contests will appear here.</p>
+									</div>
+								</div>
 							) : (
 								<div className="space-y-4">
 									<div className='border rounded-2xl overflow-hidden' style={{ background: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}>

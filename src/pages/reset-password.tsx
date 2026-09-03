@@ -56,34 +56,45 @@ interface ErrorStateProps {
 	onRequestNewLink: () => void;
 }
 
-export const ErrorState: React.FC<ErrorStateProps> = ({ message, onRequestNewLink }) => (
-	<div className="w-full text-center space-y-6 py-4">
-		<div className="flex justify-center">
-			<div className="p-4 bg-bc-error/10 border border-bc-error/20 rounded-full text-bc-error shadow-glow-error animate-pulse">
-				<FaExclamationTriangle size={32} />
+export const ErrorState: React.FC<ErrorStateProps> = ({ message, onRequestNewLink }) => {
+	let title = "Reset Link Expired";
+	if (message.toLowerCase().includes("invalid")) {
+		title = "Invalid Reset Link";
+	} else if (message.toLowerCase().includes("already used") || message.toLowerCase().includes("used")) {
+		title = "Reset Link Already Used";
+	} else if (message.toLowerCase().includes("expired")) {
+		title = "Reset Link Expired";
+	}
+
+	return (
+		<div className="w-full text-center space-y-6 py-4">
+			<div className="flex justify-center">
+				<div className="p-4 bg-bc-error/10 border border-bc-error/20 rounded-full text-bc-error shadow-glow-error animate-pulse">
+					<FaExclamationTriangle size={32} />
+				</div>
+			</div>
+			<div>
+				<h2 className="text-xl font-bold text-dark-gray-8 tracking-tight">{title}</h2>
+				<p className="text-sm text-dark-gray-6 mt-2 leading-relaxed px-4">{message}</p>
+			</div>
+			<div className="space-y-3 pt-2">
+				<button
+					onClick={onRequestNewLink}
+					className="w-full bc-btn-brand font-semibold py-2.5 px-4 rounded-lg text-xs transition duration-200"
+				>
+					Send New Reset Email
+				</button>
+				<Link
+					href="/auth?type=login"
+					className="w-full flex items-center justify-center gap-2 bc-btn-ghost font-medium py-2.5 px-4 rounded-lg text-xs transition duration-200 text-dark-gray-7 hover:text-dark-gray-8"
+				>
+					<FaArrowLeft size={10} />
+					<span>Back to Login</span>
+				</Link>
 			</div>
 		</div>
-		<div>
-			<h2 className="text-xl font-bold text-dark-gray-8 tracking-tight">Reset Link Expired</h2>
-			<p className="text-sm text-dark-gray-6 mt-2 leading-relaxed px-4">{message}</p>
-		</div>
-		<div className="space-y-3 pt-2">
-			<button
-				onClick={onRequestNewLink}
-				className="w-full bc-btn-brand font-semibold py-2.5 px-4 rounded-lg text-xs transition duration-200"
-			>
-				Send New Reset Email
-			</button>
-			<Link
-				href="/auth?type=login"
-				className="w-full flex items-center justify-center gap-2 bc-btn-ghost font-medium py-2.5 px-4 rounded-lg text-xs transition duration-200 text-dark-gray-7 hover:text-dark-gray-8"
-			>
-				<FaArrowLeft size={10} />
-				<span>Back to Login</span>
-			</Link>
-		</div>
-	</div>
-);
+	);
+};
 
 // ─────────────────────────────────────────────────────────
 // SUCCESS ANIMATION (GREEN CHECKMARK)
@@ -309,18 +320,8 @@ export default function ResetPasswordPage() {
 
 		setTokenStr(token);
 
-		// Handle mock verification for local development testing
-		if (token.startsWith("mock-token-")) {
-			const mockEmail = (router.query.email as string) || "dungpubgame@gmail.com";
-			setTimeout(() => {
-				setEmailVerified(mockEmail);
-				setStep("form");
-			}, 1000);
-			return;
-		}
-
 		// Hit backend GET route to verify token status
-		fetch(`/api/auth/reset-password?token=${encodeURIComponent(token)}`)
+		fetch(`/api/auth/reset-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(router.query.email as string || "")}`)
 			.then(async (res) => {
 				const data = await res.json();
 				if (res.ok && data.success) {
@@ -367,19 +368,6 @@ export default function ResetPasswordPage() {
 
 		setErrorMessage("");
 		setSubmitting(true);
-
-		// Mock password reset execution for local development
-		if (tokenStr.startsWith("mock-token-")) {
-			setTimeout(() => {
-				setSubmitting(false);
-				setStep("success");
-				// Redirect after 3 seconds
-				setTimeout(() => {
-					router.push("/auth?type=login");
-				}, 3000);
-			}, 1200);
-			return;
-		}
 
 		// Perform API POST submission to save new password
 		fetch("/api/auth/reset-password", {

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { auth, firestore } from "@/firebase/firebase";
 import { doc, getDoc, setDoc, collection, query, where, getDocs, limit } from "firebase/firestore";
 import { useAuthState } from "react-firebase-hooks/auth";
-import { FaGraduationCap, FaSpinner, FaChevronRight, FaChevronLeft, FaCheck, FaCheckCircle, FaLaptopCode, FaRocket, FaUser } from "react-icons/fa";
+import { FaGraduationCap, FaSpinner, FaChevronRight, FaChevronLeft, FaCheckCircle, FaUser } from "react-icons/fa";
 
 interface ProfileSetupModalProps {
 	isOpen: boolean;
@@ -38,12 +38,11 @@ const ProfileSetupModal: React.FC<ProfileSetupModalProps> = ({ isOpen, onClose }
 	const [faculty, setFaculty] = useState("");
 	const [className, setClassName] = useState("");
 	const [showStudentInfo, setShowStudentInfo] = useState(true);
-	const [experienceLevel, setExperienceLevel] = useState<"beginner" | "intermediate" | "advanced" | null>(null);
 
 	// Availability and validation state
 	const [isValidatingUsername, setIsValidatingUsername] = useState(false);
 	const [isUsernameAvailable, setIsUsernameAvailable] = useState<boolean | null>(null);
-	const [errors, setErrors] = useState<{ step1?: string; step2?: string; step3?: string }>({});
+	const [errors, setErrors] = useState<{ step1?: string; step2?: string }>({});
 	const [submitting, setSubmitting] = useState(false);
 
 	// Load existing fields if user doc exists
@@ -61,7 +60,6 @@ const ProfileSetupModal: React.FC<ProfileSetupModalProps> = ({ isOpen, onClose }
 					setSchool(data.school || "BeastCode University");
 					setFaculty(data.faculty || "");
 					setClassName(data.class || "");
-					setExperienceLevel(data.experienceLevel || null);
 					setAvatarUrl(data.avatarUrl || data.avatar || AVATAR_OPTIONS[0].value);
 					setShowStudentInfo(data.showStudentInfo !== false);
 					
@@ -139,7 +137,7 @@ const ProfileSetupModal: React.FC<ProfileSetupModalProps> = ({ isOpen, onClose }
 		setStep(2);
 	};
 
-	const handleStep2Next = () => {
+	const handleStep2Submit = async () => {
 		if (
 			!displayName.trim() ||
 			!studentId.trim() ||
@@ -151,14 +149,7 @@ const ProfileSetupModal: React.FC<ProfileSetupModalProps> = ({ isOpen, onClose }
 			return;
 		}
 		setErrors((prev) => ({ ...prev, step2: undefined }));
-		setStep(3);
-	};
-
-	const handleSubmit = async () => {
-		if (!experienceLevel || submitting) return;
-
 		setSubmitting(true);
-		setErrors((prev) => ({ ...prev, step3: undefined }));
 		try {
 			const userRef = doc(firestore, "users", user.uid);
 			await setDoc(
@@ -172,7 +163,7 @@ const ProfileSetupModal: React.FC<ProfileSetupModalProps> = ({ isOpen, onClose }
 					faculty: faculty.trim(),
 					class: className.trim(),
 					showStudentInfo,
-					experienceLevel,
+					experienceLevel: "Newbie", // default initial tier
 					isOnboarded: true,
 					email: user.email,
 					usernameLastChangedAt: Date.now(),
@@ -183,7 +174,7 @@ const ProfileSetupModal: React.FC<ProfileSetupModalProps> = ({ isOpen, onClose }
 			onClose();
 		} catch (error: any) {
 			console.error("Error setting up profile:", error);
-			setErrors((prev) => ({ ...prev, step3: "Failed to finalize profile. Please try again." }));
+			setErrors((prev) => ({ ...prev, step2: "Failed to finalize profile. Please try again." }));
 		} finally {
 			setSubmitting(false);
 		}
@@ -207,7 +198,6 @@ const ProfileSetupModal: React.FC<ProfileSetupModalProps> = ({ isOpen, onClose }
 					<div className="flex items-center gap-1.5">
 						<span className={`w-6 h-1 rounded-full ${step >= 1 ? "bg-brand-orange" : "bg-gray-850"}`} />
 						<span className={`w-6 h-1 rounded-full ${step >= 2 ? "bg-brand-orange" : "bg-gray-850"}`} />
-						<span className={`w-6 h-1 rounded-full ${step >= 3 ? "bg-brand-orange" : "bg-gray-850"}`} />
 					</div>
 				</div>
 
@@ -409,121 +399,20 @@ const ProfileSetupModal: React.FC<ProfileSetupModalProps> = ({ isOpen, onClose }
 							</button>
 							<button
 								type="button"
-								onClick={handleStep2Next}
-								className="bc-btn-brand font-bold px-5 py-2.5 rounded-lg text-xs flex items-center gap-1.5 transition"
-							>
-								<span>Choose Level</span>
-								<FaChevronRight size={10} />
-							</button>
-						</div>
-					</div>
-				)}
-
-				{/* STEP 3: Experience Level Selection */}
-				{step === 3 && (
-					<div className="space-y-5">
-						<label className="text-xs font-semibold text-dark-gray-7 uppercase tracking-wider block">
-							Select Experience Tier
-						</label>
-						
-						<div className="space-y-3">
-							{/* Beginner Card */}
-							<button
-								type="button"
-								onClick={() => setExperienceLevel("beginner")}
-								className={`w-full text-left p-4 rounded-xl border bg-dark-surface transition-all flex items-center justify-between group ${
-									experienceLevel === "beginner"
-										? "border-brand-orange ring-2 ring-brand-orange/10"
-										: "border-gray-850 hover:border-dark-hover"
-								}`}
-							>
-								<div className="flex items-center gap-3">
-									<div className="p-2 bg-bc-success/10 rounded-md text-bc-success border border-bc-success/10">
-										<FaUser size={16} />
-									</div>
-									<div>
-										<h4 className="text-xs font-bold text-dark-gray-8 group-hover:text-brand-orange transition-colors">Beginner</h4>
-										<p className="text-[10px] text-dark-gray-7 mt-0.5">Focusing on fundamentals, loops, arrays & basic logic</p>
-									</div>
-								</div>
-								{experienceLevel === "beginner" && <FaCheck className="text-brand-orange" size={12} />}
-							</button>
-
-							{/* Intermediate Card */}
-							<button
-								type="button"
-								onClick={() => setExperienceLevel("intermediate")}
-								className={`w-full text-left p-4 rounded-xl border bg-dark-surface transition-all flex items-center justify-between group ${
-									experienceLevel === "intermediate"
-										? "border-brand-orange ring-2 ring-brand-orange/10"
-										: "border-gray-850 hover:border-dark-hover"
-								}`}
-							>
-								<div className="flex items-center gap-3">
-									<div className="p-2 bg-bc-info/10 rounded-md text-bc-info border border-bc-info/10">
-										<FaLaptopCode size={16} />
-									</div>
-									<div>
-										<h4 className="text-xs font-bold text-dark-gray-8 group-hover:text-brand-orange transition-colors">Intermediate</h4>
-										<p className="text-[10px] text-dark-gray-7 mt-0.5">Focusing on standard Data Structures, DP & trees</p>
-									</div>
-								</div>
-								{experienceLevel === "intermediate" && <FaCheck className="text-brand-orange" size={12} />}
-							</button>
-
-							{/* Advanced Card */}
-							<button
-								type="button"
-								onClick={() => setExperienceLevel("advanced")}
-								className={`w-full text-left p-4 rounded-xl border bg-dark-surface transition-all flex items-center justify-between group ${
-									experienceLevel === "advanced"
-										? "border-brand-orange ring-2 ring-brand-orange/10"
-										: "border-gray-850 hover:border-dark-hover"
-								}`}
-							>
-								<div className="flex items-center gap-3">
-									<div className="p-2 bg-bc-error/10 rounded-md text-bc-error border border-bc-error/10">
-										<FaRocket size={16} />
-									</div>
-									<div>
-										<h4 className="text-xs font-bold text-dark-gray-8 group-hover:text-brand-orange transition-colors">Advanced</h4>
-										<p className="text-[10px] text-dark-gray-7 mt-0.5">Focusing on competitive math, graphs & performance algorithms</p>
-									</div>
-								</div>
-								{experienceLevel === "advanced" && <FaCheck className="text-brand-orange" size={12} />}
-							</button>
-						</div>
-
-						{errors.step3 && (
-							<div className="p-3 bg-bc-error/10 border border-bc-error/20 rounded-lg text-bc-error text-xs font-medium">
-								{errors.step3}
-							</div>
-						)}
-
-						{/* Footer Actions */}
-						<div className="flex justify-between pt-4 border-t border-gray-850 mt-4">
-							<button
-								type="button"
+								onClick={handleStep2Submit}
 								disabled={submitting}
-								onClick={() => setStep(2)}
-								className="bc-btn-ghost font-bold px-4 py-2.5 rounded-lg text-xs flex items-center gap-1.5 transition disabled:opacity-50"
-							>
-								<FaChevronLeft size={10} />
-								<span>Back</span>
-							</button>
-							<button
-								type="button"
-								onClick={handleSubmit}
-								disabled={!experienceLevel || submitting}
 								className="bc-btn-brand disabled:opacity-40 font-bold px-5 py-2.5 rounded-lg text-xs flex items-center gap-1.5 transition"
 							>
 								{submitting ? (
 									<>
 										<FaSpinner className="animate-spin" size={12} />
-										<span>Saving Profile...</span>
+										<span>Finalizing...</span>
 									</>
 								) : (
-									<span>Finalize Workspace</span>
+									<>
+										<span>Finalize Workspace</span>
+										<FaChevronRight size={10} />
+									</>
 								)}
 							</button>
 						</div>

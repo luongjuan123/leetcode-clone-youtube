@@ -33,6 +33,11 @@ export default function TagPage() {
 			};
 
 			try {
+				// Fetch deleted problems
+				const deletedSnap = await getDocs(collection(firestore, "deleted_problems"));
+				const deletedIds = new Set<string>();
+				deletedSnap.forEach((d) => deletedIds.add(d.id));
+
 				// Fetch all problems and filter client-side for case-insensitive and space/dash-agnostic matching
 				const q = query(collection(firestore, "problems"));
 				const querySnapshot = await getDocs(q);
@@ -40,9 +45,9 @@ export default function TagPage() {
 
 				querySnapshot.forEach((docSnap) => {
 					const data = docSnap.data();
-					const dbTags = data.tags && Array.isArray(data.tags) && data.tags.length > 0
+					const dbTags = data.tags && Array.isArray(data.tags)
 						? data.tags
-						: (data.category ? [data.category] : ["Array"]);
+						: [];
 					
 					if (isTagMatch(dbTags)) {
 						list.push({ id: docSnap.id, ...data, tags: dbTags } as DBProblem);
@@ -51,15 +56,14 @@ export default function TagPage() {
 
 				// Fallback to static problems matching the tag for seamless local testing
 				const staticMatches = Object.values(staticProblems).filter((p) => {
-					const pTags = p.tags && Array.isArray(p.tags) && p.tags.length > 0
-						? p.tags
-						: ((p as any).category ? [(p as any).category] : ["Array"]);
+					if (deletedIds.has(p.id)) return false;
+					const pTags = p.tags && Array.isArray(p.tags) ? p.tags : [];
 					return isTagMatch(pTags);
 				}).map(p => ({
 					id: p.id,
 					title: p.title,
 					difficulty: p.difficulty || "Easy",
-					tags: p.tags && Array.isArray(p.tags) && p.tags.length > 0 ? p.tags : ((p as any).category ? [(p as any).category] : ["Array"]),
+					tags: p.tags && Array.isArray(p.tags) ? p.tags : [],
 					likes: 0,
 					dislikes: 0,
 					attempts: 0,
@@ -82,15 +86,13 @@ export default function TagPage() {
 				
 				// Fallback purely to local problems on network error
 				const staticMatches = Object.values(staticProblems).filter((p) => {
-					const pTags = p.tags && Array.isArray(p.tags) && p.tags.length > 0
-						? p.tags
-						: ((p as any).category ? [(p as any).category] : ["Array"]);
+					const pTags = p.tags && Array.isArray(p.tags) ? p.tags : [];
 					return isTagMatch(pTags);
 				}).map(p => ({
 					id: p.id,
 					title: p.title,
 					difficulty: p.difficulty || "Easy",
-					tags: p.tags && Array.isArray(p.tags) && p.tags.length > 0 ? p.tags : ((p as any).category ? [(p as any).category] : ["Array"]),
+					tags: p.tags && Array.isArray(p.tags) ? p.tags : [],
 					likes: 0,
 					dislikes: 0,
 					attempts: 0,

@@ -116,9 +116,9 @@ const ContestProblemPage: React.FC = () => {
 			const problemDoc = await getDoc(doc(firestore, "problems", pid as string));
 			if (problemDoc.exists()) {
 				const data = problemDoc.data();
-				const dbTags = data.tags && Array.isArray(data.tags) && data.tags.length > 0
+				const dbTags = data.tags && Array.isArray(data.tags)
 					? data.tags
-					: (data.category ? [data.category] : ["Array"]);
+					: [];
 				probObj = {
 					id: problemDoc.id,
 					title: data.title || "",
@@ -137,27 +137,31 @@ const ContestProblemPage: React.FC = () => {
 					points: data.points || 100,
 				};
 			} else if (staticProblems[pid as string]) {
-				const staticProb = staticProblems[pid as string];
-				const dbTags = staticProb.tags && Array.isArray(staticProb.tags) && staticProb.tags.length > 0
-					? staticProb.tags
-					: ((staticProb as any).category ? [(staticProb as any).category] : ["Array"]);
-				probObj = {
-					id: pid as string,
-					title: staticProb.title || "",
-					problemStatement: staticProb.problemStatement || "",
-					examples: staticProb.examples || [],
-					constraints: staticProb.constraints || "",
-					starterCode: staticProb.starterCode || "",
-					handlerFunction: typeof staticProb.handlerFunction === "function" ? staticProb.handlerFunction.toString() : staticProb.handlerFunction,
-					starterFunctionName: staticProb.starterFunctionName || "",
-					inputFormat: staticProb.inputFormat || "",
-					outputFormat: staticProb.outputFormat || "",
-					tags: dbTags,
-					description: staticProb.description || "",
-					language: staticProb.language || "English",
-					difficulty: staticProb.difficulty || "Medium",
-					points: staticProb.points || 100,
-				};
+				// Check if the static problem is deleted
+				const deletedDoc = await getDoc(doc(firestore, "deleted_problems", pid as string));
+				if (!deletedDoc.exists()) {
+					const staticProb = staticProblems[pid as string];
+					const dbTags = staticProb.tags && Array.isArray(staticProb.tags)
+						? staticProb.tags
+						: [];
+					probObj = {
+						id: pid as string,
+						title: staticProb.title || "",
+						problemStatement: staticProb.problemStatement || "",
+						examples: staticProb.examples || [],
+						constraints: staticProb.constraints || "",
+						starterCode: staticProb.starterCode || "",
+						handlerFunction: typeof staticProb.handlerFunction === "function" ? staticProb.handlerFunction.toString() : staticProb.handlerFunction,
+						starterFunctionName: staticProb.starterFunctionName || "",
+						inputFormat: staticProb.inputFormat || "",
+						outputFormat: staticProb.outputFormat || "",
+						tags: dbTags,
+						description: staticProb.description || "",
+						language: staticProb.language || "English",
+						difficulty: staticProb.difficulty || "Medium",
+						points: staticProb.points || 100,
+					};
+				}
 			}
 			setProblem(probObj);
 

@@ -3,7 +3,7 @@ import { auth, firestore } from "@/firebase/firebase";
 import { useAuthState } from "react-firebase-hooks/auth";
 import { sendEmailVerification, signOut, updateEmail } from "firebase/auth";
 import { doc, updateDoc } from "firebase/firestore";
-import { FaEnvelopeOpenText, FaSync, FaSignOutAlt, FaPaperPlane, FaPen, FaArrowLeft, FaSpinner } from "react-icons/fa";
+import { FaEnvelopeOpenText, FaSync, FaSignOutAlt, FaPaperPlane, FaPen, FaArrowLeft, FaSpinner, FaExclamationTriangle } from "react-icons/fa";
 import { translateFirebaseError } from "@/utils/authErrors";
 import { sanitizeAutofilledEmail } from "@/utils/sanitizeEmail";
 
@@ -193,8 +193,9 @@ const EmailVerificationModal: React.FC<EmailVerificationModalProps> = ({ isOpen,
 							We have dispatched a verification email to <span className="text-brand-orange font-semibold font-mono">{user.email}</span>.
 							Please click the link inside it to proceed.
 						</p>
-						<p className="text-[11px] text-amber-500 font-semibold mt-3 bg-amber-500/10 border border-amber-500/20 px-3.5 py-2 rounded-lg animate-pulse max-w-[320px]">
-							⚠️ Check your Spam / Junk folder if you don&apos;t see the email within 1-2 minutes!
+						<p className="text-[11px] text-amber-500 font-semibold mt-3 bg-amber-500/10 border border-amber-500/20 px-3.5 py-2 rounded-lg animate-pulse max-w-[320px] flex items-center justify-center gap-1.5">
+							<FaExclamationTriangle size={12} className="shrink-0" />
+							<span>Check your Spam / Junk folder if you don&apos;t see the email within 1-2 minutes!</span>
 						</p>
 						<button
 							onClick={() => {

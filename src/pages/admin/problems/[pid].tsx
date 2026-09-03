@@ -10,7 +10,7 @@ import { useAuthState } from "react-firebase-hooks/auth";
 import Link from "next/link";
 import { FaChevronLeft, FaPlus, FaTrash, FaEdit, FaCheck, FaTimes, FaCloudUploadAlt, FaExclamationTriangle, FaSpinner } from "react-icons/fa";
 import MarkdownEditor from "@/components/Admin/MarkdownEditor";
-import TagInput from "@/components/Admin/TagInput";
+import TagSelect from "@/components/Admin/TagSelect";
 
 interface Example {
 	id: number;
@@ -129,9 +129,9 @@ const EditProblem: React.FC = () => {
 					setInputFormat(data.inputFormat || "");
 					setConstraints(data.constraints || "");
 					setOutputFormat(data.outputFormat || "");
-					const dbTags = data.tags && Array.isArray(data.tags) && data.tags.length > 0
+					const dbTags = data.tags && Array.isArray(data.tags)
 						? data.tags
-						: (data.category ? [data.category] : []);
+						: [];
 					setTags(dbTags);
 					
 					// moderators
@@ -424,7 +424,9 @@ const EditProblem: React.FC = () => {
 		try {
 			const problemData = {
 				id: pid as string,
-				title,
+				slug: pid as string,
+				updatedAt: Date.now(),
+				title: title.trim(),
 				difficulty,
 				videoId: videoId.trim() || null,
 				link: link.trim() || null,
@@ -741,7 +743,7 @@ const EditProblem: React.FC = () => {
 											Tags
 										</label>
 										<div className='col-span-9'>
-											<TagInput tags={tags} onChange={setTags} />
+											<TagSelect type="problem" selectedTags={tags} onChange={setTags} />
 										</div>
 									</div>
 								</div>

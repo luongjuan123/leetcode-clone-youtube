@@ -28,6 +28,7 @@ interface SearchThread {
 	createdAt: number;
 	likes: string[];
 	replies: any[];
+	tags?: string[];
 }
 
 interface SearchProblem {
@@ -48,6 +49,8 @@ export default function SearchPage() {
 	const [usersList, setUsersList] = useState<SearchUser[]>([]);
 	const [threadsList, setThreadsList] = useState<SearchThread[]>([]);
 	const [problemsList, setProblemsList] = useState<SearchProblem[]>([]);
+	const [problemTagsMap, setProblemTagsMap] = useState<Record<string, string>>({});
+	const [threadTagsMap, setThreadTagsMap] = useState<Record<string, string>>({});
 	const [loading, setLoading] = useState(true);
 
 	// Follow state for current user
@@ -82,28 +85,48 @@ export default function SearchPage() {
 				const pList: SearchProblem[] = [];
 				problemsSnap.forEach((d) => {
 					const data = d.data();
-					const dbTags = data.tags && Array.isArray(data.tags) && data.tags.length > 0
+					const dbTags = data.tags && Array.isArray(data.tags)
 						? data.tags
-						: (data.category ? [data.category] : ["Array"]);
+						: [];
 					pList.push({ id: d.id, ...data, tags: dbTags } as SearchProblem);
 				});
+
+				// Fetch deleted problems
+				const deletedSnap = await getDocs(collection(firestore, "deleted_problems"));
+				const deletedIds = new Set<string>();
+				deletedSnap.forEach((d) => deletedIds.add(d.id));
 
 				const staticList = Object.values(staticProblems).map(p => ({
 					id: p.id,
 					title: p.title,
 					difficulty: p.difficulty || "Easy",
-					tags: p.tags && Array.isArray(p.tags) && p.tags.length > 0 ? p.tags : ((p as any).category ? [(p as any).category] : ["Array"]),
+					tags: p.tags && Array.isArray(p.tags) ? p.tags : [],
 					attempts: 0,
 					solved: 0,
 				}));
 				
 				staticList.forEach((staticProb) => {
-					if (!pList.some((p) => p.id === staticProb.id)) {
+					if (!deletedIds.has(staticProb.id) && !pList.some((p) => p.id === staticProb.id)) {
 						pList.push(staticProb);
 					}
 				});
 
 				setProblemsList(pList);
+
+				// Query tags maps
+				const problemTagsSnap = await getDocs(collection(firestore, "problemTags"));
+				const pTagsMap: Record<string, string> = {};
+				problemTagsSnap.forEach((d) => {
+					pTagsMap[d.id] = d.data().name || d.id;
+				});
+				setProblemTagsMap(pTagsMap);
+
+				const threadTagsSnap = await getDocs(collection(firestore, "threadTags"));
+				const tTagsMap: Record<string, string> = {};
+				threadTagsSnap.forEach((d) => {
+					tTagsMap[d.id] = d.data().name || d.id;
+				});
+				setThreadTagsMap(tTagsMap);
 			} catch (e) {
 				console.error("Search data load error:", e);
 			} finally {
@@ -174,7 +197,11 @@ export default function SearchPage() {
 			.map((t) => {
 				const contentScore = checkMatch(t.content, qTrim);
 				const authorScore = checkMatch(t.displayName, qTrim);
-				const totalScore = contentScore + authorScore;
+				const tagsScore = t.tags ? t.tags.reduce((acc, tag) => {
+					const tagName = threadTagsMap[tag] || tag;
+					return acc + checkMatch(tagName, qTrim);
+				}, 0) : 0;
+				const totalScore = contentScore + authorScore + tagsScore;
 				return { thread: t, score: totalScore };
 			})
 			.filter((item) => item.score > 0)
@@ -202,7 +229,10 @@ export default function SearchPage() {
 		const problems = problemsList
 			.map((p) => {
 				const titleScore = checkMatch(p.title, qTrim);
-				const tagsScore = p.tags ? p.tags.reduce((acc, tag) => acc + checkMatch(tag, qTrim), 0) : 0;
+				const tagsScore = p.tags ? p.tags.reduce((acc, tag) => {
+					const tagName = problemTagsMap[tag] || tag;
+					return acc + checkMatch(tagName, qTrim);
+				}, 0) : 0;
 				const totalScore = titleScore + tagsScore;
 				return { problem: p, score: totalScore };
 			})
@@ -211,7 +241,7 @@ export default function SearchPage() {
 			.map((item) => item.problem);
 
 		return { users, threads, hashtags, problems };
-	}, [searchQuery, usersList, threadsList, problemsList]);
+	}, [searchQuery, usersList, threadsList, problemsList, problemTagsMap, threadTagsMap]);
 
 	// Suggestions Autocomplete
 	const suggestions = useMemo(() => {

@@ -4,6 +4,8 @@ import { doc, getDoc, onSnapshot } from "firebase/firestore";
 import { auth, firestore } from "@/firebase/firebase";
 import BeastCodeSelect from "../UI/BeastCodeSelect";
 import Link from "next/link";
+import CountrySelector from "../UI/CountrySelector";
+import { getCountryName } from "@/utils/countryData";
 import {
 	FaTrophy,
 	FaUser,
@@ -14,7 +16,10 @@ import {
 	FaAngleDoubleLeft,
 	FaAngleDoubleRight,
 	FaGlobe,
-	FaUserFriends
+	FaUserFriends,
+	FaStar,
+	FaCode,
+	FaExclamationTriangle
 } from "react-icons/fa";
 
 interface LeaderboardUser {
@@ -36,19 +41,6 @@ interface LeaderboardUser {
 }
 
 const PAGE_SIZE = 100;
-
-const countriesOptions = [
-	{ value: "", label: "Global (All Countries)" },
-	{ value: "United States", label: "🇺🇸 United States" },
-	{ value: "Canada", label: "🇨🇦 Canada" },
-	{ value: "United Kingdom", label: "🇬🇧 United Kingdom" },
-	{ value: "Vietnam", label: "🇻🇳 Vietnam" },
-	{ value: "Singapore", label: "🇸🇬 Singapore" },
-	{ value: "Australia", label: "🇦🇺 Australia" },
-	{ value: "Germany", label: "🇩🇪 Germany" },
-	{ value: "France", label: "🇫🇷 France" },
-	{ value: "Japan", label: "🇯🇵 Japan" },
-];
 
 const sortOptions = [
 	{ value: "score", label: "Total Score" },
@@ -316,12 +308,12 @@ const Leaderboard: React.FC = () => {
 	};
 
 	// Render metric value based on active sorting
-	const renderMetric = (u: LeaderboardUser) => {
+	const renderMetric = (u: LeaderboardUser): React.ReactNode => {
 		if (sortField === "xp") return `${u.xp.toLocaleString()} XP`;
-		if (sortField === "rating") return `⭐ ${u.rating}`;
-		if (sortField === "contestRating") return `⚔️ ${u.contestRating}`;
-		if (sortField === "mlRating") return `🧠 ${u.mlRating}`;
-		if (sortField === "problemSolvingRating") return `🧩 ${u.problemSolvingRating}`;
+		if (sortField === "rating") return <span className="inline-flex items-center gap-1"><FaStar className="text-yellow-500" size={12} /> {u.rating}</span>;
+		if (sortField === "contestRating") return <span className="inline-flex items-center gap-1"><FaTrophy className="text-brand-orange" size={12} /> {u.contestRating}</span>;
+		if (sortField === "mlRating") return <span className="inline-flex items-center gap-1"><FaCode className="text-cyan-400" size={12} /> {u.mlRating}</span>;
+		if (sortField === "problemSolvingRating") return <span className="inline-flex items-center gap-1"><FaTrophy className="text-emerald-400" size={12} /> {u.problemSolvingRating}</span>;
 		return `${u.score.toLocaleString()} pts`;
 	};
 
@@ -390,12 +382,12 @@ const Leaderboard: React.FC = () => {
 					</div>
 
 					{/* Country selector */}
-					<div>
-						<BeastCodeSelect
-							options={countriesOptions}
+					<div className="w-52">
+						<CountrySelector
 							value={country}
 							onChange={setCountry}
-							placeholder="Select Country..."
+							placeholder="Global (All Countries)"
+							showGlobal={true}
 						/>
 					</div>
 
@@ -478,7 +470,7 @@ const Leaderboard: React.FC = () => {
 						color: "var(--text-warning, #fbbf24)"
 					}}
 				>
-					<span className="text-lg">⚠️</span>
+					<FaExclamationTriangle className="text-amber-500 shrink-0" size={16} />
 					<div>{warning}</div>
 				</div>
 			)}
@@ -582,7 +574,7 @@ const Leaderboard: React.FC = () => {
 													) : rank === 3 ? (
 														<FaMedal className="text-amber-600" size={18} />
 													) : (
-														<span style={{ color: "var(--text-muted)" }}>#{rank}</span>
+														<span style={{ color: "var(--text-secondary)" }}>#{rank}</span>
 													)}
 												</div>
 											</td>
@@ -614,17 +606,35 @@ const Leaderboard: React.FC = () => {
 											</td>
 
 											{/* University */}
-											<td className="px-6 py-4 hidden md:table-cell text-xs" style={{ color: "var(--text-muted)" }}>
-												<span className="font-semibold truncate block" style={{ color: "var(--text-secondary)" }}>
+											<td className="px-6 py-4 hidden md:table-cell text-xs" style={{ color: "var(--text-secondary)" }}>
+												<span className="font-semibold truncate block" style={{ color: "var(--text-secondary)" }} title={rankingUser.school}>
 													{rankingUser.school}
 												</span>
 											</td>
 
 											{/* Country */}
 											<td className="px-6 py-4 hidden lg:table-cell text-center text-xs" style={{ color: "var(--text-secondary)" }}>
-												<span className="inline-flex items-center gap-1">
-													<FaGlobe size={10} className="text-gray-600" />
-													{rankingUser.country}
+												<span className="inline-flex items-center gap-2">
+													{rankingUser.country ? (
+														<>
+															<img
+																src={`https://flagcdn.com/16x12/${rankingUser.country.toLowerCase()}.png`}
+																width="16"
+																height="12"
+																alt={rankingUser.country}
+																className="rounded-sm object-cover shrink-0"
+																onError={(e) => {
+																	e.currentTarget.style.display = "none";
+																}}
+															/>
+															<span className="truncate">{getCountryName(rankingUser.country)}</span>
+														</>
+													) : (
+														<>
+															<FaGlobe size={10} className="text-gray-600" />
+															<span>Global</span>
+														</>
+													)}
 												</span>
 											</td>
 
@@ -658,7 +668,7 @@ const Leaderboard: React.FC = () => {
 				{/* High-fidelity Pagination controls */}
 				<div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-4 px-6 border-t" style={{ background: "var(--bg-dark-fill-3)", borderColor: "var(--border-subtle)" }}>
 					{/* Record range descriptor */}
-					<div className="text-xs" style={{ color: "var(--text-muted)" }}>
+					<div className="text-xs" style={{ color: "var(--text-secondary)" }}>
 						Showing{" "}
 						<span className="font-bold" style={{ color: "var(--text-primary)" }}>
 							{totalItems > 0 ? (currentPage - 1) * PAGE_SIZE + 1 : 0}
@@ -738,7 +748,7 @@ const Leaderboard: React.FC = () => {
 
 					{/* Direct page input form */}
 					<form onSubmit={handleDirectPageSubmit} className="flex items-center gap-2">
-						<label htmlFor="directPage" className="text-xs" style={{ color: "var(--text-muted)" }}>Go to:</label>
+						<label htmlFor="directPage" className="text-xs" style={{ color: "var(--text-secondary)" }}>Go to:</label>
 						<input
 							type="number"
 							id="directPage"

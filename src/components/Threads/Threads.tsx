@@ -18,10 +18,12 @@ import {
 import { useRecoilState } from "recoil";
 import { threadComposerState } from "@/atoms/threadComposerAtom";
 import { threadCommentFeedbackAtom } from "@/atoms/threadCommentFeedbackAtom";
+import { authModalState } from "@/atoms/authModalAtom";
 import ThreadCard from "./ThreadCard";
 import ThreadComposer from "./ThreadComposer";
 import Avatar from "./Avatar";
 import { useUserProfile } from "@/hooks/useUserProfile";
+import { useThreadTags } from "@/hooks/useThreadTags";
 import SecondaryNav from "../TabsNavigation/SecondaryNav";
 import {
 	FaArrowLeft,
@@ -80,6 +82,7 @@ interface Thread {
 	mentions?: string[];
 	viewCount?: number;
 	bookmarkCount?: number;
+	tags?: string[];
 }
 
 interface VirtualizedThreadItemProps {
@@ -142,6 +145,7 @@ interface ThreadsBoardProps {
 
 const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 	problemId,
+	problemTitle,
 	profileUid,
 	postFeedOnly = false,
 	repostFeedOnly = false,
@@ -150,6 +154,7 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 	const router = useRouter();
 	const [, setComposer] = useRecoilState(threadComposerState);
 	const [commentFeedback, setCommentFeedback] = useRecoilState(threadCommentFeedbackAtom);
+	const [, setAuthModal] = useRecoilState(authModalState);
 
 	// Fetch current user's profile to display the latest updated avatar/displayName
 	const { profile: loggedInProfile } = useUserProfile(user?.uid);
@@ -171,7 +176,10 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 	const [searchProblem, setSearchProblem] = useState("");
 	const [searchAuthor, setSearchAuthor] = useState("");
 	const [searchHashtag, setSearchHashtag] = useState("");
+	const [searchTag, setSearchTag] = useState("");
 	const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
+	const { tags: threadTags } = useThreadTags();
 
 	// Collapsed subreplies state
 	const [collapsedReplies, setCollapsedReplies] = useState<Record<string, boolean>>({});
@@ -190,6 +198,18 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 	const [postingReply, setPostingReply] = useState(false);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const sentinelRef = useRef<HTMLDivElement>(null);
+
+	const handleCreateThread = () => {
+		if (!user) {
+			setAuthModal({ isOpen: true, type: "login" });
+			return;
+		}
+		setComposer({
+			isOpen: true,
+			problemId,
+			problemTitle
+		});
+	};
 
 	// Sync deep links with router query ?threadId=XYZ
 	useEffect(() => {
@@ -502,6 +522,9 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 			const qH = searchHashtag.toLowerCase().replace("#", "").trim();
 			list = list.filter((t) => t.hashtags?.some((h) => h.toLowerCase() === qH));
 		}
+		if (searchTag) {
+			list = list.filter((t) => t.tags?.includes(searchTag));
+		}
 
 		// Sorting
 		if (sortBy === "latest") {
@@ -519,7 +542,7 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 		}
 
 		return list;
-	}, [filteredThreads, searchQuery, sortBy, searchLanguage, searchProblem, searchAuthor, searchHashtag]);
+	}, [filteredThreads, searchQuery, sortBy, searchLanguage, searchProblem, searchAuthor, searchHashtag, searchTag]);
 
 	const directReplies = useMemo(() => {
 		if (!focusedThreadId) return [];
@@ -883,11 +906,21 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 						<span>Filters</span>
 						{showAdvancedFilters ? <FaAngleUp size={10} /> : <FaAngleDown size={10} />}
 					</button>
+
+					{problemId && (
+						<button
+							onClick={handleCreateThread}
+							className="bc-btn-brand px-4 py-2.5 rounded-xl transition text-xs font-black shadow-md shrink-0 flex items-center gap-1.5"
+						>
+							<FaPaperPlane size={11} />
+							<span>Create Thread</span>
+						</button>
+					)}
 				</div>
 
 				{/* Advanced filters drawer */}
 				{showAdvancedFilters && (
-					<div className="grid grid-cols-2 gap-3.5 p-3.5 rounded-xl bg-[var(--bg-dark-fill-3)] border border-[var(--border-subtle)] text-xs animate-fade-in">
+					<div className="grid grid-cols-2 md:grid-cols-3 gap-3.5 p-3.5 rounded-xl bg-[var(--bg-dark-fill-3)] border border-[var(--border-subtle)] text-xs animate-fade-in">
 						<div>
 							<label className="block text-[10px] text-[var(--text-muted)] font-black uppercase mb-1.5">Language</label>
 							<BeastCodeSelect
@@ -937,14 +970,28 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 							/>
 						</div>
 
-						{(searchLanguage || searchProblem || searchAuthor || searchHashtag) && (
-							<div className="col-span-2 flex justify-end">
+						<div>
+							<label className="block text-[10px] text-[var(--text-muted)] font-black uppercase mb-1.5">Thread Tag</label>
+							<BeastCodeSelect
+								options={[
+									{ value: "", label: "Any Tag" },
+									...threadTags.map((t) => ({ value: t.id, label: t.name })),
+								]}
+								value={searchTag}
+								onChange={setSearchTag}
+								placeholder="Select tag"
+							/>
+						</div>
+
+						{(searchLanguage || searchProblem || searchAuthor || searchHashtag || searchTag) && (
+							<div className="col-span-full flex justify-end">
 								<button
 									onClick={() => {
 										setSearchLanguage("");
 										setSearchProblem("");
 										setSearchAuthor("");
 										setSearchHashtag("");
+										setSearchTag("");
 									}}
 									className="text-[10px] font-black text-rose-500 hover:underline uppercase"
 								>
@@ -1046,13 +1093,23 @@ const ThreadsBoard: React.FC<ThreadsBoardProps> = ({
 					<div className="flex flex-col items-center justify-center py-16 text-center select-none bg-[var(--bg-dark-fill-3)] border border-[var(--border-subtle)] rounded-3xl p-6">
 						<FaHeart className="text-[var(--text-muted)] mb-3 animate-pulse" size={28} />
 						<p className="text-sm font-bold text-[var(--text-primary)]">No threads posted here yet.</p>
-						<p className="text-xs text-[var(--text-muted)] mt-1 max-w-xs leading-relaxed">
-							{searchQuery || searchLanguage || searchProblem || searchAuthor || searchHashtag
+						<p className="text-xs text-[var(--text-muted)] mt-1 max-w-xs leading-relaxed mb-4">
+							{searchQuery || searchLanguage || searchProblem || searchAuthor || searchHashtag || searchTag
 								? "No threads matched your advanced search queries. Clear filters and try again!"
 								: activeTab === "following"
 								? "Users you follow haven't posted yet, or you haven't followed anyone. Try following developers!"
+								: problemId
+								? `Share your thoughts, solution, or ask questions about ${problemTitle || "this problem"}!`
 								: "Be the first to post a thread!"}
 						</p>
+						{(problemId || (!searchQuery && !searchLanguage && !searchProblem && !searchAuthor && !searchHashtag && !searchTag)) && (
+							<button
+								onClick={handleCreateThread}
+								className="bc-btn-brand text-xs font-black px-6 py-2.5 rounded-full transition shadow-md hover:opacity-90 active:scale-95"
+							>
+								Create Thread
+							</button>
+						)}
 					</div>
 				)}
 			</div>

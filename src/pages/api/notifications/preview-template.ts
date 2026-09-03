@@ -2,6 +2,7 @@ import { withApiErrorHandler } from "@/utils/apiErrorHandler";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getEmailHtml } from "@/utils/emailTemplate";
 import { NotificationDispatcher, BeastNotificationEvent } from "@/utils/notificationDispatcher";
+import { getEventConfig } from "@/utils/notificationTemplates";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
 	if (req.method !== "POST" && req.method !== "GET") {
@@ -45,9 +46,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 			ctaUrl: "https://beastcode--beastcode-7555e.asia-southeast1.hosted.app"
 		};
 
-		// We can get the config directly using the private helper. Since getEventConfig is private, we can access it using a custom call or mimic its output.
-		// Alternatively, we can make getEventConfig public in NotificationDispatcher, or copy the mapping logic, or just invoke NotificationDispatcher's private method using type casting.
-		const config = (NotificationDispatcher as any).getEventConfig(eventType, mockPayload);
+		// Retrieve the config directly using the getEventConfig utility
+		const config = getEventConfig(eventType, mockPayload.userName, mockPayload.placeholders, mockPayload.customContent);
 
 		const emailHtml = getEmailHtml({
 			headerTitle: config.headerTitle,

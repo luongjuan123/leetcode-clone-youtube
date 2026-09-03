@@ -9,7 +9,8 @@ import { useAuthState } from "react-firebase-hooks/auth";
 import Link from "next/link";
 import { FaChevronLeft, FaPlus, FaCheck, FaSpinner } from "react-icons/fa";
 import MarkdownEditor from "@/components/Admin/MarkdownEditor";
-import TagInput from "@/components/Admin/TagInput";
+import TagSelect from "@/components/Admin/TagSelect";
+import { slugify } from "@/utils/slugify";
 
 const NewProblem: React.FC = () => {
 	const router = useRouter();
@@ -82,12 +83,7 @@ const NewProblem: React.FC = () => {
 	// Generate slug from title
 	useEffect(() => {
 		if (title) {
-			const slug = title
-				.toLowerCase()
-				.replace(/[^a-z0-9\s-]/g, "") // remove non-alphanumeric except space and hyphen
-				.replace(/\s+/g, "-") // replace spaces with hyphens
-				.replace(/-+/g, "-"); // collapse multiple hyphens
-			setId(slug);
+			setId(slugify(title));
 		} else {
 			setId("");
 		}
@@ -160,6 +156,22 @@ const NewProblem: React.FC = () => {
 		triggerStatusRibbon("info", "Creating challenge...", 0);
 
 		try {
+			// Reserved system keywords validation
+			const RESERVED_SLUGS = ["new", "edit", "api", "problems", "contests", "admin", "settings", "profile", "auth", "search", "tags", "threads", "unsubscribe"];
+			if (RESERVED_SLUGS.includes(id)) {
+				triggerStatusRibbon("error", `The slug "${id}" is a reserved system keyword. Please choose a different title.`);
+				setSubmitting(false);
+				return;
+			}
+
+			// Slug pattern validation
+			const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+			if (!slugRegex.test(id)) {
+				triggerStatusRibbon("error", `The generated slug "${id}" is invalid. Slugs must only contain lowercase alphanumeric characters and hyphens.`);
+				setSubmitting(false);
+				return;
+			}
+
 			const docRef = doc(firestore, "problems", id);
 			const docSnap = await getDoc(docRef);
 			if (docSnap.exists()) {
@@ -170,7 +182,10 @@ const NewProblem: React.FC = () => {
 
 			const problemData = {
 				id,
-				title,
+				slug: id,
+				title: title.trim(),
+				createdAt: Date.now(),
+				updatedAt: Date.now(),
 				difficulty,
 				videoId: videoId.trim() || null,
 				link: link.trim() || null,
@@ -486,7 +501,7 @@ const NewProblem: React.FC = () => {
 									Tags
 								</label>
 								<div className='col-span-9'>
-									<TagInput tags={tags} onChange={setTags} />
+									<TagSelect type="problem" selectedTags={tags} onChange={setTags} />
 								</div>
 							</div>
 						</div>

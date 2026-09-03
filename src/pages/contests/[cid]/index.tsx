@@ -16,6 +16,7 @@ import { useSetRecoilState } from "recoil";
 import ErrorDisplay from "@/components/UI/ErrorDisplay";
 import { authModalState } from "@/atoms/authModalAtom";
 import { useAdmin } from "@/hooks/useAdmin";
+import { useContestStandings } from "@/hooks/useContestStandings";
 import {
 	FaGlobe, FaLock, FaHourglassHalf, FaTrophy, FaVolumeUp,
 	FaQuestionCircle, FaFileAlt, FaComments, FaUsers, FaChartPie,
@@ -119,6 +120,7 @@ export default function ContestPortal() {
 	const hasMounted = useHasMounted();
 	const [user] = useAuthState(auth);
 	const setAuthModal = useSetRecoilState(authModalState);
+	const { standings } = useContestStandings(cid as string);
 
 	const [contest, setContest] = useState<Contest | null>(null);
 	const [loading, setLoading] = useState(true);
@@ -439,131 +441,44 @@ export default function ContestPortal() {
 			console.error("Error loading contest problems:", cpErr);
 		}
 
-		// 2. Subscribe to all contest submissions in real-time
-		const q = query(
-			collection(firestore, "contest_submissions"),
-			where("contestId", "==", cid),
-			orderBy("timestamp", "asc")
-		);
+		// 2. Subscribe ONLY to the current user's submissions in real-time to save read counts
+		let unsubscribe: (() => void) | (() => Promise<void>) = () => {};
+		if (user) {
+			const q = query(
+				collection(firestore, "contest_submissions"),
+				where("contestId", "==", cid),
+				where("uid", "==", user.uid),
+				orderBy("timestamp", "asc")
+			);
 
-		const unsubscribe = onSnapshot(q, (subSnap) => {
-			const subList: Submission[] = [];
-			const userLeaderboardMap: Record<string, LeaderboardRow> = {};
-
-			// Reset solve/attempts counts on cpList copy
-			const updatedCpList = cpList.map(p => ({ ...p, solveCount: 0, attemptsCount: 0 }));
-
-			// Initialize user rows based on registered participants (excluding terminated ones)
-			participants.forEach((p) => {
-				if (p.status === "terminated") return;
-				userLeaderboardMap[p.uid] = {
-					uid: p.uid,
-					username: p.username,
-					displayName: p.displayName,
-					rank: 0,
-					score: 0,
-					penalty: 0,
-					problemsSolved: {}
-				};
-			});
-
-			const now = Date.now();
-			const freezeTime = contest.endTime - (contest.leaderboardFreeze * 60000);
-			const isContestFrozen = contest.leaderboardFreeze > 0 && now >= freezeTime && now < contest.endTime;
-
-			subSnap.forEach((docSnap) => {
-				const subData = docSnap.data();
-				const submission: Submission = {
-					id: docSnap.id,
-					problemId: subData.problemId,
-					uid: subData.uid,
-					username: subData.username,
-					language: subData.language,
-					status: subData.status,
-					timestamp: subData.timestamp,
-					runtime: subData.runtime || 0,
-					memory: subData.memory || 0,
-					verdict: subData.verdict || "",
-					score: subData.score || 0,
-					penaltyMinutes: subData.penaltyMinutes || 0
-				};
-
-				// Add to personal submissions log if it's the current user
-				if (user && subData.uid === user.uid) {
+			unsubscribe = onSnapshot(q, (subSnap) => {
+				const subList: Submission[] = [];
+				subSnap.forEach((docSnap) => {
+					const subData = docSnap.data();
+					const submission: Submission = {
+						id: docSnap.id,
+						problemId: subData.problemId,
+						uid: subData.uid,
+						username: subData.username,
+						language: subData.language,
+						status: subData.status,
+						timestamp: subData.timestamp,
+						runtime: subData.runtime || 0,
+						memory: subData.memory || 0,
+						verdict: subData.verdict || "",
+						score: subData.score || 0,
+						penaltyMinutes: subData.penaltyMinutes || 0
+					};
 					subList.push(submission);
-				}
-
-				// Find participant to determine if they are virtual and calculate their end time
-				const participant = participants.find((p) => p.uid === subData.uid);
-				const isTerminated = participant?.status === "terminated";
-				const isVirtualParticipant = participant?.isVirtual;
-				const participantEndTime = isVirtualParticipant && participant?.virtualStartTime
-					? participant.virtualStartTime + contest.duration * 60000
-					: contest.endTime;
-
-				const isWithinContestTime = subData.timestamp < participantEndTime;
-
-				// Aggregate stats for problems (only for active, non-terminated submissions made within contest time)
-				const prob = updatedCpList.find((p) => p.problemId === subData.problemId);
-				if (prob && isWithinContestTime && !isTerminated) {
-					prob.attemptsCount = (prob.attemptsCount || 0) + 1;
-					if (subData.status === "passed") {
-						prob.solveCount = (prob.solveCount || 0) + 1;
-					}
-				}
-
-				// Update leaderboard row if user exists and submission was within contest time
-				if (userLeaderboardMap[subData.uid] && isWithinContestTime && !isTerminated) {
-					const row = userLeaderboardMap[subData.uid];
-					const pid = subData.problemId;
-
-					// Handle frozen submissions: if frozen, do NOT show other users' accepted runs
-					const isSubmissionFrozen = isContestFrozen && subData.uid !== user?.uid && subData.timestamp >= freezeTime;
-
-					if (!row.problemsSolved[pid]) {
-						row.problemsSolved[pid] = { solved: false, attempts: 0, time: 0 };
-					}
-
-					const state = row.problemsSolved[pid];
-
-					if (!state.solved) {
-						if (subData.status === "passed") {
-							if (!isSubmissionFrozen) {
-								state.solved = true;
-								state.time = Math.round((subData.timestamp - (isVirtualParticipant && participant?.virtualStartTime ? participant.virtualStartTime : contest.startTime)) / 60000);
-								row.score += submission.score;
-								row.penalty += state.time + (state.attempts * contest.penaltyRules.minutesPerIncorrect);
-							} else {
-								// Frozen solver, mark attempt but do not solve or add score
-								state.attempts++;
-							}
-						} else {
-							state.attempts++;
-						}
-					}
-				}
+				});
+				setSubmissions(subList.reverse()); // latest first
+			}, (err) => {
+				console.error("Error loading user submissions:", err);
 			});
-
-			// Sort leaderboard rows by score desc, then penalty asc
-			const sortedLeaderboard = Object.values(userLeaderboardMap).sort((a, b) => {
-				if (b.score !== a.score) return b.score - a.score;
-				return a.penalty - b.penalty;
-			});
-
-			// Assign ranks
-			sortedLeaderboard.forEach((row, index) => {
-				row.rank = index + 1;
-			});
-
-			setProblems(updatedCpList);
-			setSubmissions(subList.reverse()); // latest first
-			setLeaderboard(sortedLeaderboard);
-		}, (err) => {
-			console.error("Error loading submissions real-time:", err);
-		});
+		}
 
 		return unsubscribe;
-	}, [cid, contest, participants, user]);
+	}, [cid, contest, user]);
 
 	useEffect(() => {
 		let unsub: (() => void) | undefined;
@@ -576,6 +491,69 @@ export default function ContestPortal() {
 			if (unsub) unsub();
 		};
 	}, [contest, participants, loadProblemsAndSubmissions]);
+
+	useEffect(() => {
+		if (!standings || !contest) return;
+
+		const mappedRows: LeaderboardRow[] = standings.map((s) => {
+			const problemsSolved: Record<string, { solved: boolean; attempts: number; time: number }> = {};
+			
+			Object.entries(s.problemResults).forEach(([pid, res]) => {
+				const participant = participants.find((p) => p.uid === s.uid);
+				const pStartTime = participant?.isVirtual && participant?.virtualStartTime
+					? participant.virtualStartTime
+					: contest.startTime;
+
+				const elapsedMinutes = res.solvedTime
+					? Math.max(0, Math.round((res.solvedTime - pStartTime) / 60000))
+					: 0;
+
+				problemsSolved[pid] = {
+					solved: res.solved,
+					attempts: res.incorrectAttempts,
+					time: elapsedMinutes
+				};
+			});
+
+			const pInfo = participants.find((p) => p.uid === s.uid);
+
+			return {
+				uid: s.uid,
+				username: s.username,
+				displayName: pInfo?.displayName || s.username,
+				rank: s.rank,
+				score: s.totalScore,
+				penalty: s.totalPenalty,
+				problemsSolved
+			};
+		});
+
+		setLeaderboard(mappedRows);
+
+		// Dynamically update solve counts and attempts counts of contest problems
+		if (problems.length > 0) {
+			setProblems((prevProblems) => {
+				return prevProblems.map((p) => {
+					let solveCount = 0;
+					let attemptsCount = 0;
+
+					standings.forEach((s) => {
+						const res = s.problemResults[p.problemId];
+						if (res) {
+							if (res.solved) solveCount++;
+							attemptsCount += res.incorrectAttempts + (res.solved ? 1 : 0);
+						}
+					});
+
+					return {
+						...p,
+						solveCount,
+						attemptsCount
+					};
+				});
+			});
+		}
+	}, [standings, contest, participants, problems.length]);
 
 	// --- 6. ACTION HANDLERS ---
 	

@@ -16,14 +16,18 @@ import {
 	FaCheckCircle,
 	FaSave,
 	FaCamera,
+	FaInfoCircle,
+	FaCopy,
 } from "react-icons/fa";
 import ThreadsBoard from "@/components/Threads/Threads";
 import SecondaryNav from "@/components/TabsNavigation/SecondaryNav";
+import { calculateExperience } from "@/utils/experienceConfig";
+import { getCountryName } from "@/utils/countryData";
 
 interface UserProfile {
 	displayName: string;
 	username: string;
-	experienceLevel: "beginner" | "intermediate" | "advanced" | "";
+	experienceLevel: string;
 	studentId: string;
 	school: string;
 	class: string;
@@ -34,6 +38,15 @@ interface UserProfile {
 	email?: string;
 	showStudentInfo?: boolean;
 	usernameLastChangedAt?: number;
+	easyCount?: number;
+	mediumCount?: number;
+	hardCount?: number;
+	mlCount?: number;
+	contestParticipation?: number;
+	contestWins?: number;
+	xp?: number;
+	country?: string;
+	createdAt?: number;
 }
 
 const ProfilePage: React.FC = () => {
@@ -42,6 +55,14 @@ const ProfilePage: React.FC = () => {
 	const { uid } = router.query;
 	const isReadOnly = !!uid && uid !== user?.uid;
 	const avatarInputRef = useRef<HTMLInputElement>(null);
+
+	const [copyToast, setCopyToast] = useState<string | null>(null);
+	const triggerCopyToast = (msg: string) => {
+		setCopyToast(msg);
+		setTimeout(() => {
+			setCopyToast((prev) => prev === msg ? null : prev);
+		}, 3000);
+	};
 
 	const [loadingProfile, setLoadingProfile] = useState(true);
 	const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
@@ -78,6 +99,94 @@ const ProfilePage: React.FC = () => {
 	const [followingCount, setFollowingCount] = useState(0);
 	const [isFollowing, setIsFollowing] = useState(false);
 
+	// Trust & Safety Report States
+	const [showReportModal, setShowReportModal] = useState(false);
+	const [reportReason, setReportReason] = useState("");
+	const [reportDesc, setReportDesc] = useState("");
+	const [reportFiles, setReportFiles] = useState<{ name: string; base64: string }[]>([]);
+	const [reportFeedback, setReportFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
+	const [submittingReport, setSubmittingReport] = useState(false);
+	const [acceptReportTerms, setAcceptReportTerms] = useState(false);
+
+	const handleReportFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+		const files = e.target.files;
+		if (!files) return;
+		if (reportFiles.length + files.length > 3) {
+			setReportFeedback({ type: "error", text: "You can upload a maximum of 3 evidence files." });
+			return;
+		}
+
+		Array.from(files).forEach((file) => {
+			if (file.size > 5 * 1024 * 1024) {
+				setReportFeedback({ type: "error", text: `${file.name} is too large. Max size is 5MB per file.` });
+				return;
+			}
+
+			const reader = new FileReader();
+			reader.onload = (ev) => {
+				const base64 = ev.target?.result as string;
+				setReportFiles((prev) => [...prev, { name: file.name, base64 }]);
+			};
+			reader.readAsDataURL(file);
+		});
+	};
+
+	const handleReportSubmit = async (e: React.FormEvent) => {
+		e.preventDefault();
+		if (submittingReport) return;
+		if (!reportReason) {
+			setReportFeedback({ type: "error", text: "Please select a reason." });
+			return;
+		}
+		if (reportDesc.length < 30) {
+			setReportFeedback({ type: "error", text: "Description must be at least 30 characters." });
+			return;
+		}
+		if (!acceptReportTerms) {
+			setReportFeedback({ type: "error", text: "You must accept the terms to submit a report." });
+			return;
+		}
+
+		setSubmittingReport(true);
+		setReportFeedback(null);
+
+		try {
+			const idToken = await auth.currentUser?.getIdToken(true);
+			const res = await fetch("/api/moderation/report", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"Authorization": `Bearer ${idToken}`
+				},
+				body: JSON.stringify({
+					targetUid: uid,
+					reason: reportReason,
+					description: reportDesc,
+					files: reportFiles,
+				}),
+			});
+
+			const data = await res.json();
+			if (!res.ok) {
+				throw new Error(data.error?.message || data.message || "Failed to submit report.");
+			}
+
+			setReportFeedback({ type: "success", text: "Report submitted successfully." });
+			setTimeout(() => {
+				setShowReportModal(false);
+				setReportReason("");
+				setReportDesc("");
+				setReportFiles([]);
+				setReportFeedback(null);
+				setAcceptReportTerms(false);
+			}, 3000);
+		} catch (err: any) {
+			setReportFeedback({ type: "error", text: err.message });
+		} finally {
+			setSubmittingReport(false);
+		}
+	};
+
 	useEffect(() => {
 		if (!loadingAuth && !user && !isReadOnly) {
 			router.push("/");
@@ -107,6 +216,13 @@ const ProfilePage: React.FC = () => {
 					email: "",
 					showStudentInfo: true,
 					usernameLastChangedAt: 0,
+					easyCount: 0,
+					mediumCount: 0,
+					hardCount: 0,
+					mlCount: 0,
+					contestParticipation: 0,
+					contestWins: 0,
+					xp: 0,
 				};
 
 				if (userSnap.exists()) {
@@ -125,6 +241,15 @@ const ProfilePage: React.FC = () => {
 						email: data.email || "",
 						showStudentInfo: data.showStudentInfo !== false,
 						usernameLastChangedAt: data.usernameLastChangedAt || 0,
+						easyCount: data.easyCount || 0,
+						mediumCount: data.mediumCount || 0,
+						hardCount: data.hardCount || 0,
+						mlCount: data.mlCount || 0,
+						contestParticipation: data.contestParticipation || 0,
+						contestWins: data.contestWins || 0,
+						xp: data.xp || 0,
+						country: data.country || "",
+						createdAt: data.createdAt || 0,
 					};
 					setOriginalUsername(data.username || "");
 					if (data.avatarUrl) {
@@ -328,7 +453,6 @@ const ProfilePage: React.FC = () => {
 			const updateData: any = {
 				displayName: profile.displayName.trim(),
 				username: newUsername,
-				experienceLevel: profile.experienceLevel,
 				studentId: profile.studentId.trim(),
 				school: profile.school.trim(),
 				class: profile.class.trim(),
@@ -416,15 +540,24 @@ const ProfilePage: React.FC = () => {
 				{/* Follow Button & Social counts block */}
 				<div className='flex items-center gap-5 mb-8 select-none bg-dark-surface border border-gray-850 px-5 py-3 rounded-2xl max-w-sm shadow-sm dark:shadow-none'>
 					{isReadOnly && (
-						<button
-							onClick={handleFollowToggle}
-							className={`px-6 py-2 rounded-xl text-xs font-bold transition duration-200 shadow-md ${isFollowing
-								? "bg-dark-fill-3 hover:bg-dark-fill-2 text-dark-gray-8 border border-gray-850"
-								: "bg-brand-orange hover:bg-brand-orange-s bc-btn-brand"
-								}`}
-						>
-							{isFollowing ? "Following" : "Follow"}
-						</button>
+						<div className="flex gap-2">
+							<button
+								onClick={handleFollowToggle}
+								className={`px-6 py-2 rounded-xl text-xs font-bold transition duration-200 shadow-md ${isFollowing
+									? "bg-dark-fill-3 hover:bg-dark-fill-2 text-dark-gray-8 border border-gray-850"
+									: "bg-brand-orange hover:bg-brand-orange-s bc-btn-brand"
+									}`}
+							>
+								{isFollowing ? "Following" : "Follow"}
+							</button>
+							<button
+								type="button"
+								onClick={() => setShowReportModal(true)}
+								className="px-6 py-2 rounded-xl text-xs font-bold transition duration-200 shadow-md bg-red-600 hover:bg-red-700 text-white border border-red-700/20"
+							>
+								Report User
+							</button>
+						</div>
 					)}
 					<div className='flex gap-4 text-xs font-semibold text-dark-gray-7'>
 						<div>
@@ -479,19 +612,69 @@ const ProfilePage: React.FC = () => {
 											</p>
 										)}
 										<p className='text-xs text-dark-gray-7 truncate max-w-[200px] mt-0.5'>{isReadOnly && profile.showStudentInfo === false ? "••••••••@•••••.••" : isReadOnly ? profile.email : user?.email}</p>
-										{profile.experienceLevel && (
-											<div className="mt-1.5 flex">
-												<span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${
-													profile.experienceLevel === "beginner"
-														? "bg-green-500/10 border-green-500/30 text-green-500"
-														: profile.experienceLevel === "intermediate"
-															? "bg-yellow-500/10 border-yellow-500/30 text-yellow-500"
-															: "bg-red-500/10 border-red-500/30 text-red-500"
-												}`}>
-													{profile.experienceLevel}
-												</span>
-											</div>
-										)}
+										{(() => {
+											const expInfo = calculateExperience({
+												easySolved: profile.easyCount || 0,
+												mediumSolved: profile.mediumCount || 0,
+												hardSolved: profile.hardCount || 0,
+												mlSolved: profile.mlCount || 0,
+												contestParticipation: profile.contestParticipation || 0,
+												contestWins: profile.contestWins || 0,
+											});
+
+											return (
+												<div className="mt-3 space-y-2">
+													{/* Tier badge & XP Info */}
+													<div className="flex items-center gap-1.5">
+														<span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${expInfo.currentTier.colorClass}`}>
+															{expInfo.currentTier.name}
+														</span>
+														<span className="text-[10px] font-semibold text-dark-gray-7">
+															{expInfo.score} XP
+														</span>
+
+														{/* Tooltip */}
+														<div className="relative group inline-block cursor-pointer align-middle">
+															<FaInfoCircle className="text-gray-500 hover:text-brand-orange transition-colors" size={11} />
+															<div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-60 p-3 bg-dark-layer-1 border border-gray-800 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] text-[10px] text-gray-300 pointer-events-none">
+																<div className="font-bold text-white mb-1.5 border-b border-gray-800 pb-1 flex justify-between items-center">
+																	<span>Experience Formula</span>
+																	<span className="text-[8px] text-brand-orange uppercase">Weights</span>
+																</div>
+																<div className="space-y-1 font-mono text-[9px]">
+																	<div className="flex justify-between"><span>Easy Solved:</span> <span className="text-white">+1 XP</span></div>
+																	<div className="flex justify-between"><span>Medium Solved:</span> <span className="text-white">+3 XP</span></div>
+																	<div className="flex justify-between"><span>Hard Solved:</span> <span className="text-white">+7 XP</span></div>
+																	<div className="flex justify-between"><span>ML Solved:</span> <span className="text-white">+10 XP</span></div>
+																	<div className="flex justify-between"><span>Contest Participation:</span> <span className="text-white">+5 XP</span></div>
+																	<div className="flex justify-between"><span>Contest Win:</span> <span className="text-white">+20 XP</span></div>
+																</div>
+																<div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-dark-layer-1" />
+															</div>
+														</div>
+													</div>
+
+													{/* Progress bar */}
+													<div className="w-44">
+														<div className="w-full h-1 rounded-full bg-gray-800 overflow-hidden">
+															<div
+																className="h-full rounded-full transition-all duration-300"
+																style={{
+																	width: `${expInfo.percent}%`,
+																	backgroundColor: expInfo.currentTier.accentColor,
+																}}
+															/>
+														</div>
+														{expInfo.nextTier && (
+															<div className="flex justify-between items-center mt-1 text-[8px] text-dark-gray-6">
+																<span>{expInfo.pointsToNext} XP to {expInfo.nextTier.name}</span>
+																<span>{Math.round(expInfo.percent)}%</span>
+															</div>
+														)}
+													</div>
+												</div>
+											);
+										})()}
 									</div>
 								</div>
 
@@ -537,6 +720,84 @@ const ProfilePage: React.FC = () => {
 								)}
 							</div>
 							<div className='absolute -right-10 -bottom-10 w-40 h-40 bg-brand-orange/5 rounded-full blur-2xl pointer-events-none' />
+						</div>
+
+						{/* User Information Card */}
+						<div className='bg-dark-surface border border-gray-850 rounded-2xl p-6 shadow-md dark:shadow-2xl space-y-4 relative overflow-hidden'>
+							<div className='absolute top-0 right-0 w-24 h-24 bg-brand-orange/5 rounded-full blur-xl pointer-events-none' />
+							<h3 className='text-lg font-bold text-dark-gray-8 border-b border-gray-850 pb-3 flex items-center gap-2'>
+								<FaUser className='text-brand-orange shrink-0' />
+								User Information
+							</h3>
+							
+							<div className='space-y-3.5 text-xs'>
+								{/* UID Section */}
+								<div className='flex justify-between items-center bg-dark-layer-2/30 p-2.5 rounded-xl border border-gray-850/50'>
+									<div className='space-y-0.5'>
+										<span className='text-gray-500 font-bold uppercase tracking-wider block text-[10px]'>User UID</span>
+										<span className='font-mono text-gray-300 select-all truncate max-w-[190px] block' title={isReadOnly ? (uid as string) : user?.uid}>
+											{isReadOnly ? (uid as string) : user?.uid}
+										</span>
+									</div>
+									<button
+										onClick={() => {
+											const copyText = isReadOnly ? (uid as string) : user?.uid;
+											if (copyText) {
+												navigator.clipboard.writeText(copyText);
+												triggerCopyToast("UID copied to clipboard!");
+											}
+										}}
+										className='text-gray-400 hover:text-white transition p-2 hover:bg-gray-800 rounded-lg shrink-0'
+										title='Copy UID'
+									>
+										<FaCopy size={13} />
+									</button>
+								</div>
+
+								{/* Country Section */}
+								<div className='flex justify-between items-center py-1 border-b border-gray-850/30'>
+									<span className='text-gray-500 font-bold uppercase tracking-wider block text-[10px]'>Country</span>
+									<span className='text-gray-300 font-semibold'>
+										{profile.country ? getCountryName(profile.country) : "Not Specified"}
+									</span>
+								</div>
+
+								{/* Joined Date Section */}
+								<div className='flex justify-between items-center py-1 border-b border-gray-850/30'>
+									<span className='text-gray-500 font-bold uppercase tracking-wider block text-[10px]'>Joined Date</span>
+									<span className='text-gray-300 font-semibold'>
+										{profile.createdAt ? new Date(profile.createdAt).toLocaleDateString(undefined, {
+											year: 'numeric',
+											month: 'long',
+											day: 'numeric'
+										}) : "Join date not available"}
+									</span>
+								</div>
+
+								{/* Experience Tier Section */}
+								<div className='flex justify-between items-center py-1'>
+									<span className='text-gray-500 font-bold uppercase tracking-wider block text-[10px]'>Experience Tier</span>
+									{(() => {
+										const expInfo = calculateExperience({
+											easySolved: profile.easyCount || 0,
+											mediumSolved: profile.mediumCount || 0,
+											hardSolved: profile.hardCount || 0,
+											mlSolved: profile.mlCount || 0,
+											contestParticipation: profile.contestParticipation || 0,
+											contestWins: profile.contestWins || 0,
+										});
+										return (
+											<span className='font-bold uppercase px-2 py-0.5 rounded text-[10px]' style={{
+												color: expInfo.currentTier.accentColor,
+												backgroundColor: `color-mix(in srgb, ${expInfo.currentTier.accentColor} 12%, transparent)`,
+												border: `1px solid color-mix(in srgb, ${expInfo.currentTier.accentColor} 30%, transparent)`
+											}}>
+												{expInfo.currentTier.name}
+											</span>
+										);
+									})()}
+								</div>
+							</div>
 						</div>
 
 						{/* Solved Stats */}
@@ -606,7 +867,7 @@ const ProfilePage: React.FC = () => {
 										onChange={handleAvatarChange}
 									/>
 									{avatarBase64 && (
-										<span className='text-[10px] text-green-400 font-medium'>✓ New photo ready — save to apply</span>
+										<span className='text-[10px] text-green-400 font-medium flex items-center gap-1'><FaCheckCircle size={10} /> New photo ready — save to apply</span>
 									)}
 								</div>
 							) : (
@@ -666,22 +927,74 @@ const ProfilePage: React.FC = () => {
 								</div>
 
 								<div>
-									<label htmlFor='experienceLevel' className='text-sm font-semibold block mb-2 text-dark-gray-8'>
-										Experience Tier {!isReadOnly && <span className='text-red-500'>*</span>}
+									<label className='text-sm font-semibold block mb-2 text-dark-gray-8'>
+										Experience Tier (Calculated Automatically)
 									</label>
-									<select
-										value={profile.experienceLevel}
-										onChange={(e) => setProfile((p) => ({ ...p, experienceLevel: e.target.value as any }))}
-										id='experienceLevel'
-										disabled={isReadOnly}
-										required
-										className='border border-gray-850 outline-none sm:text-sm rounded-lg focus:ring-1 focus:ring-brand-orange focus:border-brand-orange block w-full p-3 bg-dark-layer-2 text-dark-gray-8 disabled:opacity-60 disabled:cursor-not-allowed'
-									>
-										<option value=''>Select Experience Tier</option>
-										<option value='beginner'>Beginner</option>
-										<option value='intermediate'>Intermediate</option>
-										<option value='advanced'>Advanced</option>
-									</select>
+									<div className="border border-gray-850 rounded-lg p-3 bg-dark-layer-2 flex items-center justify-between">
+										{(() => {
+											const expInfo = calculateExperience({
+												easySolved: profile.easyCount || 0,
+												mediumSolved: profile.mediumCount || 0,
+												hardSolved: profile.hardCount || 0,
+												mlSolved: profile.mlCount || 0,
+												contestParticipation: profile.contestParticipation || 0,
+												contestWins: profile.contestWins || 0,
+											});
+
+											return (
+												<div className="w-full space-y-2">
+													<div className="flex items-center gap-1.5 justify-between">
+														<div className="flex items-center gap-1.5">
+															<span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${expInfo.currentTier.colorClass}`}>
+																{expInfo.currentTier.name}
+															</span>
+															<span className="text-[11px] font-semibold text-text-secondary" style={{ color: "var(--text-secondary)" }}>
+																{expInfo.score} XP
+															</span>
+														</div>
+
+														{/* Tooltip */}
+														<div className="relative group inline-block cursor-pointer align-middle">
+															<FaInfoCircle className="text-gray-500 hover:text-brand-orange transition-colors" size={13} />
+															<div className="absolute bottom-full right-0 mb-2 w-64 p-3 bg-dark-layer-1 border border-gray-800 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] text-xs text-gray-300 pointer-events-none">
+																<div className="font-bold text-white mb-1.5 border-b border-gray-800 pb-1 flex justify-between items-center">
+																	<span>Experience Calculation</span>
+																	<span className="text-[9px] text-brand-orange uppercase">Weights System</span>
+																</div>
+																<div className="space-y-1 font-mono text-[10px]">
+																	<div className="flex justify-between"><span>Easy Solved:</span> <span className="text-white">+1 XP</span></div>
+																	<div className="flex justify-between"><span>Medium Solved:</span> <span className="text-white">+3 XP</span></div>
+																	<div className="flex justify-between"><span>Hard Solved:</span> <span className="text-white">+7 XP</span></div>
+																	<div className="flex justify-between"><span>ML Solved:</span> <span className="text-white">+10 XP</span></div>
+																	<div className="flex justify-between"><span>Contest Participation:</span> <span className="text-white">+5 XP</span></div>
+																	<div className="flex justify-between"><span>Contest Win:</span> <span className="text-white">+20 XP</span></div>
+																</div>
+																<div className="absolute top-full right-1.5 border-4 border-transparent border-t-dark-layer-1" />
+															</div>
+														</div>
+													</div>
+
+													<div className="w-full">
+														<div className="w-full h-1.5 rounded-full bg-gray-800 overflow-hidden">
+															<div
+																className="h-full rounded-full transition-all duration-300"
+																style={{
+																	width: `${expInfo.percent}%`,
+																	backgroundColor: expInfo.currentTier.accentColor,
+																}}
+															/>
+														</div>
+														{expInfo.nextTier && (
+															<div className="flex justify-between items-center mt-1 text-[9px] text-dark-gray-7">
+																<span>{expInfo.pointsToNext} XP to {expInfo.nextTier.name}</span>
+																<span>{Math.round(expInfo.percent)}%</span>
+															</div>
+														)}
+													</div>
+												</div>
+											);
+										})()}
+									</div>
 								</div>
 
 								{isReadOnly && profile.showStudentInfo === false ? (
@@ -870,6 +1183,155 @@ const ProfilePage: React.FC = () => {
 					</div>
 				</div>
 			</div>
+
+			{/* Premium Glassmorphism Report User Modal */}
+			{showReportModal && (
+				<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
+					<div className="bg-dark-layer-1 border border-gray-800 rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl animate-scale-up">
+						{/* Header */}
+						<div className="px-6 py-4 border-b border-gray-800 flex justify-between items-center bg-red-950/20">
+							<div className="flex items-center gap-2 text-red-500">
+								<span className="text-xl">🚨</span>
+								<h3 className="text-lg font-bold text-white">Report User: @{profile.username}</h3>
+							</div>
+							<button
+								onClick={() => {
+									setShowReportModal(false);
+									setReportFeedback(null);
+								}}
+								className="text-gray-400 hover:text-white transition duration-150"
+							>
+								✕
+							</button>
+						</div>
+
+						{/* Form */}
+						<form onSubmit={handleReportSubmit} className="p-6 space-y-4">
+							<div>
+								<label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">
+									Violation Category <span className="text-red-500">*</span>
+								</label>
+								<select
+									value={reportReason}
+									onChange={(e) => setReportReason(e.target.value)}
+									required
+									className="w-full bg-dark-layer-2 border border-gray-850 text-white rounded-lg p-2.5 outline-none focus:ring-1 focus:ring-brand-orange"
+								>
+									<option value="">Select a reason...</option>
+									<option value="Cheating / Plagiarism">Cheating / Plagiarism (copying code/solutions)</option>
+									<option value="Abusive Behavior">Abusive Behavior (toxic posts/comments)</option>
+									<option value="Spam">Spam (advertising/flooding the leaderboard)</option>
+									<option value="Impersonation">Impersonation (pretending to be another user/org)</option>
+									<option value="Harassment">Harassment (stalking/hate speech)</option>
+									<option value="Other">Other (specify below)</option>
+								</select>
+							</div>
+
+							<div>
+								<div className="flex justify-between items-center mb-2">
+									<label className="block text-xs font-bold uppercase tracking-wider text-gray-400">
+										Detailed Description <span className="text-red-500">*</span>
+									</label>
+									<span className={`text-[10px] ${reportDesc.length < 30 ? "text-yellow-500" : "text-gray-500"}`}>
+										{reportDesc.length} / 3000 chars (min 30)
+									</span>
+								</div>
+								<textarea
+									value={reportDesc}
+									onChange={(e) => setReportDesc(e.target.value)}
+									required
+									minLength={30}
+									maxLength={3000}
+									rows={4}
+									placeholder="Describe the violation in detail, referencing specific submissions, threads, or dates where appropriate..."
+									className="w-full bg-dark-layer-2 border border-gray-850 text-white rounded-lg p-3 outline-none focus:ring-1 focus:ring-brand-orange text-sm placeholder:text-gray-600 resize-none"
+								/>
+							</div>
+
+							{/* File Upload / Evidence */}
+							<div>
+								<label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">
+									Evidence & Attachments (Optional)
+								</label>
+								<div className="border border-dashed border-gray-850 rounded-lg p-4 bg-dark-layer-2 flex flex-col items-center justify-center gap-2">
+									<span className="text-2xl">📁</span>
+									<p className="text-xs text-gray-400 text-center">
+										Drag & drop or <label className="text-brand-orange cursor-pointer hover:underline">browse<input type="file" multiple accept="image/*,.pdf,.txt,.zip" onChange={handleReportFileChange} className="hidden" /></label>
+									</p>
+									<p className="text-[9px] text-gray-500">Supports: JPG, PNG, PDF, TXT, ZIP · Max 3 files · Max 5MB each</p>
+								</div>
+
+								{reportFiles.length > 0 && (
+									<div className="mt-3 space-y-1.5">
+										{reportFiles.map((file, idx) => (
+											<div key={idx} className="flex justify-between items-center bg-dark-fill-3 border border-gray-850 rounded-md px-3 py-1.5 text-xs text-gray-300">
+												<span className="truncate max-w-[250px] font-mono">{file.name}</span>
+												<button
+													type="button"
+													onClick={() => setReportFiles(prev => prev.filter((_, i) => i !== idx))}
+													className="text-red-400 hover:text-red-500 transition ml-2 font-bold"
+												>
+													✕
+												</button>
+											</div>
+										))}
+									</div>
+								)}
+							</div>
+
+							{/* Terms */}
+							<label className="flex gap-2.5 items-start cursor-pointer select-none">
+								<input
+									type="checkbox"
+									checked={acceptReportTerms}
+									onChange={(e) => setAcceptReportTerms(e.target.checked)}
+									className="mt-0.5 accent-brand-orange"
+								/>
+								<span className="text-[10px] text-gray-400 leading-tight">
+									I declare under penalty of perjury that this report is true, accurate, and submitted in good faith. I understand that submitting false reports may result in action against my account.
+								</span>
+							</label>
+
+							{/* Status Feedback */}
+							{reportFeedback && (
+								<div className={`p-3 rounded-lg text-xs font-semibold ${
+									reportFeedback.type === "success" ? "bg-green-950/40 text-green-400 border border-green-900/35" : "bg-red-950/40 text-red-400 border border-red-900/35"
+								}`}>
+									{reportFeedback.text}
+								</div>
+							)}
+
+							{/* Footer Actions */}
+							<div className="flex justify-end gap-2.5 pt-2 border-t border-gray-850">
+								<button
+									type="button"
+									onClick={() => {
+										setShowReportModal(false);
+										setReportFeedback(null);
+									}}
+									className="px-4 py-2 text-xs font-semibold text-gray-400 hover:text-white transition"
+								>
+									Cancel
+								</button>
+								<button
+									type="submit"
+									disabled={submittingReport}
+									className="px-5 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 disabled:bg-gray-800 disabled:text-gray-500 rounded-lg transition shadow-md flex items-center gap-1.5"
+								>
+									{submittingReport ? "Submitting..." : "Submit Report"}
+								</button>
+							</div>
+						</form>
+					</div>
+				</div>
+			)}
+
+			{copyToast && (
+				<div className="fixed bottom-5 right-5 bg-dark-layer-1 border border-emerald-500/30 text-emerald-400 px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 z-50 animate-bounce">
+					<FaCheckCircle className="text-emerald-500" />
+					<span className="text-xs font-semibold">{copyToast}</span>
+				</div>
+			)}
 		</main>
 	);
 };

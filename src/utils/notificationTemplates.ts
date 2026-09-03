@@ -12,6 +12,8 @@ export interface TemplateConfig {
 	description?: string;
 	details: { label: string; value: string; isHighlight?: boolean }[];
 	ctaText?: string;
+	ctaUrl?: string;
+	footerText?: string;
 }
 
 export const EVENT_TEMPLATES: Record<BeastNotificationEvent, (name: string, ph: Record<string, string>, customContent?: string) => TemplateConfig> = {
@@ -417,7 +419,7 @@ export const EVENT_TEMPLATES: Record<BeastNotificationEvent, (name: string, ph: 
 	PROB_SOLVED_MILESTONE: (name, ph, customContent) => ({
 		category: "achievements",
 		priority: "high",
-		subject: `🎉 Milestone Unlocked: ${ph.solvedCount || "100"} Problems Solved!`,
+		subject: `Milestone Unlocked: ${ph.solvedCount || "100"} Problems Solved!`,
 		headerTitle: "Milestone",
 		accentColor: "#10b981",
 		accentGlowColor: "rgba(16, 185, 129, 0.15)",
@@ -684,7 +686,7 @@ export const EVENT_TEMPLATES: Record<BeastNotificationEvent, (name: string, ph: 
 	ACH_BADGE: (name, ph, customContent) => ({
 		category: "achievements",
 		priority: "high",
-		subject: "🎉 Badge Earned! New Achievement Unlocked!",
+		subject: "Badge Earned! New Achievement Unlocked!",
 		headerTitle: "Badge Unlocked",
 		accentColor: "#a855f7",
 		accentGlowColor: "rgba(168, 85, 247, 0.15)",
@@ -700,7 +702,7 @@ export const EVENT_TEMPLATES: Record<BeastNotificationEvent, (name: string, ph: 
 	ACH_LEVEL_UP: (name, ph, customContent) => ({
 		category: "achievements",
 		priority: "high",
-		subject: `🚀 Level Up! You reached Level ${ph.newLevel || "1"}!`,
+		subject: `Level Up! You reached Level ${ph.newLevel || "1"}!`,
 		headerTitle: "Level Up",
 		accentColor: "#a855f7",
 		accentGlowColor: "rgba(168, 85, 247, 0.15)",
@@ -733,7 +735,7 @@ export const EVENT_TEMPLATES: Record<BeastNotificationEvent, (name: string, ph: 
 	ACH_STREAK_REMINDER: (name, ph, customContent) => ({
 		category: "problem",
 		priority: "normal",
-		subject: `🔥 Save your ${ph.streakDays || "0"}-Day Coding Streak!`,
+		subject: `Save your ${ph.streakDays || "0"}-Day Coding Streak!`,
 		headerTitle: "Streak Alert",
 		accentColor: "#f97316",
 		accentGlowColor: "rgba(249, 115, 22, 0.15)",
@@ -750,7 +752,7 @@ export const EVENT_TEMPLATES: Record<BeastNotificationEvent, (name: string, ph: 
 	ACH_STREAK_WARN: (name, ph, customContent) => ({
 		category: "problem",
 		priority: "high",
-		subject: `⚠️ Streak Lost Warning: Solve today!`,
+		subject: `Streak Lost Warning: Solve today!`,
 		headerTitle: "Warning",
 		accentColor: "#ef4444",
 		accentGlowColor: "rgba(239, 68, 68, 0.15)",

@@ -53,9 +53,9 @@ export async function getStaticProps({ params }: { params: { pid: string } }) {
 		if (docSnap.exists) {
 			const data = docSnap.data();
 			if (data) {
-				const dbTags = data.tags && Array.isArray(data.tags) && data.tags.length > 0
+				const dbTags = data.tags && Array.isArray(data.tags)
 					? data.tags
-					: (data.category ? [data.category] : ["Array"]);
+					: [];
 				problem = {
 					id: docSnap.id,
 					title: data.title || "",
@@ -73,7 +73,6 @@ export async function getStaticProps({ params }: { params: { pid: string } }) {
 					difficulty: data.difficulty || "Medium",
 					points: data.points || data.maxScore || 100,
 					order: Number(data.order) || 0,
-					category: data.category || "",
 					customChecker: data.customChecker || null,
 					editorial: data.editorial || null,
 				};
@@ -85,39 +84,43 @@ export async function getStaticProps({ params }: { params: { pid: string } }) {
 
 	// Fallback to static problems for seamless local testing
 	if (!problem && staticProblems[pid]) {
-		const staticProb = staticProblems[pid];
-		const dbTags = staticProb.tags && Array.isArray(staticProb.tags) && staticProb.tags.length > 0
-			? staticProb.tags
-			: ((staticProb as any).category ? [(staticProb as any).category] : ["Array"]);
-		problem = {
-			id: pid,
-			title: staticProb.title || "",
-			problemStatement: staticProb.problemStatement || "",
-			examples: staticProb.examples || [],
-			constraints: staticProb.constraints || "",
-			starterCode: staticProb.starterCode || "",
-			handlerFunction: typeof staticProb.handlerFunction === "function" ? staticProb.handlerFunction.toString() : staticProb.handlerFunction,
-			starterFunctionName: staticProb.starterFunctionName || "",
-			inputFormat: staticProb.inputFormat || "",
-			outputFormat: staticProb.outputFormat || "",
-			tags: dbTags,
-			description: staticProb.description || "",
-			language: staticProb.language || "English",
-			difficulty: staticProb.difficulty || "Medium",
-			points: staticProb.points || 100,
-			order: (staticProb as any).order || 0,
-			category: (staticProb as any).category || "",
-			customChecker: (staticProb as any).customChecker || null,
-			editorial: (staticProb as any).editorial || null,
-		};
+		try {
+			const db = getAdminFirestore();
+			const deletedSnap = await db.collection("deleted_problems").doc(pid).get();
+			if (!deletedSnap.exists) {
+				const staticProb = staticProblems[pid];
+				const dbTags = staticProb.tags && Array.isArray(staticProb.tags)
+					? staticProb.tags
+					: [];
+				problem = {
+					id: pid,
+					title: staticProb.title || "",
+					problemStatement: staticProb.problemStatement || "",
+					examples: staticProb.examples || [],
+					constraints: staticProb.constraints || "",
+					starterCode: staticProb.starterCode || "",
+					handlerFunction: typeof staticProb.handlerFunction === "function" ? staticProb.handlerFunction.toString() : staticProb.handlerFunction,
+					starterFunctionName: staticProb.starterFunctionName || "",
+					inputFormat: staticProb.inputFormat || "",
+					outputFormat: staticProb.outputFormat || "",
+					tags: dbTags,
+					description: staticProb.description || "",
+					language: staticProb.language || "English",
+					difficulty: staticProb.difficulty || "Medium",
+					points: staticProb.points || 100,
+					order: (staticProb as any).order || 0,
+					customChecker: (staticProb as any).customChecker || null,
+					editorial: (staticProb as any).editorial || null,
+				};
+			}
+		} catch (error) {
+			console.error("Error checking deleted_problems in getStaticProps:", error);
+		}
 	}
 
 	if (!problem) {
 		return {
-			props: {
-				problem: null,
-				errorType: "problem_not_found"
-			},
+			notFound: true,
 			revalidate: 1,
 		};
 	}

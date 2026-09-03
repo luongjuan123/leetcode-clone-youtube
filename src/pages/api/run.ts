@@ -4,8 +4,12 @@ import { exec, spawn, execSync } from "child_process";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import crypto from "crypto";
 import { getAdminFirestore } from "@/firebase/firebaseAdmin";
 import { getEffectiveLimits, ExecutionProfileSettings } from "@/utils/executionProfiles";
+import { withAuthAndModeration } from "@/utils/authMiddleware";
+import { getRedisClient } from "@/utils/redis";
+import { SandboxExecutionResult } from "@/utils/types";
 
 function checkLocalCommand(cmd: string): boolean {
 	try {
@@ -370,18 +374,116 @@ interface RunResponse {
 	memory?: number;
 }
 
+let checkedSandbox = false;
+let sandboxAllowed = false;
+
+function checkSandboxPermissions(): boolean {
+	if (checkedSandbox) return sandboxAllowed;
+	checkedSandbox = true;
+	try {
+		const testCgroup = "/sys/fs/cgroup/beastcode-test";
+		if (!fs.existsSync("/sys/fs/cgroup")) {
+			sandboxAllowed = false;
+			return false;
+		}
+		fs.mkdirSync(testCgroup);
+		fs.rmdirSync(testCgroup);
+
+		execSync("unshare --fork --pid --net true", { stdio: "ignore" });
+		sandboxAllowed = true;
+	} catch {
+		sandboxAllowed = false;
+		if (process.env.NODE_ENV === "development") {
+			console.warn("[SECURITY WARNING] Local sandbox permissions missing. Falling back to un-jailed process execution for development mode.");
+		}
+	}
+	return sandboxAllowed;
+}
+
 function runCommandWithStdin(
 	command: string,
 	args: string[],
 	stdinData: string,
-	limits: ExecutionProfileSettings
-): Promise<{ stdout: string; stderr: string; code: number | null; timedOut: boolean; memoryLimitExceeded: boolean; outputLimitExceeded: boolean }> {
+	limits: ExecutionProfileSettings,
+	language?: string
+): Promise<SandboxExecutionResult> {
 	return new Promise((resolve) => {
 		const timeoutMs = limits.timeoutMs;
 		const memoryLimitBytes = limits.memoryLimitMb * 1024 * 1024;
 		const maxOutputSize = limits.maxOutputSizeChars;
 
-		const child = spawn(command, args, { timeout: timeoutMs });
+		const isSandboxEnabled = checkSandboxPermissions();
+		
+		if (!isSandboxEnabled && process.env.NODE_ENV !== "development") {
+			resolve({
+				stdout: "",
+				stderr: "Security Error: Local sandbox permissions missing in production environment.",
+				code: -1,
+				timedOut: false,
+				memoryLimitExceeded: false,
+				outputLimitExceeded: false
+			});
+			return;
+		}
+		
+		let cgroupDir = "";
+		let runId = "";
+		
+		let spawnCmd = command;
+		let spawnArgs = args;
+
+		if (isSandboxEnabled) {
+			runId = crypto.randomBytes(16).toString("hex");
+			cgroupDir = `/sys/fs/cgroup/beastcode-sandbox/run-${runId}`;
+
+			try {
+				if (!fs.existsSync("/sys/fs/cgroup/beastcode-sandbox")) {
+					fs.mkdirSync("/sys/fs/cgroup/beastcode-sandbox");
+				}
+				fs.mkdirSync(cgroupDir);
+
+				// Write memory cap
+				fs.writeFileSync(`${cgroupDir}/memory.max`, `${memoryLimitBytes}`);
+				fs.writeFileSync(`${cgroupDir}/memory.swap.max`, "0");
+
+				// Write pids limit (1 for single threaded, 5 for JVM)
+				const pidsMax = language === "java" ? "5" : "1";
+				fs.writeFileSync(`${cgroupDir}/pids.max`, pidsMax);
+
+				// Write CPU throttling: 50% CPU over 100ms
+				fs.writeFileSync(`${cgroupDir}/cpu.max`, "50000 100000");
+
+				// Log sandbox initialization parameters
+				console.log(JSON.stringify({
+					runId,
+					command,
+					language: language || "unknown",
+					memoryMaxBytes: memoryLimitBytes,
+					pidsMax: parseInt(pidsMax, 10),
+					cpuMax: "50000 100000",
+					timestamp: Date.now()
+				}));
+			} catch (cgErr) {
+				console.error("Failed to setup cgroups sandbox path, falling back:", cgErr);
+				cgroupDir = ""; // Disable cgroup checks
+			}
+
+			// Prepend unshare command
+			spawnCmd = "unshare";
+			spawnArgs = ["--fork", "--pid", "--net", "--mount", command, ...args];
+		}
+
+		// Spawn child process
+		const child = spawn(spawnCmd, spawnArgs, { stdio: ["pipe", "pipe", "pipe"], shell: false });
+
+		// Put process into the cgroup slice if sandbox is active
+		if (cgroupDir && child.pid) {
+			try {
+				fs.writeFileSync(`${cgroupDir}/cgroup.procs`, `${child.pid}`);
+			} catch (procErr) {
+				console.error("Failed to write child PID to cgroup.procs:", procErr);
+			}
+		}
 
 		let stdout = "";
 		let stderr = "";
@@ -394,26 +496,29 @@ function runCommandWithStdin(
 			child.kill("SIGKILL");
 		}, timeoutMs);
 
-		// Memory limit checking via polling
-		const memoryPollInterval = setInterval(() => {
-			if (child.pid) {
-				try {
-					const statmPath = `/proc/${child.pid}/statm`;
-					if (fs.existsSync(statmPath)) {
-						const statm = fs.readFileSync(statmPath, "utf8");
-						const parts = statm.split(/\s+/);
-						const residentPages = parseInt(parts[1], 10);
-						const rssBytes = residentPages * 4096;
-						if (rssBytes > memoryLimitBytes) {
-							memoryLimitExceeded = true;
-							child.kill("SIGKILL");
+		// Non-sandbox development mode memory polling fallback
+		let memoryPollInterval: NodeJS.Timeout | null = null;
+		if (!isSandboxEnabled) {
+			memoryPollInterval = setInterval(() => {
+				if (child.pid) {
+					try {
+						const statmPath = `/proc/${child.pid}/statm`;
+						if (fs.existsSync(statmPath)) {
+							const statm = fs.readFileSync(statmPath, "utf8");
+							const parts = statm.split(/\s+/);
+							const residentPages = parseInt(parts[1], 10);
+							const rssBytes = residentPages * 4096;
+							if (rssBytes > memoryLimitBytes) {
+								memoryLimitExceeded = true;
+								child.kill("SIGKILL");
+							}
 						}
+					} catch (e) {
+						// Ignore process exits
 					}
-				} catch (e) {
-					// Process might have exited
 				}
-			}
-		}, 50);
+			}, 50);
+		}
 
 		child.stdout.on("data", (data) => {
 			const chunk = data.toString();
@@ -435,11 +540,50 @@ function runCommandWithStdin(
 
 		const finish = (code: number | null) => {
 			clearTimeout(timer);
-			clearInterval(memoryPollInterval);
+			if (memoryPollInterval) {
+				clearInterval(memoryPollInterval);
+			}
+
+			// Post-mortem review: check if OOM killer killed the process
+			let oomKilled = false;
+			if (cgroupDir && fs.existsSync(`${cgroupDir}/memory.events`)) {
+				try {
+					const events = fs.readFileSync(`${cgroupDir}/memory.events`, "utf8");
+					const oomMatch = events.match(/(oom|oom_kill)\s+([1-9]\d*)/);
+					if (oomMatch) {
+						oomKilled = true;
+					}
+				} catch (evErr) {
+					console.error("Failed to read memory.events from cgroups:", evErr);
+				}
+			}
+
+			if (oomKilled) {
+				memoryLimitExceeded = true;
+			}
+
+			// Clean up the cgroup slice directory
+			if (cgroupDir && fs.existsSync(cgroupDir)) {
+				try {
+					fs.rmdirSync(cgroupDir);
+				} catch (rmErr) {
+					// Retry cgroup dir removal after a small delay in case processes are still cleaning up
+					setTimeout(() => {
+						try {
+							if (fs.existsSync(cgroupDir)) {
+								fs.rmdirSync(cgroupDir);
+							}
+						} catch (retryErr) {
+							console.error("Failed to clean up cgroup dir on retry:", retryErr);
+						}
+					}, 50);
+				}
+			}
+
 			resolve({ stdout, stderr, code, timedOut, memoryLimitExceeded, outputLimitExceeded });
 		};
 
-		child.on("error", (err) => {
+		child.on("error", () => {
 			finish(-1);
 		});
 
@@ -464,19 +608,41 @@ function cleanOutput(str: string): string {
 		.trim();
 }
 
-export async function runCode(
+function normalizeCode(code: string): string {
+	if (!code) return "";
+	return code
+		.replace(/\r\n/g, "\n")
+		.split("\n")
+		.map((line) => line.trimEnd())
+		.join("\n")
+		.trim();
+}
+
+async function runCodeInternal(
 	problemId: string,
 	userCode: string,
 	language: SupportedLanguage,
 	testcases: any[],
 	isCustomInput?: boolean,
-	onStatusUpdate?: (stage: string, progress?: { current: number; total: number }) => void
+	onStatusUpdate?: (stage: string, progress?: { current: number; total: number }) => void,
+	cachedProblemData?: any
 ): Promise<RunResponse> {
 	let customChecker: any = null;
 	let executionProfile: string | undefined = "normal";
 	let customLimits: any = {};
 
-	if (problemId) {
+	if (cachedProblemData) {
+		customChecker = cachedProblemData.customChecker;
+		executionProfile = cachedProblemData.executionProfile || "normal";
+		customLimits = {
+			timeoutMs: cachedProblemData.customTimeoutMs,
+			memoryLimitMb: cachedProblemData.customMemoryLimitMb,
+			maxOutputSizeChars: cachedProblemData.customMaxOutputSizeChars,
+			cpuCount: cachedProblemData.customCpuCount,
+			diskLimitMb: cachedProblemData.customDiskLimitMb,
+			processLimit: cachedProblemData.customProcessLimit,
+		};
+	} else if (problemId) {
 		try {
 			const db = getAdminFirestore();
 			const problemDoc = await db.collection("problems").doc(problemId).get();
@@ -521,8 +687,8 @@ export async function runCode(
 			const stdins = testcases.map(tc => tc.inputText || "");
 			const executions = await runBatchWithJudge0(userCode, language, stdins, limits, onStatusUpdate);
 
-			const testResults: { passed: boolean; input: string; expected: string; actual: string; error?: string }[] = [];
-			let firstFailure: { index: number; input: string; expected: string; actual: string } | null = null;
+			const testResults: { passed: boolean; input: string; expected: string; actual: string; error?: string; runtime?: number; memory?: number }[] = [];
+			let firstFailure: { index: number; input: string; expected: string; actual: string; error?: string } | null = null;
 			let maxRuntime = 0;
 			let maxMemory = 0;
 
@@ -533,9 +699,11 @@ export async function runCode(
 				const expectedOutput = cleanOutput(tc.outputText || "");
 				const execution = executions[i];
 
+				let runMs = 0;
+				let memKb = 0;
 				if (execution) {
-					const runMs = ((execution as any).time || 0) * 1000;
-					const memKb = ((execution as any).memory || 0);
+					runMs = Math.round(((execution as any).time || 0) * 1000);
+					memKb = ((execution as any).memory || 0);
 					if (runMs > maxRuntime) maxRuntime = runMs;
 					if (memKb > maxMemory) maxMemory = memKb;
 				}
@@ -555,57 +723,35 @@ export async function runCode(
 					};
 				}
 
+				let passed = false;
+				let actual = "";
+				let errorDetails = "";
+
 				if (execution.timedOut) {
-					return {
-						success: false,
-						failedCaseIndex: i + 1,
-						input: inputData,
-						expected: expectedOutput,
-						actual: "Time Limit Exceeded",
-						error: `Time Limit Exceeded (${limits.timeoutMs}ms)`
-					};
+					actual = "Time Limit Exceeded";
+					errorDetails = `Time Limit Exceeded (${limits.timeoutMs}ms)`;
+				} else if (execution.memoryLimitExceeded) {
+					actual = "Memory Limit Exceeded";
+					errorDetails = `Memory Limit Exceeded (${limits.memoryLimitMb}MB)`;
+				} else if (execution.outputLimitExceeded) {
+					actual = "Output Limit Exceeded";
+					errorDetails = `Output Limit Exceeded (${limits.maxOutputSizeChars} chars)`;
+				} else if (execution.code !== 0 && execution.code !== null) {
+					actual = execution.stdout || "";
+					errorDetails = execution.stderr || `Runtime Error (exit code ${execution.code})`;
+				} else {
+					passed = isCustomInput ? true : checkVerdict(execution.stdout, tc.outputText || "", customChecker, inputData);
+					actual = execution.stdout.trim() || "";
 				}
-
-				if (execution.memoryLimitExceeded) {
-					return {
-						success: false,
-						failedCaseIndex: i + 1,
-						input: inputData,
-						expected: expectedOutput,
-						actual: "Memory Limit Exceeded",
-						error: `Memory Limit Exceeded (${limits.memoryLimitMb}MB)`
-					};
-				}
-
-				if (execution.outputLimitExceeded) {
-					return {
-						success: false,
-						failedCaseIndex: i + 1,
-						input: inputData,
-						expected: expectedOutput,
-						actual: "Output Limit Exceeded",
-						error: `Output Limit Exceeded (${limits.maxOutputSizeChars} chars)`
-					};
-				}
-
-				if (execution.code !== 0 && execution.code !== null) {
-					return {
-						success: false,
-						failedCaseIndex: i + 1,
-						input: inputData,
-						expected: expectedOutput,
-						actual: execution.stdout,
-						error: execution.stderr || `Runtime Error (exit code ${execution.code})`
-					};
-				}
-
-				const passed = isCustomInput ? true : checkVerdict(execution.stdout, tc.outputText || "", customChecker, inputData);
 
 				testResults.push({
 					passed,
 					input: inputData,
 					expected: expectedOutput,
-					actual: execution.stdout.trim() || "",
+					actual,
+					error: errorDetails || undefined,
+					runtime: runMs,
+					memory: memKb
 				});
 
 				if (!passed && firstFailure === null) {
@@ -613,7 +759,8 @@ export async function runCode(
 						index: i + 1,
 						input: inputData,
 						expected: expectedOutput,
-						actual: execution.stdout.trim(),
+						actual,
+						error: errorDetails || "Wrong Answer"
 					};
 				}
 			}
@@ -634,7 +781,7 @@ export async function runCode(
 					input: firstFailure?.input,
 					expected: firstFailure?.expected,
 					actual: firstFailure?.actual,
-					error: "Wrong Answer",
+					error: firstFailure?.error || "Wrong Answer",
 					runtime: maxRuntime,
 					memory: maxMemory
 				};
@@ -701,16 +848,6 @@ export async function runCode(
 			});
 
 			if (compileResult.code !== 0) {
-				// Cleanup source files
-				try {
-					if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-					if (javaSubdir && fs.existsSync(javaSubdir)) {
-						fs.rmSync(javaSubdir, { recursive: true, force: true });
-					}
-				} catch (cleanupErr) {
-					console.error("Cleanup error:", cleanupErr);
-				}
-
 				return {
 					success: false,
 					isCompileError: true,
@@ -720,8 +857,8 @@ export async function runCode(
 		}
 
 		// Run against each test case sequentially
-		const testResults: { passed: boolean; input: string; expected: string; actual: string; error?: string }[] = [];
-		let firstFailure: { index: number; input: string; expected: string; actual: string } | null = null;
+		const testResults: { passed: boolean; input: string; expected: string; actual: string; error?: string; runtime?: number; memory?: number }[] = [];
+		let firstFailure: { index: number; input: string; expected: string; actual: string; error?: string } | null = null;
 		let maxRuntime = 0;
 		let maxMemory = 0;
 
@@ -755,68 +892,41 @@ export async function runCode(
 			}
 
 			const localStartTime = Date.now();
-			const execution = await runCommandWithStdin(runCmd, runArgs, inputData, limits);
+			const execution = await runCommandWithStdin(runCmd, runArgs, inputData, limits, language);
 			const localElapsed = Date.now() - localStartTime;
 			if (localElapsed > maxRuntime) maxRuntime = localElapsed;
 			const estimatedMemory = Math.round(limits.memoryLimitMb * 1024 * 0.12);
 			if (estimatedMemory > maxMemory) maxMemory = estimatedMemory;
 
+			let passed = false;
+			let actual = "";
+			let errorDetails = "";
+
 			if (execution.timedOut) {
-				cleanupTempFiles(filePath, binaryPath, javaSubdir);
-				return {
-					success: false,
-					failedCaseIndex: i + 1,
-					input: inputData,
-					expected: expectedOutput,
-					actual: "Time Limit Exceeded",
-					error: `Time Limit Exceeded (${limits.timeoutMs}ms)`
-				};
+				actual = "Time Limit Exceeded";
+				errorDetails = `Time Limit Exceeded (${limits.timeoutMs}ms)`;
+			} else if (execution.memoryLimitExceeded) {
+				actual = "Memory Limit Exceeded";
+				errorDetails = `Memory Limit Exceeded (${limits.memoryLimitMb}MB)`;
+			} else if (execution.outputLimitExceeded) {
+				actual = "Output Limit Exceeded";
+				errorDetails = `Output Limit Exceeded (${limits.maxOutputSizeChars} chars)`;
+			} else if (execution.code !== 0 && execution.code !== null) {
+				actual = execution.stdout || "";
+				errorDetails = execution.stderr || `Runtime Error (exit code ${execution.code})`;
+			} else {
+				passed = isCustomInput ? true : checkVerdict(execution.stdout, tc.outputText || "", customChecker, inputData);
+				actual = execution.stdout.trim() || "";
 			}
-
-			if (execution.memoryLimitExceeded) {
-				cleanupTempFiles(filePath, binaryPath, javaSubdir);
-				return {
-					success: false,
-					failedCaseIndex: i + 1,
-					input: inputData,
-					expected: expectedOutput,
-					actual: "Memory Limit Exceeded",
-					error: `Memory Limit Exceeded (${limits.memoryLimitMb}MB)`
-				};
-			}
-
-			if (execution.outputLimitExceeded) {
-				cleanupTempFiles(filePath, binaryPath, javaSubdir);
-				return {
-					success: false,
-					failedCaseIndex: i + 1,
-					input: inputData,
-					expected: expectedOutput,
-					actual: "Output Limit Exceeded",
-					error: `Output Limit Exceeded (${limits.maxOutputSizeChars} chars)`
-				};
-			}
-
-			if (execution.code !== 0 && execution.code !== null) {
-				cleanupTempFiles(filePath, binaryPath, javaSubdir);
-				return {
-					success: false,
-					failedCaseIndex: i + 1,
-					input: inputData,
-					expected: expectedOutput,
-					actual: execution.stdout,
-					error: execution.stderr || `Runtime Error (exit code ${execution.code})`
-				};
-			}
-
-			onStatusUpdate?.("evaluating");
-			const passed = isCustomInput ? true : checkVerdict(execution.stdout, tc.outputText || "", customChecker, inputData);
 
 			testResults.push({
 				passed,
 				input: inputData,
 				expected: expectedOutput,
-				actual: execution.stdout.trim() || "",
+				actual,
+				error: errorDetails || undefined,
+				runtime: localElapsed,
+				memory: estimatedMemory
 			});
 
 			if (!passed && firstFailure === null) {
@@ -824,16 +934,20 @@ export async function runCode(
 					index: i + 1,
 					input: inputData,
 					expected: expectedOutput,
-					actual: execution.stdout.trim(),
+					actual,
+					error: errorDetails || "Wrong Answer"
 				};
+			}
+
+			// For local execution, stop on first failure to conserve host resource
+			if (!passed) {
+				break;
 			}
 		}
 
-		cleanupTempFiles(filePath, binaryPath, javaSubdir);
-
 		const passedCount = testResults.filter((r) => r.passed).length;
 		const totalCount = testResults.length;
-		const allPassed = passedCount === totalCount;
+		const allPassed = passedCount === testcases.length;
 
 		if (allPassed) {
 			return { success: true, passedCount, totalCount, testResults, runtime: maxRuntime, memory: maxMemory };
@@ -847,19 +961,110 @@ export async function runCode(
 				input: firstFailure?.input,
 				expected: firstFailure?.expected,
 				actual: firstFailure?.actual,
-				error: "Wrong Answer",
+				error: firstFailure?.error || "Wrong Answer",
 				runtime: maxRuntime,
 				memory: maxMemory
 			};
 		}
 
 	} catch (err: any) {
-		cleanupTempFiles(filePath, binaryPath, javaSubdir);
 		return {
 			success: false,
 			error: `Server execution error: ${err.message}`
 		};
+	} finally {
+		cleanupTempFiles(filePath, binaryPath, javaSubdir);
 	}
+}
+
+export async function runCode(
+	problemId: string,
+	userCode: string,
+	language: SupportedLanguage,
+	testcases: any[],
+	isCustomInput?: boolean,
+	onStatusUpdate?: (stage: string, progress?: { current: number; total: number }) => void
+): Promise<RunResponse> {
+	if (!userCode || !language || !testcases || !Array.isArray(testcases)) {
+		return { success: false, error: "Missing required fields" };
+	}
+
+	let problemUpdatedAt = 0;
+	let cacheBypass = false;
+	let problemData: any = null;
+
+	if (problemId) {
+		try {
+			const db = getAdminFirestore();
+			const problemDoc = await db.collection("problems").doc(problemId).get();
+			if (problemDoc.exists) {
+				problemData = problemDoc.data();
+				problemUpdatedAt = problemData?.updatedAt || 0;
+				cacheBypass = problemData?.cacheBypass === true;
+			}
+		} catch (dbErr) {
+			console.error("Error fetching problem details in runCode cache layer:", dbErr);
+		}
+	}
+
+	const bypassCache = cacheBypass || !!isCustomInput;
+	let executionHash = "";
+
+	if (!bypassCache) {
+		const normalized = normalizeCode(userCode);
+		const hashPayload = `${normalized}|${language}|${problemId}|${problemUpdatedAt}`;
+		executionHash = crypto.createHash("sha256").update(hashPayload).digest("hex");
+
+		try {
+			const redis = getRedisClient();
+			if (redis) {
+				const cached = await redis.get(`judge:cache:${executionHash}`);
+				if (cached) {
+					const cachedResponse = JSON.parse(cached);
+					onStatusUpdate?.("completed");
+					return cachedResponse;
+				}
+			}
+		} catch (redisErr) {
+			console.error("Redis execution cache read failure:", redisErr);
+		}
+	}
+
+	const result = await runCodeInternal(
+		problemId,
+		userCode,
+		language,
+		testcases,
+		isCustomInput,
+		onStatusUpdate,
+		problemData
+	);
+
+	if (!bypassCache && executionHash && result && result.success !== false) {
+		const redis = getRedisClient();
+		if (redis) {
+			const verdictStr = result.isCompileError
+				? "Compilation Error"
+				: result.error
+					? result.error
+					: "Accepted";
+
+			const cachePayload = {
+				...result,
+				verdict: verdictStr,
+				totalRuntimeMs: result.runtime || 0,
+				totalMemoryKb: result.memory || 0
+			};
+
+			Promise.allSettled([
+				redis.set(`judge:cache:${executionHash}`, JSON.stringify(cachePayload), "EX", 604800)
+			]).catch((err) => {
+				console.error("Redis execution cache write failure:", err);
+			});
+		}
+	}
+
+	return result;
 }
 
 async function handler(req: NextApiRequest, res: NextApiResponse<RunResponse>) {
@@ -997,4 +1202,4 @@ function checkVerdict(
 	return false;
 }
 
-export default withApiErrorHandler(handler);
+export default withApiErrorHandler(withAuthAndModeration(handler));

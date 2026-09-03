@@ -6,7 +6,7 @@ function makeRequest(email) {
 		const req = http.request({
 			hostname: "localhost",
 			port: 3001,
-			path: "/api/forgot-password",
+			path: "/api/auth/forgot-password",
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",

@@ -4,6 +4,8 @@ export interface ThreadComposerState {
 	isOpen: boolean;
 	parentThreadId?: string;
 	replyToDisplayName?: string;
+	problemId?: string;
+	problemTitle?: string;
 }
 
 export const threadComposerState = atom<ThreadComposerState>({

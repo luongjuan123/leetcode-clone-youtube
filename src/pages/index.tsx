@@ -5,7 +5,7 @@ import BeastCodePagination from "@/components/UI/BeastCodePagination";
 
 import useHasMounted from "@/hooks/useHasMounted";
 import { useState, useEffect } from "react";
-import { FaSearch } from "react-icons/fa";
+import { FaSearch, FaCheck } from "react-icons/fa";
 
 export default function Home() {
 	const [loadingProblems, setLoadingProblems] = useState(true);
@@ -28,8 +28,8 @@ export default function Home() {
 
 	const sortOptions = [
 		{ value: "default", label: "Default Order" },
-		{ value: "a-z", label: "A → Z" },
-		{ value: "z-a", label: "Z → A" },
+		{ value: "a-z", label: "A to Z" },
+		{ value: "z-a", label: "Z to A" },
 		{ value: "easiest", label: "Easiest First" },
 		{ value: "hardest", label: "Hardest First" },
 		{ value: "likes", label: "Most Liked" },
@@ -116,8 +116,8 @@ export default function Home() {
 							<thead>
 								<tr style={{ borderBottom: "1px solid var(--border-subtle)" }}>
 									<th className="pl-5 pr-3 py-3.5 text-left">
-										<span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
-											✓
+										<span className="text-[10px] font-bold uppercase tracking-widest flex items-center" style={{ color: "var(--text-muted)" }}>
+											<FaCheck size={10} />
 										</span>
 									</th>
 									<th className="px-4 py-3.5 text-left">

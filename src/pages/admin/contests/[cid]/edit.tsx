@@ -14,7 +14,7 @@ import Link from "next/link";
 import {
 	FaChevronLeft, FaCheck, FaSpinner, FaPlus, FaTrash,
 	FaArrowUp, FaArrowDown, FaEdit, FaVolumeUp, FaQuestionCircle,
-	FaFileAlt, FaChartBar, FaExclamationTriangle, FaBell
+	FaFileAlt, FaChartBar, FaExclamationTriangle, FaBell, FaSearch
 } from "react-icons/fa";
 import MarkdownEditor from "@/components/Admin/MarkdownEditor";
 import BeastCodeSelect from "@/components/UI/BeastCodeSelect";
@@ -1110,7 +1110,7 @@ const EditContest: React.FC = () => {
 										onClick={() => setIsPickerOpen(true)}
 										className='flex items-center gap-2 bg-gradient-to-r from-brand-orange to-yellow-500 hover:opacity-90 text-white text-xs font-bold px-4 py-2.5 rounded-lg transition shadow-glow-sm'
 									>
-										🔍 Open Advanced Search / Picker
+										<FaSearch size={12} /> Open Advanced Search / Picker
 									</button>
 									<Link
 										href='/admin/problems/new'

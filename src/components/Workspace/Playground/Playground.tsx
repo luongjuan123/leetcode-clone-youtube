@@ -14,9 +14,9 @@ import { useRouter } from "next/router";
 import { arrayUnion, doc, updateDoc, addDoc, collection, increment, getDoc, setDoc } from "firebase/firestore";
 import useLocalStorage from "@/hooks/useLocalStorage";
 import { SupportedLanguage, starterCodes, runPistonCode } from "@/utils/pistonRunner";
-import dynamic from "next/dynamic";
+import { FiCheck, FiX } from "react-icons/fi";
 import { useSubmission } from "@/context/SubmissionContext";
-const Split = dynamic(() => import("react-split"), { ssr: false });
+import TestcaseScorecard from "../TestcaseScorecard/TestcaseScorecard";
 
 import { getFriendlyErrorMessage } from "@/utils/errorFilter";
 
@@ -56,6 +56,8 @@ const Playground: React.FC<PlaygroundProps> = ({
 	const [customInputChecked, setCustomInputChecked] = useState(false);
 	const [customInputText, setCustomInputText] = useState("");
 	const [activeTestCaseId, setActiveTestCaseId] = useState(0);
+	const [consoleTab, setConsoleTab] = useState<"testcases" | "custominput" | "results">("testcases");
+	const [activeExampleId, setActiveExampleId] = useState(0);
 
 	const [user, loading] = useAuthState(auth);
 	const {
@@ -77,6 +79,15 @@ const Playground: React.FC<PlaygroundProps> = ({
 	const runMessage = runError || (runStatus === "accepted" ? "All test cases passed successfully!" : "");
 	const executingType = isSubmitting ? "submit" : (runStatus === "running" ? "run" : null);
 
+	const handleToggleCustomInput = (checked: boolean) => {
+		setCustomInputChecked(checked);
+		if (checked) {
+			setConsoleTab("custominput");
+		} else {
+			setConsoleTab("testcases");
+		}
+	};
+
 	const handleExecute = async (isSubmit: boolean) => {
 		if (!user) {
 			alert(`Please login to ${isSubmit ? "submit" : "run"} your code`);
@@ -95,6 +106,7 @@ const Playground: React.FC<PlaygroundProps> = ({
 
 		// Run code flow
 		try {
+			setConsoleTab("results");
 			await runCode(userCode, language, problem, customInputChecked, customInputText);
 			setActiveTestCaseId(0);
 		} catch (error: any) {
@@ -330,7 +342,7 @@ const Playground: React.FC<PlaygroundProps> = ({
 	};
 
 	return (
-		<div className="flex flex-col relative w-full border rounded-lg overflow-hidden shadow-sm animate-fade-in" style={{ background: "var(--bg-dark-layer-1)", borderColor: "var(--border-subtle)" }}>
+		<div className="flex flex-col relative w-full h-full border-t lg:border-t-0 lg:border-l overflow-hidden animate-fade-in" style={{ background: "var(--bg-dark-layer-1)", borderColor: "var(--border-subtle)" }}>
 			{/* preference nav */}
 			<PreferenceNav
 				settings={settings}
@@ -341,24 +353,10 @@ const Playground: React.FC<PlaygroundProps> = ({
 				syncStatus={syncStatus}
 			/>
 
-			{/* Custom Input Block */}
-			{customInputChecked && (
-				<div className={`p-4 border-b ${lightTheme ? "bg-gray-50 border-gray-300 text-gray-800" : "bg-dark-fill-3 text-white border-gray-800"}`} style={{ backgroundColor: "var(--bg-dark-layer-1)", borderColor: "var(--border-subtle)" }}>
-					<p className="text-xs font-semibold mb-2" style={{ color: "var(--text-secondary)" }}>Custom Input Text:</p>
-					<textarea
-						value={customInputText}
-						onChange={(e) => setCustomInputText(e.target.value)}
-						rows={3}
-						className="w-full text-xs font-mono p-3 rounded-lg outline-none border focus:ring-0"
-						style={{ backgroundColor: "var(--bg-testcase)", borderColor: "var(--border-subtle)", color: "var(--text-primary)" }}
-						placeholder="Write custom input parameters here..."
-					/>
-				</div>
-			)}
-
-			<Split className="h-[520px]" direction="vertical" sizes={[60, 40]} minSize={100}>
+			{/* Main Layout: Vertically Stacked Editor and Console Tray */}
+			<div className="flex-1 overflow-y-auto w-full flex flex-col">
 				{/* Editor View */}
-				<div className="w-full overflow-auto">
+				<div className="w-full min-h-[600px] overflow-auto border-b" style={{ borderColor: "var(--border-subtle)" }}>
 					<CodeMirror
 						value={userCode}
 						theme={lightTheme ? undefined : vscodeDark}
@@ -368,161 +366,289 @@ const Playground: React.FC<PlaygroundProps> = ({
 					/>
 				</div>
 
-				{/* Console Results Panel (Runs only) */}
-				<div className="w-full px-5 overflow-auto pb-14 border-t pt-4" style={{ background: "var(--bg-dark-layer-1)", color: "var(--text-primary)", borderColor: "var(--border-subtle)" }}>
-					<div className="text-xs font-bold text-text-secondary mb-3 flex items-center gap-1.5" style={{ color: "var(--text-secondary)" }}>
-						<span>Console Output / Run Result:</span>
+				{/* Console Results Panel (Tabbed Output Tray) */}
+				<div className="w-full px-5 pb-20 pt-4" style={{ background: "var(--bg-surface)", color: "var(--text-primary)" }}>
+					<div className="flex items-center space-x-2 border-b pb-2 mb-4" style={{ borderColor: "var(--border-default)" }}>
+						<button
+							type="button"
+							onClick={() => setConsoleTab("testcases")}
+							className="text-xs font-semibold px-3 py-1.5 rounded-md transition duration-200"
+							style={{
+								fontFamily: "'Inter', sans-serif",
+								background: consoleTab === "testcases" ? "var(--bg-dark-layer-1)" : "transparent",
+								color: consoleTab === "testcases" ? "var(--text-primary)" : "var(--text-secondary)",
+								border: consoleTab === "testcases" ? "1px solid var(--border-default)" : "1px solid transparent"
+							}}
+						>
+							Test Cases
+						</button>
+						<button
+							type="button"
+							onClick={() => setConsoleTab("custominput")}
+							className="text-xs font-semibold px-3 py-1.5 rounded-md transition duration-200"
+							style={{
+								fontFamily: "'Inter', sans-serif",
+								background: consoleTab === "custominput" ? "var(--bg-dark-layer-1)" : "transparent",
+								color: consoleTab === "custominput" ? "var(--text-primary)" : "var(--text-secondary)",
+								border: consoleTab === "custominput" ? "1px solid var(--border-default)" : "1px solid transparent"
+							}}
+						>
+							Custom Input {customInputChecked && <span className="inline-block w-1.5 h-1.5 rounded-full ml-1 bg-brand-orange" />}
+						</button>
+						<button
+							type="button"
+							onClick={() => setConsoleTab("results")}
+							className="text-xs font-semibold px-3 py-1.5 rounded-md transition duration-200"
+							style={{
+								fontFamily: "'Inter', sans-serif",
+								background: consoleTab === "results" ? "var(--bg-dark-layer-1)" : "transparent",
+								color: consoleTab === "results" ? "var(--text-primary)" : "var(--text-secondary)",
+								border: consoleTab === "results" ? "1px solid var(--border-default)" : "1px solid transparent"
+							}}
+						>
+							Results {runStatus !== "idle" && (
+								<span className={`inline-block w-1.5 h-1.5 rounded-full ml-1 ${
+									runStatus === "running" ? "bg-brand-orange animate-pulse" : runStatus === "accepted" ? "bg-emerald-400" : "bg-rose-400"
+								}`} />
+							)}
+						</button>
 					</div>
 
 					<div className="my-2">
-						{runStatus === "idle" ? (
-							<div className="text-gray-500 text-xs py-6 italic text-center">
-								No run results yet. Click &quot;Run Code&quot; to test your solution.
-							</div>
-						) : runStatus === "running" ? (
-							<div className={`rounded-2xl p-6 border shadow-sm max-w-md mx-auto mt-2 ${
-								lightTheme ? "bg-gray-50 border-gray-300" : "bg-dark-fill-3/15 border-gray-800"
-							}`}>
-								<h3 className={`text-xs font-semibold mb-4 flex items-center gap-2.5 ${lightTheme ? "text-gray-700" : "text-gray-300"}`}>
-									<div className={`animate-spin rounded-full h-4 w-4 border-2 border-t-transparent ${
-										lightTheme ? "border-blue-600" : "border-brand-orange"
-									}`} />
-									Evaluating Run...
-								</h3>
-								<div className="flex flex-col space-y-4 py-2 px-1">
-									<div className="flex items-center space-x-3">
-										<div className={`animate-spin rounded-full h-3.5 w-3.5 border-2 border-t-transparent ${
-											lightTheme ? "border-blue-600" : "border-brand-orange"
-										}`} />
-										<span className={`text-xs font-medium ${lightTheme ? "text-gray-850" : "text-white"}`}>
-											Running test cases against Piston environment...
-										</span>
+						{consoleTab === "testcases" && (() => {
+							const sampleExamples = (problem.examples || []).filter((ex: any) => ex.isSample);
+							// Clamp activeExampleId to range of sampleExamples
+							const activeIdx = Math.min(activeExampleId, Math.max(0, sampleExamples.length - 1));
+							return (
+								<div className="space-y-4">
+									<div className="flex flex-wrap gap-2">
+										{sampleExamples.map((example, idx) => (
+											<button
+												key={example.id || idx}
+												type="button"
+												onClick={() => setActiveExampleId(idx)}
+												className="text-xs font-semibold px-3 py-1.5 rounded-md transition duration-200"
+												style={{
+													fontFamily: "'Inter', sans-serif",
+													background: activeIdx === idx ? "var(--bg-dark-layer-1)" : "var(--bg-dark-layer-2)",
+													color: activeIdx === idx ? "var(--text-primary)" : "var(--text-secondary)",
+													border: activeIdx === idx ? "1px solid var(--border-default)" : "1px solid transparent"
+												}}
+											>
+												Case {idx + 1}
+											</button>
+										))}
 									</div>
-								</div>
-							</div>
-						) : runStatus === "accepted" ? (
-							<div className="space-y-4">
-								<div className="text-bc-success text-lg font-black mb-1">Passed</div>
-								<div className="text-xs text-text-muted font-bold" style={{ color: "var(--text-muted)" }}>
-									Passed Cases: {passedCount} / {totalCount}
-								</div>
 
-								{testResults.length > 0 && (
-									<>
-										<div className="flex select-none">
-											{testResults.map((_, index) => (
-												<button
-													key={index}
-													onClick={() => setActiveTestCaseId(index)}
-													className="mr-2 font-semibold items-center transition-all focus:outline-none inline-flex relative rounded-lg px-4 py-1.5 cursor-pointer whitespace-nowrap text-xs font-bold"
-													style={activeTestCaseId === index
-														? { color: "var(--brand-orange)", background: "var(--bg-dark-fill-3)", border: "1px solid var(--border-accent)" }
-														: { color: "var(--text-muted)", background: "var(--bg-dark-fill-3)", border: "1px solid transparent" }
-													}
+									{sampleExamples[activeIdx] && (
+										<div className="space-y-3 animate-fade-in">
+											<div>
+												<p className="text-[11px] font-bold mb-1 text-gray-400 uppercase tracking-wider">Input:</p>
+												<pre 
+													className="border px-4 py-3 rounded-lg text-xs whitespace-pre-wrap text-gray-200"
+													style={{
+														fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+														backgroundColor: "rgba(0,0,0,0.35)",
+														borderColor: "var(--border-default)"
+													}}
 												>
-													Case {index + 1}
-												</button>
-											))}
+													{sampleExamples[activeIdx].inputText}
+												</pre>
+											</div>
+											<div>
+												<p className="text-[11px] font-bold mb-1 text-gray-400 uppercase tracking-wider">Expected Output:</p>
+												<pre 
+													className="border px-4 py-3 rounded-lg text-xs whitespace-pre-wrap text-gray-200"
+													style={{
+														fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+														backgroundColor: "rgba(0,0,0,0.35)",
+														borderColor: "var(--border-default)"
+													}}
+												>
+													{sampleExamples[activeIdx].outputText}
+												</pre>
+											</div>
+											{sampleExamples[activeIdx].explanation && (
+												<div>
+													<p className="text-[11px] font-bold mb-1 text-gray-400 uppercase tracking-wider">Explanation:</p>
+													<div 
+														className="text-xs bg-white/[0.02] border p-3 rounded-lg leading-relaxed text-gray-300"
+														style={{ borderColor: "var(--border-default)" }}
+													>
+														{sampleExamples[activeIdx].explanation}
+													</div>
+												</div>
+											)}
 										</div>
+									)}
+								</div>
+							);
+						})()}
 
-										{testResults[activeTestCaseId] && (
-											<div className="font-semibold my-4">
-												<p className="text-xs font-bold mt-4" style={{ color: "var(--text-secondary)" }}>Input:</p>
-												<div className="w-full rounded-lg border px-4 py-3 mt-2 font-mono text-xs whitespace-pre-wrap" style={{ background: "var(--bg-testcase)", borderColor: "var(--border-testcase)", color: "var(--text-testcase)" }}>
-													{testResults[activeTestCaseId].input}
-												</div>
-												{testResults[activeTestCaseId].expected && (
-													<>
-														<p className="text-xs font-bold mt-4" style={{ color: "var(--text-secondary)" }}>Expected Output:</p>
-														<div className="w-full rounded-lg border px-4 py-3 mt-2 font-mono text-xs whitespace-pre-wrap" style={{ background: "var(--bg-testcase)", borderColor: "var(--border-testcase)", color: "var(--text-testcase)" }}>
-															{testResults[activeTestCaseId].expected}
-														</div>
-													</>
-												)}
-												<p className="text-xs font-bold mt-4" style={{ color: "var(--text-secondary)" }}>Your Output:</p>
-												<div className="w-full rounded-lg border px-4 py-3 mt-2 font-mono text-xs whitespace-pre-wrap" style={{ background: "var(--bg-testcase)", borderColor: "var(--border-testcase)", color: "var(--text-testcase)" }}>
-													{testResults[activeTestCaseId].actual}
-												</div>
+						{consoleTab === "custominput" && (
+							<div className="space-y-3">
+								<div className="flex items-center justify-between">
+									<p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Custom Execution Input:</p>
+									<label className="flex items-center space-x-2 cursor-pointer">
+										<input
+											type="checkbox"
+											checked={customInputChecked}
+											onChange={(e) => handleToggleCustomInput(e.target.checked)}
+											className="rounded border-gray-700 bg-black/40 text-brand-orange focus:ring-0"
+										/>
+										<span className="text-xs text-gray-300">Enable Custom Input</span>
+									</label>
+								</div>
+								<textarea
+									value={customInputText}
+									onChange={(e) => {
+										setCustomInputText(e.target.value);
+										if (!customInputChecked) {
+											setCustomInputChecked(true);
+										}
+									}}
+									rows={5}
+									className="w-full text-xs font-mono p-4 rounded-xl outline-none border focus:ring-0 transition bg-black/45 border-gray-800 text-gray-200 placeholder-gray-600 focus:border-brand-orange/60"
+									placeholder="Provide custom input arguments to run your solution (e.g. [2,7,11,15]\n9)"
+								/>
+							</div>
+						)}
+
+						{consoleTab === "results" && (
+							<div>
+								{runStatus === "idle" ? (
+									<div className="text-gray-500 text-xs py-8 italic text-center">
+										No run results yet. Click &quot;Run Code&quot; to test your solution.
+									</div>
+								) : runStatus === "running" ? (
+									<div className={`rounded-2xl p-6 border shadow-sm max-w-md mx-auto mt-2 bg-dark-fill-3/15 border-gray-800`}>
+										<h3 className={`text-xs font-semibold mb-4 flex items-center gap-2.5 text-gray-300`}>
+											<div className={`animate-spin rounded-full h-4 w-4 border-2 border-t-transparent border-brand-orange`} />
+											Evaluating Run...
+										</h3>
+										<div className="flex flex-col space-y-4 py-2 px-1">
+											<div className="flex items-center space-x-3">
+												<div className={`animate-spin rounded-full h-3.5 w-3.5 border-2 border-t-transparent border-brand-orange`} />
+												<span className={`text-xs font-medium text-white`}>
+													Running test cases against execution environment...
+												</span>
+											</div>
+										</div>
+									</div>
+								) : runStatus === "accepted" || runStatus === "wrong_answer" ? (
+									<div className="space-y-4">
+										{/* Verdict Banner */}
+										{runStatus === "accepted" ? (
+											<div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-450 p-4 rounded-xl font-bold text-sm flex items-center gap-2">
+												<span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+												Accepted
+											</div>
+										) : (
+											<div className="bg-rose-500/10 border border-rose-500/20 text-rose-450 p-4 rounded-xl font-bold text-sm flex items-center gap-2">
+												<span className="w-2 h-2 rounded-full bg-rose-500" />
+												Wrong Answer
 											</div>
 										)}
-									</>
-								)}
-							</div>
-						) : runStatus === "wrong_answer" ? (
-							<div className="space-y-4">
-								<div className="text-bc-error text-lg font-black mb-1">Wrong Answer</div>
-								<div className="text-xs text-text-muted font-bold" style={{ color: "var(--text-muted)" }}>
-									Passed Cases: {passedCount} / {totalCount}
-								</div>
 
-								{testResults.length > 0 && (
-									<>
-										<div className="flex select-none">
-											{testResults.map((result, index) => (
-												<button
-													key={index}
-													onClick={() => setActiveTestCaseId(index)}
-													className="mr-2 font-semibold items-center transition-all focus:outline-none inline-flex relative rounded-lg px-4 py-1.5 cursor-pointer whitespace-nowrap text-xs font-bold"
-													style={activeTestCaseId === index
-														? { color: result.passed ? "var(--bc-success)" : "var(--bc-error)", background: "var(--bg-dark-fill-3)", border: "1px solid var(--border-accent)" }
-														: { color: "var(--text-muted)", background: "var(--bg-dark-fill-3)", border: "1px solid transparent" }
-													}
-												>
-													Case {index + 1} {result.passed ? "✓" : "✗"}
-												</button>
-											))}
-										</div>
+										{testResults.length > 0 && (() => {
+											const activeRunIdx = Math.min(activeTestCaseId, Math.max(0, testResults.length - 1));
+											return (
+												<div className="space-y-4">
+													{/* Case Switcher Tabs */}
+													<div className="flex flex-wrap gap-2">
+														{testResults.map((_, idx) => (
+															<button
+																key={idx}
+																type="button"
+																onClick={() => setActiveTestCaseId(idx)}
+																className="text-xs font-semibold px-3 py-1.5 rounded-md transition duration-200"
+																style={{
+																	fontFamily: "'Inter', sans-serif",
+																	background: activeRunIdx === idx ? "var(--bg-dark-layer-1)" : "var(--bg-dark-layer-2)",
+																	color: activeRunIdx === idx ? "var(--text-primary)" : "var(--text-secondary)",
+																	border: activeRunIdx === idx ? "1px solid var(--border-default)" : "1px solid transparent"
+																}}
+															>
+																Case {idx + 1}
+															</button>
+														))}
+													</div>
 
-										{testResults[activeTestCaseId] && (
-											<div className="font-semibold my-4">
-												<p className="text-xs font-bold mt-4" style={{ color: "var(--text-secondary)" }}>Input:</p>
-												<div className="w-full rounded-lg border px-4 py-3 mt-2 font-mono text-xs whitespace-pre-wrap" style={{ background: "var(--bg-testcase)", borderColor: "var(--border-testcase)", color: "var(--text-testcase)" }}>
-													{testResults[activeTestCaseId].input}
-												</div>
-												{testResults[activeTestCaseId].expected && (
-													<>
-														<p className="text-xs font-bold mt-4" style={{ color: "var(--text-secondary)" }}>Expected Output:</p>
-														<div className="w-full rounded-lg border px-4 py-3 mt-2 font-mono text-xs whitespace-pre-wrap" style={{ background: "var(--bg-testcase)", borderColor: "var(--border-testcase)", color: "var(--text-testcase)" }}>
-															{testResults[activeTestCaseId].expected}
+													{testResults[activeRunIdx] && (
+														<div className="space-y-4 pt-2 animate-fade-in">
+															<div>
+																<p className="text-[11px] font-bold mb-1.5 text-gray-400 uppercase tracking-wider">Input:</p>
+																<pre 
+																	className="border border-gray-850 bg-black/35 px-4 py-3 rounded-lg text-xs whitespace-pre-wrap text-gray-200"
+																	style={{ fontFamily: "'JetBrains Mono', 'Fira Code', monospace" }}
+																>
+																	{testResults[activeRunIdx].input || <span className="italic text-gray-550">Empty Input</span>}
+																</pre>
+															</div>
+
+															<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+																<div>
+																	<p className="text-[11px] font-bold mb-1.5 text-gray-400 uppercase tracking-wider">Your Output:</p>
+																	<pre 
+																		className={`border px-4 py-3 rounded-lg text-xs whitespace-pre-wrap ${
+																			testResults[activeRunIdx].passed
+																				? "bg-green-500/10 border-green-500/20 text-green-450"
+																				: "bg-red-900/20 border-red-500/20 text-rose-450"
+																		}`}
+																		style={{ fontFamily: "'JetBrains Mono', 'Fira Code', monospace" }}
+																	>
+																		{testResults[activeRunIdx].actual || <span className="italic opacity-50">Empty Output</span>}
+																	</pre>
+																</div>
+																<div>
+																	<p className="text-[11px] font-bold mb-1.5 text-gray-400 uppercase tracking-wider">Expected Output:</p>
+																	<pre 
+																		className="border border-green-500/20 bg-green-500/10 px-4 py-3 rounded-lg text-xs whitespace-pre-wrap text-green-450"
+																		style={{ fontFamily: "'JetBrains Mono', 'Fira Code', monospace" }}
+																	>
+																		{testResults[activeRunIdx].expected}
+																	</pre>
+																</div>
+															</div>
+
+															{testResults[activeRunIdx].error && (
+																<div>
+																	<p className="text-[11px] font-bold mb-1.5 text-gray-400 uppercase tracking-wider">Error Details:</p>
+																	<pre 
+																		className="border p-4 rounded-xl text-xs overflow-auto max-h-[140px] whitespace-pre-wrap bg-rose-950/20 border-rose-800/35 text-rose-450"
+																		style={{ fontFamily: "'JetBrains Mono', 'Fira Code', monospace" }}
+																	>
+																		{testResults[activeRunIdx].error}
+																	</pre>
+																</div>
+															)}
 														</div>
-													</>
-												)}
-												<p className="text-xs font-bold mt-4" style={{ color: "var(--text-secondary)" }}>Your Output:</p>
-												<div className="w-full rounded-lg border px-4 py-3 mt-2 font-mono text-xs whitespace-pre-wrap text-rose-500" style={{ background: "var(--bg-testcase)", borderColor: "var(--border-testcase)" }}>
-													{testResults[activeTestCaseId].actual || <span className="italic text-gray-500">Empty Output</span>}
+													)}
 												</div>
-												{testResults[activeTestCaseId].error && (
-													<>
-														<p className="text-xs font-bold mt-4 text-rose-500">Error Details:</p>
-														<pre className="w-full rounded-lg border p-4 font-mono text-xs whitespace-pre-wrap text-rose-400 bg-black/40 border-border-subtle" style={{ borderColor: "var(--border-subtle)" }}>
-															{testResults[activeTestCaseId].error}
-														</pre>
-													</>
-												)}
-											</div>
-										)}
-									</>
+											);
+										})()}
+									</div>
+								) : runStatus === "compile_error" ? (
+									<div className="space-y-4 animate-fade-in">
+										<div className="text-rose-550 text-lg font-black flex items-center gap-2">
+											<span>Compilation Error</span>
+										</div>
+										<div className="text-xs font-semibold text-text-muted" style={{ color: "var(--text-muted)" }}>Details:</div>
+										<pre className="text-xs font-mono p-4 rounded-xl border overflow-auto max-h-[180px] whitespace-pre-wrap text-red-400 bg-black/60 border-border-subtle" style={{ borderColor: "var(--border-subtle)" }}>
+											{runMessage}
+										</pre>
+									</div>
+								) : (
+									<div className="text-center py-6 animate-fade-in">
+										<div className="text-rose-500 font-bold mb-2">Execution Error</div>
+										<div className="text-xs font-semibold text-text-muted" style={{ color: "var(--text-muted)" }}>{runMessage}</div>
+									</div>
 								)}
-							</div>
-						) : runStatus === "compile_error" ? (
-							<div className="space-y-4">
-								<div className="text-rose-550 text-lg font-black flex items-center gap-2">
-									<span>Compilation Error</span>
-								</div>
-								<div className="text-xs font-semibold text-text-muted" style={{ color: "var(--text-muted)" }}>Details:</div>
-								<pre className="text-xs font-mono p-4 rounded-xl border overflow-auto max-h-[180px] whitespace-pre-wrap text-red-400 bg-black/60 border-border-subtle" style={{ borderColor: "var(--border-subtle)" }}>
-									{runMessage}
-								</pre>
-							</div>
-						) : (
-							<div className="text-center py-6">
-								<div className="text-rose-500 font-bold mb-2">Execution Error</div>
-								<div className="text-xs font-semibold text-text-muted" style={{ color: "var(--text-muted)" }}>{runMessage}</div>
 							</div>
 						)}
 					</div>
 				</div>
-			</Split>
+			</div>
 
 			<EditorFooter
 				handleRun={() => handleExecute(false)}
@@ -530,7 +656,7 @@ const Playground: React.FC<PlaygroundProps> = ({
 				lightTheme={lightTheme}
 				onUploadFile={(code) => setUserCode(code)}
 				customInputChecked={customInputChecked}
-				setCustomInputChecked={setCustomInputChecked}
+				setCustomInputChecked={handleToggleCustomInput}
 				executingType={executingType}
 			/>
 		</div>

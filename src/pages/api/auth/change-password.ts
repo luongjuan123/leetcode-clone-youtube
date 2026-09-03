@@ -2,6 +2,7 @@ import { withApiErrorHandler } from "@/utils/apiErrorHandler";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getAdminAuth, getAdminFirestore } from "@/firebase/firebaseAdmin";
 import { EmailService } from "@/utils/emailService";
+import { EmailLayout, EmailHeader, EmailFooter, InfoRow, InfoTable, DangerBox, COLORS } from "@/utils/emailComponents";
 import { analysePassword, BANNED_SEQUENCES, PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH } from "@/utils/passwordPolicy";
 import crypto from "crypto";
 
@@ -43,42 +44,45 @@ function isRateLimited(ip: string): boolean {
 
 // ─── Security notification email ──────────────────────────────────────────────
 function buildChangedEmail(ip: string, country: string, device: string, time: string): string {
-	return `<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Your BeastCode Password Was Changed</title></head>
-<body style="margin:0;padding:0;background:#0d0d0f;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#fff;">
-  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background:#0d0d0f;padding:40px 20px;">
-    <tr><td align="center">
-      <table border="0" cellpadding="0" cellspacing="0" width="100%"
-        style="max-width:500px;background:#131316;border:1px solid rgba(239,68,68,.2);border-top:3px solid #ef4444;border-radius:16px;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.6);border-collapse:separate;">
-        <tr>
-          <td align="center" style="padding:28px 30px 14px;background:#0c0c0e;border-bottom:1px solid rgba(255,255,255,.04);">
-            <span style="font-size:22px;font-weight:900;letter-spacing:-1px;color:#fff;">Beast<span style="color:#ef4444;">Code</span></span>
-          </td>
-        </tr>
-        <tr><td style="padding:32px 30px;">
-          <h1 style="margin:0 0 14px;font-size:17px;font-weight:800;color:#fff;">Security Notice: Password Changed</h1>
-          <p style="margin:0 0 22px;font-size:14px;line-height:1.6;color:#a1a1aa;">Your account password was just changed. Here are the details:</p>
-          <table border="0" cellpadding="0" cellspacing="0" width="100%"
-            style="margin-bottom:24px;background:#0c0c0e;border:1px solid rgba(255,255,255,.04);border-radius:8px;font-size:13px;">
-            <tr><td style="padding:10px 15px;color:#71717a;font-weight:600;width:100px;">Time</td><td style="padding:10px 15px;color:#e4e4e7;font-family:monospace;">${time}</td></tr>
-            <tr style="border-top:1px solid rgba(255,255,255,.03);"><td style="padding:10px 15px;color:#71717a;font-weight:600;">IP</td><td style="padding:10px 15px;color:#e4e4e7;font-family:monospace;">${ip}</td></tr>
-            <tr style="border-top:1px solid rgba(255,255,255,.03);"><td style="padding:10px 15px;color:#71717a;font-weight:600;">Location</td><td style="padding:10px 15px;color:#e4e4e7;">${country}</td></tr>
-            <tr style="border-top:1px solid rgba(255,255,255,.03);"><td style="padding:10px 15px;color:#71717a;font-weight:600;">Device</td><td style="padding:10px 15px;color:#e4e4e7;">${device}</td></tr>
-          </table>
-          <p style="margin:0;font-size:13px;color:#f43f5e;font-weight:600;">If this was not you, <a href="mailto:support@bomboclatbeastcode.codes" style="color:#f43f5e;">contact support immediately</a>.</p>
-        </td></tr>
-        <tr>
-          <td style="padding:20px 30px;border-top:1px solid rgba(255,255,255,.04);background:#0c0c0e;text-align:center;font-size:11px;">
-            <p style="margin:0 0 6px;color:#a1a1aa;font-weight:600;">Practice. Compete. Become Better.</p>
-            <p style="margin:0;color:#3f3f46;">&copy; 2026 BeastCode. All rights reserved.</p>
-          </td>
-        </tr>
-      </table>
-    </td></tr>
-  </table>
-</body></html>`;
+	const detailsContent = `
+		${InfoRow({ label: "Time", value: time, accentColor: COLORS.danger })}
+		${InfoRow({ label: "IP Address", value: ip, accentColor: COLORS.danger })}
+		${InfoRow({ label: "Location", value: country, accentColor: COLORS.danger })}
+		${InfoRow({ label: "Device", value: device, accentColor: COLORS.danger })}
+	`;
+
+	const bodyContent = `
+		${EmailHeader({ headerTitle: "SECURITY NOTICE", accentColor: COLORS.danger })}
+		<tr>
+			<td style="padding: 40px 35px 35px 35px; background-color: ${COLORS.card}; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+				<h1 style="margin: 0 0 20px 0; font-size: 24px; font-weight: 800; line-height: 1.3; color: ${COLORS.primaryText}; letter-spacing: -0.5px;">
+					Security Notice: Password Changed
+				</h1>
+				
+				<p style="margin: 0 0 20px 0; font-size: 15px; line-height: 1.6; color: ${COLORS.secondaryText}; font-weight: 500;">
+					Hello,
+				</p>
+				
+				<p style="margin: 0 0 30px 0; font-size: 14px; line-height: 1.6; color: ${COLORS.mutedText};">
+					The password for your BeastCode account was recently updated. Here are the security details for this action:
+				</p>
+
+				${InfoTable({ content: detailsContent, accentColor: COLORS.danger })}
+
+				${DangerBox({
+					title: "Unrecognized Action?",
+					message: "If you did not perform this change, please contact support immediately to secure your account."
+				})}
+			</td>
+		</tr>
+		${EmailFooter({})}
+	`;
+
+	return EmailLayout({
+		title: "Your BeastCode Password Was Changed",
+		previewText: "Security Notice: The password for your BeastCode account was updated.",
+		bodyContent
+	});
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────

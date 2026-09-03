@@ -137,39 +137,42 @@ export function withApiErrorHandler(handler: NextApiHandlerWithErrors) {
 				let code = "INTERNAL_SERVER_ERROR";
 				let message = "Something went wrong.";
 
+				const handlerMessage = payload?.message || (typeof payload?.error === "string" ? payload.error : null);
+
 				if (currentStatusCode === 400) {
 					code = "BAD_REQUEST";
 					// Preserve safe, explicit 400 messages written by route handlers
-					message = payload?.message || "Invalid request parameters.";
+					message = handlerMessage || "Invalid request parameters.";
 				} else if (currentStatusCode === 401) {
 					code = "UNAUTHORIZED";
-					message = "Authentication is required.";
+					message = handlerMessage || "Authentication is required.";
 				} else if (currentStatusCode === 403) {
 					code = "FORBIDDEN";
-					message = "You do not have permission to perform this action.";
+					message = handlerMessage || "You do not have permission to perform this action.";
 				} else if (currentStatusCode === 404) {
 					code = "NOT_FOUND";
-					message = "The requested resource was not found.";
+					message = handlerMessage || "The requested resource was not found.";
 				} else if (currentStatusCode === 405) {
 					code = "METHOD_NOT_ALLOWED";
-					message = "HTTP method not allowed.";
+					message = handlerMessage || "HTTP method not allowed.";
 				} else if (currentStatusCode === 503) {
 					code = "SERVICE_UNAVAILABLE";
-					message = "Service is temporarily unavailable.";
+					message = handlerMessage || "Service is temporarily unavailable.";
 				} else if (currentStatusCode === 200) {
 					// Success responses pass through unchanged
 					return originalJson.call(this, payload);
 				}
 
-				// In production, always sanitize 5xx messages.
-				// In development, forward the handler's own message for easier debugging.
+				const resolvedMessage = currentStatusCode >= 500
+					? message
+					: (handlerMessage || message);
+
 				const sanitizedPayload = {
 					success: false,
+					message: resolvedMessage,
 					error: {
 						code,
-						message: currentStatusCode >= 500
-							? message // always generic for 5xx
-							: (payload?.message || message),
+						message: resolvedMessage,
 						...(isProduction ? {} : { details: payload }),
 					},
 				};

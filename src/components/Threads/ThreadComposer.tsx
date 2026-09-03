@@ -3,7 +3,7 @@ import { useRecoilState } from "recoil";
 import { threadComposerState } from "@/atoms/threadComposerAtom";
 import { useAuthState } from "react-firebase-hooks/auth";
 import { auth, firestore } from "@/firebase/firebase";
-import { collection, addDoc, getDocs, doc, getDoc } from "firebase/firestore";
+import { collection, addDoc, getDocs, doc, getDoc, query, where } from "firebase/firestore";
 import { clientSendNotification } from "@/utils/clientNotificationService";
 import {
 	FaTimes,
@@ -27,6 +27,7 @@ import GifPicker from "./GifPicker";
 import EmojiPicker from "./EmojiPicker";
 import Avatar from "./Avatar";
 import BeastCodeSelect from "@/components/UI/BeastCodeSelect";
+import TagSelect from "@/components/Admin/TagSelect";
 
 interface AttachmentFile {
 	name: string;
@@ -115,6 +116,7 @@ const ThreadComposer: React.FC = () => {
 
 	const [error, setError] = useState<string | null>(null);
 	const [success, setSuccess] = useState<string | null>(null);
+	const [tags, setTags] = useState<string[]>([]);
 
 	const [quotedThread, setQuotedThread] = useState<any>(null);
 	const [loadingQuoted, setLoadingQuoted] = useState(false);
@@ -227,6 +229,88 @@ const ThreadComposer: React.FC = () => {
 		} else {
 			setQuotedThread(null);
 			sessionStorage.removeItem("pendingQuoteId");
+		}
+	}, [composer.isOpen]);
+
+	// Auto-attach user's latest submission for the workspace problem discussions
+	useEffect(() => {
+		if (composer.isOpen && composer.problemId && user) {
+			const fetchAndAttachLatest = async () => {
+				setError(null);
+				try {
+					const querySnapshot = await getDocs(
+						query(
+							collection(firestore, "submissions"),
+							where("uid", "==", user.uid),
+							where("problemId", "==", composer.problemId)
+						)
+					);
+					const list: any[] = [];
+					querySnapshot.forEach((docSnap) => {
+						list.push({ id: docSnap.id, ...docSnap.data() });
+					});
+					
+					if (list.length > 0) {
+						list.sort((a, b) => b.timestamp - a.timestamp);
+						const latestSub = list[0];
+						
+						// Get problem stats
+						let attempts = 0;
+						let solved = 0;
+						const probDoc = await getDoc(doc(firestore, "problems", composer.problemId!));
+						if (probDoc.exists()) {
+							const probData = probDoc.data();
+							attempts = probData.attempts || 0;
+							solved = probData.solved || 0;
+						}
+
+						const formatted: AttachmentProblem = {
+							problemId: composer.problemId!,
+							problemTitle: latestSub.problemTitle || composer.problemTitle || composer.problemId!,
+							submissionId: latestSub.id,
+							submissionIndex: 1,
+							code: latestSub.code || "",
+							language: latestSub.language || "",
+							status: latestSub.status || "",
+							timestamp: latestSub.timestamp || Date.now(),
+							attempts,
+							solved,
+						};
+
+						setDrafts([
+							{
+								content: "",
+								photos: [],
+								files: [],
+								poll: null,
+								gif: null,
+								submittedProblem: formatted,
+							}
+						]);
+					} else {
+						setError(`You haven't submitted any solutions for this problem yet. Please submit a solution first to start a thread!`);
+					}
+				} catch (e) {
+					console.error("Error auto-attaching submission:", e);
+				}
+			};
+			fetchAndAttachLatest();
+		}
+	}, [composer.isOpen, composer.problemId, user]);
+
+	// Reset drafts when composer is closed
+	useEffect(() => {
+		if (!composer.isOpen) {
+			setDrafts([
+				{
+					content: "",
+					photos: [],
+					files: [],
+					poll: null,
+					gif: null,
+					submittedProblem: null,
+				},
+			]);
 		}
 	}, [composer.isOpen]);
 
@@ -799,6 +883,7 @@ const ThreadComposer: React.FC = () => {
 					mentions,
 					parentThreadId: previousThreadId || "", // empty string if top level
 					quotedThreadId: (i === 0 && pendingQuoteId) ? pendingQuoteId : "",
+					tags: (i === 0 && !composer.parentThreadId) ? tags : [],
 				};
 
 				if (draft.submittedProblem) {
@@ -841,6 +926,7 @@ const ThreadComposer: React.FC = () => {
 						submittedProblem: null,
 					},
 				]);
+				setTags([]);
 				setSuccess(null);
 			}, 1000);
 		} catch (e) {
@@ -984,6 +1070,19 @@ const ThreadComposer: React.FC = () => {
 											)}
 										</div>
 									</div>
+
+									{/* Thread Tags Selector (only on first post of a new thread) */}
+									{idx === 0 && !composer.parentThreadId && (
+										<div className="w-full mb-3">
+											<TagSelect
+												type="thread"
+												selectedTags={tags}
+												onChange={setTags}
+												maxTags={5}
+												placeholder="Select thread tags (max 5)"
+											/>
+										</div>
+									)}
 
 									{/* Formatting helper bar (only in Edit mode) */}
 									{!draft.previewMode && (

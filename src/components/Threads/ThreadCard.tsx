@@ -32,8 +32,10 @@ import { threadCommentFeedbackAtom } from "@/atoms/threadCommentFeedbackAtom";
 import PollComponent from "./PollComponent";
 import Avatar from "./Avatar";
 import ThreadMedia from "./ThreadMedia";
+import AttachmentGrid from "@/components/AttachmentViewer/AttachmentGrid";
 import { useRouter } from "next/router";
 import { useUserProfile } from "@/hooks/useUserProfile";
+import { useThreadTags } from "@/hooks/useThreadTags";
 import { clientSendNotification } from "@/utils/clientNotificationService";
 
 
@@ -78,6 +80,7 @@ interface Thread {
 	mentions?: string[];
 	viewCount?: number;
 	bookmarkCount?: number;
+	tags?: string[];
 }
 
 interface ThreadCardProps {
@@ -97,6 +100,7 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 	const setComposer = useSetRecoilState(threadComposerState);
 	const commentFeedback = useRecoilValue(threadCommentFeedbackAtom);
 	const router = useRouter();
+	const { getTag } = useThreadTags();
 
 	// Fetch real-time/latest profile of the author to show the newest uploaded avatar/displayName
 	const { profile: authorProfile } = useUserProfile(thread.uid);
@@ -497,7 +501,7 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 							<FaCheckCircle className='text-brand-orange shrink-0' size={12} title='Verified Developer' />
 						</div>
 
-						<div className='flex items-center gap-2.5 text-bc-muted text-xs shrink-0 font-mono'>
+						<div className='flex items-center gap-2.5 text-text-secondary text-xs shrink-0 font-mono'>
 							<span>{timeAgo}</span>
 
 							{/* Options trigger */}
@@ -507,7 +511,7 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 										e.stopPropagation();
 										setShowOptions(!showOptions);
 									}}
-									className='p-1.5 hover:bg-dark-fill-3 text-bc-muted hover:text-dark-gray-8 rounded-full transition relative'
+									className='p-1.5 hover:bg-dark-fill-3 text-text-secondary hover:text-dark-gray-8 rounded-full transition relative'
 								>
 									<FaEllipsisH size={13} />
 									{loginTooltipTarget === "bookmark" && (
@@ -563,12 +567,52 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 						</p>
 					)}
 
+					{/* Thread Tags */}
+					{thread.tags && thread.tags.length > 0 && (
+						<div className='flex flex-wrap gap-1.5 pt-1 select-none'>
+							{thread.tags.map((tagId) => {
+								const tag = getTag(tagId);
+								const name = tag?.name || tagId.charAt(0).toUpperCase() + tagId.slice(1);
+								const color = tag?.color || "#3B82F6";
+								return (
+									<span
+										key={tagId}
+										className='inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold border'
+										style={{
+											color: color,
+											backgroundColor: `color-mix(in srgb, ${color} 10%, transparent)`,
+											borderColor: `color-mix(in srgb, ${color} 25%, transparent)`
+										}}
+									>
+										{name}
+									</span>
+								);
+							})}
+						</div>
+					)}
+
 					{/* Reusable ThreadMedia handles aspect-ratios & responsive constraints */}
 					<ThreadMedia
 						photos={thread.photos}
 						gif={thread.gif}
 						onDoubleTap={handleLikeToggle}
 					/>
+
+					{/* File attachments */}
+					{thread.files && thread.files.length > 0 && (
+						<div className="mt-3">
+							<AttachmentGrid
+								files={thread.files.map((file: any) => ({
+									url: file.data,
+									name: file.name,
+									size: file.size,
+									type: file.type,
+									uploadedBy: thread.displayName || "User",
+									uploadDate: thread.createdAt,
+								}))}
+							/>
+						</div>
+					)}
 
 					{/* Poll view */}
 					{thread.poll && (
@@ -598,7 +642,7 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 										</p>
 									</div>
 								) : (
-									<p className='text-xs text-bc-muted italic select-none'>Quoted content deleted.</p>
+									<p className='text-xs text-text-secondary italic select-none'>Quoted content deleted.</p>
 								)}
 							</div>
 						</Link>
@@ -649,7 +693,7 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 					)}
 
 					{/* Actions row: Icons size 20x20, gap 20px, aligned vertically */}
-					<div className='flex items-center gap-[20px] text-bc-muted select-none pt-1 min-h-[32px]'>
+					<div className='flex items-center gap-[20px] text-text-secondary select-none pt-1 min-h-[32px]'>
 						{/* Like */}
 						<button
 							onClick={handleLikeToggle}
@@ -773,7 +817,7 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 
 					{/* View count */}
 					{thread.viewCount !== undefined && thread.viewCount > 0 && (
-						<div className='flex items-center gap-1 text-[10px] text-bc-muted font-mono select-none pt-0.5'>
+						<div className='flex items-center gap-1 text-[10px] text-text-secondary font-mono select-none pt-0.5'>
 							<FaEye size={9} />
 							<span>{thread.viewCount} {thread.viewCount === 1 ? "view" : "views"}</span>
 						</div>
@@ -837,7 +881,7 @@ const RepostEmbed: React.FC<{ threadId: string }> = ({ threadId }) => {
 	}
 
 	if (!thread) {
-		return <p className='text-xs text-bc-muted italic select-none'>Repost unavailable.</p>;
+		return <p className='text-xs text-text-secondary italic select-none'>Repost unavailable.</p>;
 	}
 
 	return (
