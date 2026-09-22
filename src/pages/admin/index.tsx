@@ -25,7 +25,8 @@ import {
 	FiFlag,
 	FiX,
 	FiActivity,
-	FiMail
+	FiMail,
+	FiUsers
 } from "react-icons/fi";
 
 // ─── Tab Components ────────────────────────────────────────────────────────────
@@ -34,9 +35,10 @@ import { ProblemsTab } from "@/components/Admin/ProblemsTab";
 import { ContestsTab } from "@/components/Admin/ContestsTab";
 import { ModerationTab } from "@/components/Admin/ModerationTab";
 import { EmailsTab } from "@/components/Admin/EmailsTab";
+import { OrganizationsTab } from "@/components/Admin/OrganizationsTab";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
-type AdminTab = "overview" | "problems" | "contests" | "moderation" | "emails";
+type AdminTab = "overview" | "problems" | "contests" | "moderation" | "emails" | "organizations";
 
 interface ProblemListItem {
 	id: string;
@@ -62,6 +64,7 @@ const TABS: { id: AdminTab; label: string; icon: React.ReactNode; danger?: boole
 	{ id: "problems", label: "Problems", icon: <FiBookOpen size={13} /> },
 	{ id: "contests", label: "Contests", icon: <FiActivity size={13} /> },
 	{ id: "moderation", label: "Moderation", icon: <FiFlag size={13} />, danger: true },
+	{ id: "organizations", label: "Organizations", icon: <FiUsers size={13} /> },
 	{ id: "emails", label: "Email Queue", icon: <FiMail size={13} /> },
 ];
 
@@ -470,6 +473,10 @@ const AdminDashboard: React.FC = () => {
 
 						{activeTab === "emails" && (
 							<EmailsTab />
+						)}
+
+						{activeTab === "organizations" && (
+							<OrganizationsTab triggerStatusMessage={triggerStatusRibbon} />
 						)}
 					</div>
 				</div>

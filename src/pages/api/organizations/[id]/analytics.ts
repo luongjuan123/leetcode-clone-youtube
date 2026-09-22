@@ -77,11 +77,11 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
 		snaps.forEach((snap) => {
 			snap.forEach((doc) => {
 				const data = doc.data() || {};
-				totalSolvedCount += data.problemsSolved || 0;
-				if (data.contestRating) {
-					totalRatingSum += data.contestRating;
-					ratedMembersCount++;
-				}
+				const solved = (data.solvedProblems || []).length;
+				totalSolvedCount += solved;
+				const rating = data.contestRating !== undefined ? data.contestRating : 1500;
+				totalRatingSum += rating;
+				ratedMembersCount++;
 				totalUsersFound++;
 			});
 		});

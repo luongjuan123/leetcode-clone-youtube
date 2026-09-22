@@ -39,40 +39,81 @@ export default function Home() {
 	const totalPages = Math.ceil(totalItems / pageSize);
 
 	return (
-		<main className="bg-dark-layer-2 min-h-screen pb-20" style={{ fontFamily: "var(--font-sans)" }}>
+		<main className="min-h-screen pb-20 hero-gradient" style={{ fontFamily: "var(--font-sans)", background: "var(--bg-base)" }}>
 			<Topbar />
 
-			{/* ── PAGE HEADER ── */}
-			<div className="max-w-[860px] mx-auto px-4 pt-8 pb-2">
-				<h1 className="text-2xl font-bold tracking-tight mb-1 text-dark-gray-8 text-shadow-glow">
-					Problem Set
-				</h1>
-				<p className="text-sm text-dark-gray-6 font-medium">
-					Practice algorithmic challenges and improve your competitive programming skills.
-				</p>
+			{/* ── PAGE HERO BANNER ── */}
+			<div className="max-w-[960px] mx-auto px-4 pt-10 pb-6">
+				<div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-dark-layer-1 p-6 rounded-2xl border border-border-default shadow-lg glassmorphic">
+					<div>
+						<div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold bg-brand-orange/10 text-brand-orange border border-brand-orange/20 mb-3">
+							<span className="w-2 h-2 rounded-full bg-brand-orange animate-pulse" />
+							BeastCode Platform Arena
+						</div>
+						<h1 className="text-3xl font-extrabold tracking-tight text-text-primary glow-text mb-1">
+							Problem Set
+						</h1>
+						<p className="text-sm text-text-secondary font-medium max-w-xl">
+							Practice algorithmic challenges, climb the global leaderboards, and excel in competitive programming.
+						</p>
+					</div>
+					<div className="flex items-center gap-3">
+						<div className="stat-card flex flex-col items-center justify-center min-w-[100px] text-center">
+							<span className="text-xl font-black text-brand-orange">{totalItems}</span>
+							<span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Problems</span>
+						</div>
+					</div>
+				</div>
 			</div>
 
 			{/* ── CONTENT ── */}
-			<div className="max-w-[860px] mx-auto px-4">
+			<div className="max-w-[960px] mx-auto px-4">
+
+				{/* ── TOPIC FILTER CHIPS ── */}
+				<div className="flex items-center gap-2 overflow-x-auto pb-2 mb-4 scrollbar-none">
+					{[
+						{ label: "All Topics", value: "" },
+						{ label: "Arrays", value: "array" },
+						{ label: "Two Pointers", value: "two-pointers" },
+						{ label: "Dynamic Programming", value: "dynamic-programming" },
+						{ label: "Graphs", value: "graph" },
+						{ label: "Trees", value: "tree" },
+						{ label: "Strings", value: "string" },
+						{ label: "Math", value: "math font" },
+						{ label: "Binary Search", value: "binary-search" },
+						{ label: "Sorting", value: "sorting" },
+					].map((chip) => {
+						const active = searchQuery.toLowerCase().trim() === chip.value.toLowerCase().trim();
+						return (
+							<button
+								key={chip.label}
+								onClick={() => setSearchQuery(chip.value)}
+								className={`topic-chip ${active ? "topic-chip-active" : ""}`}
+							>
+								{chip.label}
+							</button>
+						);
+					})}
+				</div>
 
 				{/* ── FILTER & SORT BAR ── */}
 				<div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between mb-5">
 
 					{/* Search */}
-					<div className="relative flex-1 max-w-sm">
+					<div className="relative flex-1 max-w-md">
 						<FaSearch
 							className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
-							size={12}
-							style={{ color: "var(--text-muted)" }}
+							size={13}
+							style={{ color: "var(--brand-orange)" }}
 						/>
 						<input
 							type="text"
-							placeholder="Search by name or tags..."
+							placeholder="Search problem by name, tag, or topic..."
 							value={searchQuery}
 							onChange={(e) => setSearchQuery(e.target.value)}
-							className="w-full pl-9 pr-4 py-2.5 text-sm rounded-xl outline-none transition-all duration-200 focus:border-brand-orange"
+							className="w-full pl-9 pr-4 py-2.5 text-sm rounded-xl outline-none transition-all duration-200 glow-focus"
 							style={{
-								background: "var(--bg-base)",
+								background: "var(--bg-surface)",
 								border: "1px solid var(--border-default)",
 								color: "var(--text-primary)",
 								fontFamily: "var(--font-sans)",
@@ -82,8 +123,8 @@ export default function Home() {
 
 					{/* Sort */}
 					<div className="flex items-center gap-2">
-						<span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Sort:</span>
-						<div className="w-44">
+						<span className="text-xs font-bold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Sort:</span>
+						<div className="w-48">
 							<BeastCodeSelect
 								options={sortOptions}
 								value={sortBy}
@@ -95,10 +136,10 @@ export default function Home() {
 
 				{/* ── TABLE ── */}
 				<div
-					className="rounded-2xl overflow-hidden mb-4"
+					className="rounded-2xl overflow-hidden mb-4 glass-card"
 					style={{
 						background: "var(--bg-surface)",
-						border: "1px solid var(--border-subtle)",
+						border: "1px solid var(--border-default)",
 					}}
 				>
 					{/* Loading skeleton */}

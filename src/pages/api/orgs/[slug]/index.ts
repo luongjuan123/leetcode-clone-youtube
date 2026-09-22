@@ -52,7 +52,9 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
 				country,
 				category,
 				socialLinks,
+				avatar,
 				avatarUrl,
+				banner,
 				bannerUrl,
 				contactEmail,
 				recruitmentStatus,
@@ -72,8 +74,16 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
 			if (country !== undefined) updateData.country = country.trim();
 			if (category !== undefined) updateData.category = category.trim();
 			if (socialLinks !== undefined) updateData.socialLinks = socialLinks;
-			if (avatarUrl !== undefined) updateData.avatarUrl = avatarUrl;
-			if (bannerUrl !== undefined) updateData.bannerUrl = bannerUrl;
+			if (avatar !== undefined || avatarUrl !== undefined) {
+				const canonical = ((avatarUrl !== undefined ? avatarUrl : avatar) || "").trim();
+				updateData.avatar = canonical;
+				updateData.avatarUrl = canonical;
+			}
+			if (banner !== undefined || bannerUrl !== undefined) {
+				const canonicalBanner = ((bannerUrl !== undefined ? bannerUrl : banner) || "").trim();
+				updateData.banner = canonicalBanner;
+				updateData.bannerUrl = canonicalBanner;
+			}
 			if (contactEmail !== undefined) updateData.contactEmail = contactEmail.trim();
 			if (recruitmentStatus !== undefined) updateData.recruitmentStatus = recruitmentStatus;
 			

@@ -5,6 +5,12 @@ import {
 	PrimaryButton,
 	InfoRow,
 	InfoTable,
+	OtpBox,
+	OrganizationCard,
+	ContestCard,
+	RecruitmentCard,
+	HomeworkCard,
+	NotificationCard,
 	COLORS
 } from "./emailComponents";
 
@@ -15,32 +21,77 @@ export interface EmailDetailsItem {
 }
 
 export interface EmailTemplateOptions {
-	headerTitle: string; // e.g. "NEW CONTEST" or "REGISTRATION CONFIRMED"
-	accentColor: string; // e.g. "#f97316" (orange), "#10b981" (green), "#ef4444" (red)
-	accentGlowColor?: string; // Kept for backwards compatibility
-	title: string; // Headline title
-	leadText: string; // Salutation / main intro
-	description?: string; // Optional paragraph body
-	details: EmailDetailsItem[];
+	headerTitle?: string;
+	accentColor?: string;
+	accentGlowColor?: string; // Kept for compatibility
+	title: string;
+	leadText: string;
+	description?: string;
+	details?: EmailDetailsItem[];
 	ctaText?: string;
 	ctaUrl?: string;
-	footerText?: string; // Kept for backwards compatibility
+	footerText?: string; // Kept for compatibility
 	recipientEmail?: string;
-	preferenceType?: string; // e.g. "reminders", "achievements", "editorials", etc.
+	preferenceType?: string;
+
+	// Brand card extensions
+	otpCode?: string;
+	otpExpiration?: string;
+	orgCard?: {
+		orgName: string;
+		orgAvatar?: string;
+		roleName?: string;
+		ownerName?: string;
+		detailsText?: string;
+	};
+	contestCard?: {
+		title: string;
+		startTime: string;
+		duration: string;
+		countdown?: string;
+		bannerUrl?: string;
+	};
+	recruitmentCard?: {
+		companyName: string;
+		companyLogo?: string;
+		jobTitle: string;
+		skills?: string[];
+		description?: string;
+	};
+	homeworkCard?: {
+		title: string;
+		dueDate: string;
+		difficulty: string;
+		teacher: string;
+		orgName: string;
+	};
+	notificationCard?: {
+		title: string;
+		description: string;
+		timestamp: string;
+	};
 }
 
 export function getEmailHtml(options: EmailTemplateOptions): string {
 	const {
 		headerTitle,
-		accentColor,
+		accentColor = COLORS.primary,
 		title,
 		leadText,
 		description = "",
-		details,
+		details = [],
 		ctaText,
 		ctaUrl,
 		recipientEmail,
-		preferenceType
+		preferenceType,
+
+		otpCode,
+		otpExpiration,
+		orgCard,
+		contestCard,
+		recruitmentCard,
+		homeworkCard,
+		notificationCard
 	} = options;
 
 	// Render details using InfoRow
@@ -50,10 +101,31 @@ export function getEmailHtml(options: EmailTemplateOptions): string {
 				label: item.label,
 				value: item.value,
 				isHighlight: item.isHighlight,
-				accentColor: accentColor || COLORS.accent
+				accentColor: accentColor
 			})
 		)
 		.join("");
+
+	// Build specialized cards HTML
+	let cardContentHtml = "";
+	if (otpCode) {
+		cardContentHtml += OtpBox({ code: otpCode, expirationText: otpExpiration });
+	}
+	if (orgCard) {
+		cardContentHtml += OrganizationCard(orgCard);
+	}
+	if (contestCard) {
+		cardContentHtml += ContestCard(contestCard);
+	}
+	if (recruitmentCard) {
+		cardContentHtml += RecruitmentCard(recruitmentCard);
+	}
+	if (homeworkCard) {
+		cardContentHtml += HomeworkCard(homeworkCard);
+	}
+	if (notificationCard) {
+		cardContentHtml += NotificationCard(notificationCard);
+	}
 
 	// Build the complete inside-card body layout
 	const bodyContent = `
@@ -61,7 +133,7 @@ export function getEmailHtml(options: EmailTemplateOptions): string {
 		
 		<!-- Content Body -->
 		<tr>
-			<td style="padding: 40px 35px 35px 35px; background-color: ${COLORS.card}; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+			<td style="padding: 40px 35px 35px 35px; background-color: ${COLORS.card}; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
 				<h1 style="margin: 0 0 20px 0; font-size: 24px; font-weight: 800; line-height: 1.3; color: ${COLORS.primaryText}; letter-spacing: -0.5px;">
 					${title}
 				</h1>
@@ -71,10 +143,13 @@ export function getEmailHtml(options: EmailTemplateOptions): string {
 				</p>
 				
 				${description ? `
-				<p style="margin: 0 0 30px 0; font-size: 14px; line-height: 1.6; color: ${COLORS.mutedText};">
+				<p style="margin: 0 0 30px 0; font-size: 14px; line-height: 1.6; color: ${COLORS.secondaryText}; opacity: 0.9;">
 					${description}
 				</p>
 				` : ""}
+
+				<!-- Specialized Card -->
+				${cardContentHtml}
 
 				<!-- Details Card -->
 				${details.length > 0 ? InfoTable({ content: detailsRowsHtml, accentColor }) : ""}

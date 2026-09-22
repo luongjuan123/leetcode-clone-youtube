@@ -32,16 +32,72 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
 		return res.status(404).json({ success: false, error: "Not Found: Organization does not exist" });
 	}
 
-	// Security: If visibility is secret and user is not an active member, deny visibility (Not Found for obfuscation)
+	// Security: If visibility is secret and user is not an active member, check if they have a pending invitation
 	if (org.visibility === "secret" && !member) {
-		return res.status(404).json({ success: false, error: "Not Found" });
+		let hasPendingInvite = false;
+		if (uid) {
+			const inviteSnap = await db.collection("organizationInvitations")
+				.where("organizationId", "==", org.id)
+				.where("uid", "==", uid)
+				.where("status", "==", "Pending")
+				.limit(1)
+				.get();
+			if (!inviteSnap.empty) {
+				hasPendingInvite = true;
+			} else {
+				const userDoc = await db.collection("users").doc(uid).get();
+				const email = userDoc.data()?.email;
+				if (email) {
+					const inviteEmailSnap = await db.collection("organizationInvitations")
+						.where("organizationId", "==", org.id)
+						.where("email", "==", email)
+						.where("status", "==", "Pending")
+						.limit(1)
+						.get();
+					if (!inviteEmailSnap.empty) {
+						hasPendingInvite = true;
+					}
+				}
+			}
+		}
+		if (!hasPendingInvite) {
+			return res.status(404).json({ success: false, error: "Not Found" });
+		}
 	}
 
 	// GET /api/organizations/:id
 	if (req.method === "GET") {
 		try {
-			// If private organization, hide sensitive metadata from guests/non-members
-			if (org.visibility === "private" && !member) {
+			// Check if they have a pending invitation to bypass hiding private metadata on invitation page
+			let hasPendingInvite = false;
+			if (uid && org.visibility === "private" && !member) {
+				const inviteSnap = await db.collection("organizationInvitations")
+					.where("organizationId", "==", org.id)
+					.where("uid", "==", uid)
+					.where("status", "==", "Pending")
+					.limit(1)
+					.get();
+				if (!inviteSnap.empty) {
+					hasPendingInvite = true;
+				} else {
+					const userDoc = await db.collection("users").doc(uid).get();
+					const email = userDoc.data()?.email;
+					if (email) {
+						const inviteEmailSnap = await db.collection("organizationInvitations")
+							.where("organizationId", "==", org.id)
+							.where("email", "==", email)
+							.where("status", "==", "Pending")
+							.limit(1)
+							.get();
+						if (!inviteEmailSnap.empty) {
+							hasPendingInvite = true;
+						}
+					}
+				}
+			}
+
+			// If private organization, and no membership and no pending invite, hide sensitive metadata from guests/non-members
+			if (org.visibility === "private" && !member && !hasPendingInvite) {
 				const guestProfile = {
 					id: org.id,
 					slug: org.slug,
@@ -49,7 +105,8 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
 					displayName: org.displayName,
 					shortName: org.shortName,
 					description: org.description,
-					avatar: org.avatar,
+					avatar: org.avatar || (org as any).avatarUrl || "",
+					avatarUrl: (org as any).avatarUrl || org.avatar || "",
 					banner: org.banner,
 					organizationType: org.organizationType,
 					visibility: org.visibility,
@@ -90,7 +147,9 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
 				shortName,
 				description,
 				avatar,
+				avatarUrl,
 				banner,
+				bannerUrl,
 				visibility,
 				website,
 				country,
@@ -108,8 +167,16 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
 			if (displayName !== undefined) updateData.displayName = displayName.trim();
 			if (shortName !== undefined) updateData.shortName = shortName.trim();
 			if (description !== undefined) updateData.description = description.trim();
-			if (avatar !== undefined) updateData.avatar = avatar.trim();
-			if (banner !== undefined) updateData.banner = banner.trim();
+			if (avatar !== undefined || avatarUrl !== undefined) {
+				const canonical = ((avatarUrl !== undefined ? avatarUrl : avatar) || "").trim();
+				updateData.avatar = canonical;
+				(updateData as any).avatarUrl = canonical;
+			}
+			if (banner !== undefined || bannerUrl !== undefined) {
+				const canonicalBanner = ((bannerUrl !== undefined ? bannerUrl : banner) || "").trim();
+				updateData.banner = canonicalBanner;
+				(updateData as any).bannerUrl = canonicalBanner;
+			}
 			if (visibility !== undefined) updateData.visibility = visibility;
 			if (website !== undefined) updateData.website = website.trim();
 			if (country !== undefined) updateData.country = country.trim();

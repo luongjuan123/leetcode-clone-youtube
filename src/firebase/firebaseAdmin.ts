@@ -15,6 +15,7 @@
 import { initializeApp, cert, getApps, getApp, App } from "firebase-admin/app";
 import { getFirestore, Firestore } from "firebase-admin/firestore";
 import { getAuth, Auth } from "firebase-admin/auth";
+import { getStorage, Storage } from "firebase-admin/storage";
 
 // ─── Startup Validation & Mocks ───────────────────────────────────────────────
 const isProd = process.env.NODE_ENV === "production";
@@ -62,25 +63,99 @@ const mockUsers = [
 	}
 ];
 
+function resolveMockFieldValue(currentVal: any, transform: any): any {
+	if (transform && typeof transform === "object") {
+		const name = transform.constructor?.name;
+		if (name === "NumericIncrementTransform") {
+			const operand = transform.operand;
+			return (typeof currentVal === "number" ? currentVal : 0) + operand;
+		}
+		if (name === "ArrayUnionTransform") {
+			const elements = transform.elements || [];
+			const arr = Array.isArray(currentVal) ? [...currentVal] : [];
+			for (const el of elements) {
+				if (!arr.includes(el)) {
+					arr.push(el);
+				}
+			}
+			return arr;
+		}
+		if (name === "ArrayRemoveTransform") {
+			const elements = transform.elements || [];
+			const arr = Array.isArray(currentVal) ? [...currentVal] : [];
+			return arr.filter(el => !elements.includes(el));
+		}
+	}
+	return transform;
+}
+
 class MockDocumentReference {
-	constructor(private collectionName: string, private data: any) {}
-	async delete() {
+	constructor(private collectionName: string, private documentId: string) {}
+	deleteSync() {
 		const list = mockDbStore[this.collectionName] || [];
-		const index = list.indexOf(this.data);
+		const index = list.findIndex(d => d.id === this.documentId);
 		if (index > -1) {
 			list.splice(index, 1);
 		}
 	}
+	async delete() {
+		this.deleteSync();
+	}
+	updateSync(updateData: any) {
+		if (!mockDbStore[this.collectionName]) {
+			mockDbStore[this.collectionName] = [];
+		}
+		const list = mockDbStore[this.collectionName];
+		let found = list.find(d => d.id === this.documentId);
+		if (!found) {
+			found = { id: this.documentId };
+			list.push(found);
+		}
+		for (const key in updateData) {
+			const val = updateData[key];
+			found[key] = resolveMockFieldValue(found[key], val);
+		}
+	}
 	async update(updateData: any) {
-		Object.assign(this.data, updateData);
+		this.updateSync(updateData);
+	}
+	setSync(setData: any, options?: { merge?: boolean }) {
+		if (!mockDbStore[this.collectionName]) {
+			mockDbStore[this.collectionName] = [];
+		}
+		const list = mockDbStore[this.collectionName];
+		let found = list.find(d => d.id === this.documentId);
+		if (!found) {
+			found = { id: this.documentId };
+			list.push(found);
+		}
+		if (options?.merge) {
+			for (const key in setData) {
+				const val = setData[key];
+				found[key] = resolveMockFieldValue(found[key], val);
+			}
+		} else {
+			for (const key in found) {
+				if (key !== "id") {
+					delete found[key];
+				}
+			}
+			for (const key in setData) {
+				const val = setData[key];
+				found[key] = resolveMockFieldValue(undefined, val);
+			}
+		}
+	}
+	async set(setData: any, options?: { merge?: boolean }) {
+		this.setSync(setData, options);
 	}
 	async get() {
 		const list = mockDbStore[this.collectionName] || [];
-		const found = list.find(d => d.id === this.data.id);
+		const found = list.find(d => d.id === this.documentId);
 		return {
 			exists: !!found,
-			id: this.data.id,
-			data: () => found || {}
+			id: this.documentId,
+			data: () => found ? { ...found } : undefined
 		};
 	}
 }
@@ -91,7 +166,7 @@ class MockQueryDocumentSnapshot {
 	private _data: any;
 	constructor(collectionName: string, data: any) {
 		this._data = data;
-		this.ref = new MockDocumentReference(collectionName, data);
+		this.ref = new MockDocumentReference(collectionName, data.id);
 		this.id = data.id || Math.random().toString(36).substring(7);
 	}
 	data() {
@@ -230,13 +305,25 @@ class MockCollectionReference extends MockQuery {
 	}
 
 	doc(id: string) {
-		const all = mockDbStore[this.cName] || [];
-		let existing = all.find(d => d.id === id);
-		if (!existing) {
-			existing = { id };
-			all.push(existing);
-		}
-		return new MockDocumentReference(this.cName, existing);
+		return new MockDocumentReference(this.cName, id);
+	}
+}
+
+class MockTransaction {
+	async get(ref: any) {
+		return ref.get();
+	}
+	set(ref: any, data: any, options?: any) {
+		ref.setSync(data, options);
+		return this;
+	}
+	update(ref: any, data: any) {
+		ref.updateSync(data);
+		return this;
+	}
+	delete(ref: any) {
+		ref.deleteSync();
+		return this;
 	}
 }
 
@@ -244,9 +331,28 @@ class MockFirestore {
 	collection(name: string) {
 		return new MockCollectionReference(name);
 	}
+	async runTransaction(updateFunction: (transaction: MockTransaction) => Promise<any>) {
+		const transaction = new MockTransaction();
+		return await updateFunction(transaction);
+	}
 }
 
 class MockAuth {
+	async getUser(uid: string) {
+		let user = mockUsers.find(u => u.uid === uid);
+		if (!user) {
+			console.warn(`[Mock Auth] User ${uid} not found. Dynamically creating mock user.`);
+			user = {
+				uid,
+				email: `${uid}@example.com`,
+				displayName: `Mock User (${uid.slice(0, 5)})`,
+				passwordHash: "mock-hash",
+			};
+			mockUsers.push(user);
+		}
+		return user;
+	}
+
 	async getUserByEmail(email: string) {
 		const emailLower = email.toLowerCase().trim();
 		const user = mockUsers.find(u => u.email.toLowerCase() === emailLower);
@@ -282,6 +388,28 @@ class MockAuth {
 		}
 		console.log(`[Mock Auth] Deleted user account ${uid}`);
 	}
+
+	async verifyIdToken(token: string) {
+		try {
+			const parts = token.split('.');
+			if (parts.length === 3) {
+				const payloadBuf = Buffer.from(parts[1], 'base64');
+				const payload = JSON.parse(payloadBuf.toString('utf-8'));
+				return {
+					uid: payload.user_id || payload.sub || "mock-uid",
+					email: payload.email || "",
+					email_verified: payload.email_verified || false,
+				};
+			}
+		} catch (e) {
+			console.error("Mock verifyIdToken parsing failed:", e);
+		}
+		return {
+			uid: token === "mock-admin-token" ? "mock-uid-admin" : "mock-uid-test",
+			email: token === "mock-admin-token" ? "admin@leetcode.com" : "test@beastcode.codes",
+			email_verified: true,
+		};
+	}
 }
 
 function assertEnvVar(name: string): string {
@@ -306,6 +434,10 @@ function getAdminApp(): App {
 	const projectId = process.env.FIREBASE_PROJECT_ID || "beastcode-7555e";
 	const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
 	const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+	const storageBucket =
+		process.env.FIREBASE_STORAGE_BUCKET ||
+		process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ||
+		"beastcode-media-348293518232";
 
 	if (clientEmail && privateKey) {
 		try {
@@ -315,6 +447,7 @@ function getAdminApp(): App {
 					clientEmail,
 					privateKey: privateKey.replace(/\\n/g, "\n"),
 				}),
+				storageBucket,
 			});
 		} catch (error) {
 			console.error("[Firebase Admin] Failed to initialize with cert:", error);
@@ -325,7 +458,7 @@ function getAdminApp(): App {
 	if (!isProd) {
 		try {
 			console.log("[Firebase Admin] Attempting initialization with local credentials / ADC...");
-			const app = initializeApp({ projectId });
+			const app = initializeApp({ projectId, storageBucket });
 			// Quick test: verify we can get firestore
 			getFirestore(app);
 			console.log("[Firebase Admin] Initialized successfully using local credentials.");
@@ -345,6 +478,7 @@ function getAdminApp(): App {
 
 	return initializeApp({
 		credential: cert({ projectId: assertedProjectId, clientEmail: assertedClientEmail, privateKey: assertedPrivateKey }),
+		storageBucket,
 	});
 }
 
@@ -366,10 +500,16 @@ export function getAdminFirestore(): Firestore {
 	try {
 		if (!_db) {
 			_db = getFirestore(getAdminApp());
+			try {
+				_db.settings({ ignoreUndefinedProperties: true });
+			} catch (settingsError) {
+				console.warn("[Firebase Admin] Settings could not be applied (likely already applied):", settingsError);
+			}
 		}
 		return _db;
 	} catch (e) {
 		if (!isProd) {
+			console.error("[Firebase Admin] Real Firestore initialization error:", e);
 			useMockFallback = true;
 			if (!_mockDb) {
 				console.warn("[Firebase Admin] WARNING: Real Firestore init failed. Falling back to Mock Firestore.");
@@ -404,6 +544,20 @@ export function getAdminAuth(): Auth {
 			}
 			return _mockAuth as unknown as Auth;
 		}
+		throw e;
+	}
+}
+
+let _storage: Storage | null = null;
+
+export function getAdminStorage(): Storage {
+	try {
+		if (!_storage) {
+			_storage = getStorage(getAdminApp());
+		}
+		return _storage;
+	} catch (e) {
+		console.error("[Firebase Admin] Storage initialization error:", e);
 		throw e;
 	}
 }

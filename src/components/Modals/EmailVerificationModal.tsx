@@ -45,16 +45,23 @@ const EmailVerificationModal: React.FC<EmailVerificationModalProps> = ({ isOpen,
 		setResending(true);
 		setFeedback(null);
 		try {
-			await sendEmailVerification(user);
+			const token = await user.getIdToken(true);
+			const res = await fetch("/api/auth/send-verification", {
+				method: "POST",
+				headers: { Authorization: `Bearer ${token}` },
+			});
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok || !data.success) {
+				throw new Error(data.message || "Failed to deliver verification email via server.");
+			}
 			setFeedback({
 				type: "success",
-				text: "Verification link successfully dispatched! Please check your inbox and spam folder.",
+				text: "Verification link successfully dispatched to your email address!",
 			});
 			setCooldown(60);
 		} catch (error: any) {
 			console.error("Error sending verification email:", error);
-			const msg = translateFirebaseError(error.code || "auth/unknown");
-			setFeedback({ type: "error", text: msg });
+			setFeedback({ type: "error", text: error.message || "Failed to deliver verification email. Please try again." });
 		} finally {
 			setResending(false);
 		}
@@ -64,20 +71,27 @@ const EmailVerificationModal: React.FC<EmailVerificationModalProps> = ({ isOpen,
 		setChecking(true);
 		setFeedback(null);
 		try {
-			if (auth.currentUser) {
-				await auth.currentUser.reload();
-				if (auth.currentUser.emailVerified) {
+			await user.reload();
+			if (auth.currentUser?.emailVerified) {
+				setFeedback({
+					type: "success",
+					text: "Email address verified! Re-initializing your workspace session...",
+				});
+				setTimeout(() => {
 					onClose();
-				} else {
-					setFeedback({
-						type: "info",
-						text: "Email is not verified yet. Please click the link we sent to your address, then try again.",
-					});
-				}
+				}, 1500);
+			} else {
+				setFeedback({
+					type: "error",
+					text: "Email is not verified yet. Please click the link we sent to your address, then try again.",
+				});
 			}
 		} catch (error: any) {
-			console.error("Error reloading user status:", error);
-			setFeedback({ type: "error", text: "Failed to reload user status. Please try again." });
+			console.error("Error reloading user:", error);
+			setFeedback({
+				type: "error",
+				text: "Failed to verify email status. Please try again.",
+			});
 		} finally {
 			setChecking(false);
 		}
@@ -102,7 +116,16 @@ const EmailVerificationModal: React.FC<EmailVerificationModalProps> = ({ isOpen,
 				updatedAt: Date.now(),
 			});
 
-			await sendEmailVerification(user);
+			const token = await user.getIdToken(true);
+			const res = await fetch("/api/auth/send-verification", {
+				method: "POST",
+				headers: { Authorization: `Bearer ${token}` },
+			});
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok || !data.success) {
+				throw new Error(data.message || "Failed to dispatch verification email to new address.");
+			}
+
 			setFeedback({
 				type: "success",
 				text: "Email updated successfully. Verification link has been dispatched to your new address.",

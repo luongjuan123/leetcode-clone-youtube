@@ -3,6 +3,8 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { getAdminAuth, getAdminFirestore } from "@/firebase/firebaseAdmin";
 import { NotificationDispatcher } from "@/utils/notificationDispatcher";
 import { NotificationRecipientService } from "@/utils/notificationRecipientService";
+import { EmailService } from "@/utils/emailService";
+import { getSiteUrl } from "@/utils/siteConfig";
 
 type ResponseData = {
 	success: boolean;
@@ -29,8 +31,13 @@ async function handler(
 			const token = authHeader.split("Bearer ")[1];
 			decodedToken = await getAdminAuth().verifyIdToken(token);
 			
-			const adminEmails = ["admin@leetcode.com", "juan@test.com", "admin@test.com", "dungpubgame@gmail.com", "24110215@st.vju.ac.vn"];
-			if (!decodedToken.email || !adminEmails.includes(decodedToken.email)) {
+			const adminEmails = ["admin@leetcode.com", "juan@test.com", "admin@test.com", "dungpubgame@gmail.com", "24110215@st.vju.ac.vn", "bomemebo6996@gmail.com"];
+			const db = getAdminFirestore();
+			const userDoc = await db.collection("users").doc(decodedToken.uid).get();
+			const userData = userDoc.data() || {};
+			const isAdmin = userData.role === "admin" || userData.isAdmin === true || adminEmails.includes(decodedToken.email || "");
+
+			if (!isAdmin) {
 				return res.status(403).json({ success: false, message: "Forbidden: Not an admin" });
 			}
 		} catch (tokenErr: any) {
@@ -47,6 +54,7 @@ async function handler(
 			contestId,
 			title,
 			description,
+			banner,
 			startTime,
 			endTime,
 			duration,
@@ -75,38 +83,43 @@ async function handler(
 			return res.status(200).json({ success: true, message: "No eligible recipients found to email.", recipientCount: 0 });
 		}
 
-		// Send response immediately to keep UI fast & responsive
-		res.status(200).json({
-			success: true,
-			message: `Announcement email dispatch started for ${eligibleUsers.length} user(s) in the background.`,
-			recipientCount: eligibleUsers.length
-		});
-
-		// 4. Asynchronously queue emails using central dispatcher
-		const appOrigin = origin || "https://beastcode.codes";
+		// 4. Queue emails using central dispatcher in parallel and process delivery in background
+		const appOrigin = (origin && !origin.includes(".run.app") && !origin.includes(".hosted.app")) ? origin : getSiteUrl();
 		const contestUrl = `${appOrigin}/contests/${contestId}`;
 		
-		(async () => {
-			for (const u of eligibleUsers) {
-				try {
-					await NotificationDispatcher.dispatch("CONTEST_PUBLISHED", {
-						toEmail: u.email,
-						toUid: u.uid,
-						userName: u.displayName,
-						ctaUrl: contestUrl,
-						customContent: description,
-						placeholders: {
-							contestTitle: title,
-							startTime: new Date(startTime).toLocaleString("en-US", { dateStyle: "full", timeStyle: "short" }),
-							durationText: `${duration} Minutes`
-						},
-						eventId: `contest-published-${contestId}-${u.uid}`
-					});
-				} catch (dispatchErr: any) {
-					console.error(`[Contest Announcement Queue Failure] Failed for ${u.email}:`, dispatchErr.message);
-				}
-			}
-		})();
+		const dispatchResults = await Promise.allSettled(
+			eligibleUsers.map((u) =>
+				NotificationDispatcher.dispatch("CONTEST_PUBLISHED", {
+					toEmail: u.email,
+					toUid: u.uid,
+					userName: u.displayName,
+					ctaUrl: contestUrl,
+					customContent: description,
+					placeholders: {
+						contestTitle: title,
+						startTime: new Date(startTime).toLocaleString("en-US", { dateStyle: "full", timeStyle: "short" }),
+						durationText: `${duration} Minutes`,
+						bannerUrl: banner || undefined
+					},
+					eventId: `contest-published-${contestId}-${u.uid}`
+				})
+			)
+		);
+
+		const sentCount = dispatchResults.filter((r) => r.status === "fulfilled").length;
+
+		// Trigger background email queue processing asynchronously without delaying the HTTP response
+		setTimeout(() => {
+			EmailService.processQueue().catch((err) => {
+				console.error("[Contest Announcement Background Email Error]:", err);
+			});
+		}, 10);
+
+		return res.status(200).json({
+			success: true,
+			message: `Contest announcement emails queued for ${sentCount} user(s).`,
+			recipientCount: sentCount
+		});
 
 	} catch (error: any) {
 		console.error("Error sending contest announcement email:", error);

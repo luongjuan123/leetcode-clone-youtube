@@ -11,6 +11,7 @@ import { FaChevronLeft, FaPlus, FaCheck, FaSpinner } from "react-icons/fa";
 import MarkdownEditor from "@/components/Admin/MarkdownEditor";
 import TagSelect from "@/components/Admin/TagSelect";
 import { slugify } from "@/utils/slugify";
+import BeastCodeSelect from "@/components/UI/BeastCodeSelect";
 
 const NewProblem: React.FC = () => {
 	const router = useRouter();
@@ -341,18 +342,17 @@ const NewProblem: React.FC = () => {
 									Language
 								</label>
 								<div className='col-span-6'>
-									<select
-										id='language'
+									<BeastCodeSelect
+										options={[
+											{ value: "English", label: "English" },
+											{ value: "Vietnamese", label: "Vietnamese" },
+											{ value: "Spanish", label: "Spanish" },
+											{ value: "Japanese", label: "Japanese" }
+										]}
 										value={language}
-										onChange={(e) => setLanguage(e.target.value)}
-										className='border outline-none rounded p-2 text-sm w-full focus:border-brand-orange transition shadow-sm'
-										style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
-									>
-										<option value='English'>English</option>
-										<option value='Vietnamese'>Vietnamese</option>
-										<option value='Spanish'>Spanish</option>
-										<option value='Japanese'>Japanese</option>
-									</select>
+										onChange={(val) => setLanguage(val)}
+										size="sm"
+									/>
 								</div>
 							</div>
 
@@ -362,17 +362,16 @@ const NewProblem: React.FC = () => {
 									Challenge Difficulty
 								</label>
 								<div className='col-span-6'>
-									<select
-										id='difficulty'
+									<BeastCodeSelect
+										options={[
+											{ value: "Easy", label: "Easy" },
+											{ value: "Medium", label: "Medium" },
+											{ value: "Hard", label: "Hard" }
+										]}
 										value={difficulty}
-										onChange={(e) => setDifficulty(e.target.value)}
-										className='border outline-none rounded p-2 text-sm w-full focus:border-brand-orange transition shadow-sm'
-										style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
-									>
-										<option value='Easy'>Easy</option>
-										<option value='Medium'>Medium</option>
-										<option value='Hard'>Hard</option>
-									</select>
+										onChange={(val) => setDifficulty(val)}
+										size="sm"
+									/>
 								</div>
 							</div>
 
@@ -614,19 +613,18 @@ const NewProblem: React.FC = () => {
 										<label htmlFor='executionProfile' className='text-xs font-bold block mb-2' style={{ color: "var(--text-secondary)" }}>
 											Execution Profile
 										</label>
-										<select
-											id='executionProfile'
+										<BeastCodeSelect
+											options={[
+												{ value: "fast", label: "Fast (Short algorithmic problems)" },
+												{ value: "normal", label: "Normal (Standard competitive programming)" },
+												{ value: "long", label: "Long (Heavy computations)" },
+												{ value: "machine_learning", label: "Machine Learning (Model training / AI challenges)" },
+												{ value: "custom", label: "Custom (Expose individual limits)" }
+											]}
 											value={executionProfile}
-											onChange={(e) => setExecutionProfile(e.target.value)}
-											className='border outline-none rounded p-2 text-xs w-full focus:border-brand-orange transition shadow-sm'
-											style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
-										>
-											<option value='fast'>Fast (Short algorithmic problems)</option>
-											<option value='normal'>Normal (Standard competitive programming)</option>
-											<option value='long'>Long (Heavy computations)</option>
-											<option value='machine_learning'>Machine Learning (Model training / AI challenges)</option>
-											<option value='custom'>Custom (Expose individual limits)</option>
-										</select>
+											onChange={(val) => setExecutionProfile(val)}
+											size="sm"
+										/>
 									</div>
 
 									{/* Effective Limits Preview Panel */}
@@ -816,18 +814,17 @@ const NewProblem: React.FC = () => {
 										<label htmlFor='checkerType' className='text-xs font-bold block mb-1' style={{ color: "var(--text-secondary)" }}>
 											Checker Logic Type
 										</label>
-										<select
-											id='checkerType'
+										<BeastCodeSelect
+											options={[
+												{ value: "exact", label: "Exact Token Matching" },
+												{ value: "whitespace", label: "Ignore Extra Whitespaces & Case Insensitive" },
+												{ value: "float_tolerance", label: "Floating Point Tolerance" },
+												{ value: "special_judge", label: "Special Judge (Code execution validator)" }
+											]}
 											value={customCheckerType}
-											onChange={(e) => setCustomCheckerType(e.target.value)}
-											className='border outline-none rounded p-2 text-xs w-full focus:border-brand-orange transition shadow-sm'
-											style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
-										>
-											<option value='exact'>Exact Token Matching</option>
-											<option value='whitespace'>Ignore Extra Whitespaces & Case Insensitive</option>
-											<option value='float_tolerance'>Floating Point Tolerance</option>
-											<option value='special_judge'>Special Judge (Code execution validator)</option>
-										</select>
+											onChange={(val) => setCustomCheckerType(val)}
+											size="sm"
+										/>
 									</div>
 
 									{customCheckerType === "float_tolerance" && (
@@ -856,16 +853,15 @@ const NewProblem: React.FC = () => {
 											<label htmlFor='checkerLang' className='text-xs font-bold block mb-1' style={{ color: "var(--text-secondary)" }}>
 												Judge script language
 											</label>
-											<select
-												id='checkerLang'
+											<BeastCodeSelect
+												options={[
+													{ value: "python", label: "Python 3" },
+													{ value: "cpp", label: "C++20" }
+												]}
 												value={customCheckerLang}
-												onChange={(e) => setCustomCheckerLang(e.target.value)}
-												className='border outline-none rounded p-2 text-xs w-full focus:border-brand-orange transition shadow-sm'
-												style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
-											>
-												<option value='python'>Python 3</option>
-												<option value='cpp'>C++20</option>
-											</select>
+												onChange={(val) => setCustomCheckerLang(val)}
+												size="sm"
+											/>
 										</div>
 									)}
 								</div>

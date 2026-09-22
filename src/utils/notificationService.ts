@@ -49,10 +49,6 @@ export async function canSendNotification(
 ): Promise<NotificationCheckResult> {
 	const emailLower = email.toLowerCase().trim();
 
-	if (emailLower === "dungpubgame@gmail.com") {
-		return { allowed: false, reason: "Recipient email is blacklisted (dungpubgame@gmail.com)" };
-	}
-
 	try {
 		const db = getAdminFirestore();
 

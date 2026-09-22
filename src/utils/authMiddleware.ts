@@ -97,6 +97,11 @@ export function withAuthAndModeration(handler: AuthenticatedHandler, options?: {
 			return handler(req, res);
 		}
 
+		const isPublicAttachment = req.query && req.query.path && typeof req.query.path === "string" && req.query.path.startsWith("avatars/");
+		if (isPublicAttachment) {
+			return handler(req, res);
+		}
+
 		if (!idToken) {
 			return res.status(401).json({ success: false, error: "Authentication required" });
 		}
@@ -108,13 +113,15 @@ export function withAuthAndModeration(handler: AuthenticatedHandler, options?: {
 
 			const db = getAdminFirestore();
 
-			// Check if user is deleted or exists in firestore
+			// Check if user exists in firestore
+			// BeastCode uses lazy provisioning; an authenticated Firebase user might not have a
+			// Firestore document yet when hitting auxiliary endpoints (e.g. session tracking).
 			const userDoc = await db.collection("users").doc(uid).get();
-			if (!userDoc.exists) {
-				return res.status(403).json({ success: false, error: "User account does not exist or has been deleted." });
+			if (!userDoc.exists && options?.requireAdmin) {
+				return res.status(403).json({ success: false, error: "Access denied. Admin role required." });
 			}
 
-			const userData = userDoc.data() || {};
+			const userData = userDoc.exists ? (userDoc.data() || {}) : {};
 
 			// Check moderation state
 			const modDoc = await db.collection("userModeration").doc(uid).get();

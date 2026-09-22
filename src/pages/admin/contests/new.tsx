@@ -7,6 +7,7 @@ import { auth, firestore } from "@/firebase/firebase";
 import Link from "next/link";
 import { FaChevronLeft, FaCheck, FaSpinner, FaTimes } from "react-icons/fa";
 import MarkdownEditor from "@/components/Admin/MarkdownEditor";
+import BeastCodeSelect from "@/components/UI/BeastCodeSelect";
 
 const NewContest: React.FC = () => {
 	const router = useRouter();
@@ -389,18 +390,17 @@ const NewContest: React.FC = () => {
 							Visibility
 						</label>
 						<div className='col-span-5'>
-							<select
-								id='visibility'
+							<BeastCodeSelect
+								options={[
+									{ value: "public", label: "Public (Anyone can view & join)" },
+									{ value: "private", label: "Private (Invite/Admin only)" },
+									{ value: "password", label: "Password Protected" },
+									{ value: "university", label: "University Restricted" }
+								]}
 								value={visibility}
-								onChange={(e) => setVisibility(e.target.value)}
-								className='border outline-none rounded p-2 text-sm w-full focus:border-brand-orange transition'
-								style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
-							>
-								<option value='public'>Public (Anyone can view & join)</option>
-								<option value='private'>Private (Invite/Admin only)</option>
-								<option value='password'>Password Protected</option>
-								<option value='university'>University Restricted</option>
-							</select>
+								onChange={(val) => setVisibility(val)}
+								size="md"
+							/>
 						</div>
 					</div>
 
@@ -455,17 +455,16 @@ const NewContest: React.FC = () => {
 							Anti-Cheat Security
 						</label>
 						<div className='col-span-5'>
-							<select
-								id='securityLevel'
+							<BeastCodeSelect
+								options={[
+									{ value: "casual", label: "Casual (Unmonitored, flexible tabs)" },
+									{ value: "standard", label: "Standard (Fullscreen check, 3 warning limits)" },
+									{ value: "strict", label: "Strict (Fullscreen, immediate auto-submit/lock on tab switch)" }
+								]}
 								value={securityLevel}
-								onChange={(e) => setSecurityLevel(e.target.value)}
-								className='border outline-none rounded p-2 text-sm w-full focus:border-brand-orange transition'
-								style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
-							>
-								<option value='casual'>Casual (Unmonitored, flexible tabs)</option>
-								<option value='standard'>Standard (Fullscreen check, 3 warning limits)</option>
-								<option value='strict'>Strict (Fullscreen, immediate auto-submit/lock on tab switch)</option>
-							</select>
+								onChange={(val) => setSecurityLevel(val)}
+								size="md"
+							/>
 						</div>
 					</div>
 

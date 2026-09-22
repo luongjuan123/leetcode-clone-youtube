@@ -553,13 +553,13 @@ export default function ResetPasswordPage() {
 			<footer className="w-full max-w-5xl py-6 flex flex-col sm:flex-row items-center justify-between text-[11px] text-dark-gray-7 border-t border-gray-850 mt-8 gap-4">
 				<span>&copy; {new Date().getFullYear()} BeastCode. All rights reserved.</span>
 				<div className="flex gap-4">
-					<Link href="https://bomboclatbeastcode.codes" className="hover:text-dark-gray-8 transition-colors duration-200">
+					<Link href="/" className="hover:text-dark-gray-8 transition-colors duration-200">
 						Platform
 					</Link>
 					<Link href="/settings" className="hover:text-dark-gray-8 transition-colors duration-200">
 						Settings
 					</Link>
-					<Link href="mailto:support@bomboclatbeastcode.codes" className="hover:text-dark-gray-8 transition-colors duration-200">
+					<Link href="mailto:support@beastcode.codes" className="hover:text-dark-gray-8 transition-colors duration-200">
 						Support
 					</Link>
 				</div>

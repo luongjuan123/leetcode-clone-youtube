@@ -6,6 +6,8 @@ export interface TestCaseResult {
 	expected: string;
 	actual: string;
 	error?: string;
+	runtime?: number;
+	memory?: number;
 }
 
 export interface PistonResult {

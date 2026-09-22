@@ -43,20 +43,44 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
 			}
 		}
 
-		// 2. Delete Firestore profile documents
-		await userDocRef.delete();
-		await db.collection("userModeration").doc(user.uid).delete();
-
-		// 3. Batch delete related collections
+		// 2. Complete batch cleanup of all 19 Firestore collections keyed by UID and user-linked documents
 		const batch = db.batch();
+
+		const uidCollections = [
+			"users",
+			"profiles",
+			"settings",
+			"statistics",
+			"solvedProblems",
+			"contestHistory",
+			"threads",
+			"notifications",
+			"notificationSettings",
+			"security",
+			"sessions",
+			"organizationMembership",
+			"achievements",
+			"bookmarks",
+			"preferences",
+			"theme",
+			"language",
+			"privacy",
+			"userModeration"
+		];
+
+		uidCollections.forEach((colName) => {
+			batch.delete(db.collection(colName).doc(user.uid));
+		});
+
+		// Delete query-matched documents
 		const pwHistory = await db.collection("passwordHistory").where("userId", "==", user.uid).get();
-		pwHistory.docs.forEach((doc) => batch.delete(doc.ref));
+		pwHistory.docs.forEach((d) => batch.delete(d.ref));
 
 		const subs = await db.collection("submissions").where("uid", "==", user.uid).get();
-		subs.docs.forEach((doc) => batch.delete(doc.ref));
+		subs.docs.forEach((d) => batch.delete(d.ref));
 
 		const contestSubs = await db.collection("contest_submissions").where("uid", "==", user.uid).get();
-		contestSubs.docs.forEach((doc) => batch.delete(doc.ref));
+		contestSubs.docs.forEach((d) => batch.delete(d.ref));
 
 		await batch.commit();
 

@@ -10,6 +10,8 @@ import {
 	FaTrophy,
 	FaUser,
 	FaMedal,
+	FaCrown,
+	FaMapMarkerAlt,
 	FaSearch,
 	FaChevronLeft,
 	FaChevronRight,
@@ -347,6 +349,89 @@ const Leaderboard: React.FC = () => {
 				</div>
 			</div>
 
+			{/* ── TOP 3 PODIUM SHOWCASE (Page 1) ── */}
+			{!loading && currentPage === 1 && usersList.length >= 3 && (
+				<div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-end my-6 select-none">
+					{/* RANK #2 - SILVER */}
+					{usersList[1] && (
+						<div className="podium-silver rounded-2xl p-5 flex flex-col items-center text-center relative order-2 md:order-1 transition-all duration-300 hover:-translate-y-1">
+							<div className="w-8 h-8 rounded-full bg-slate-300/20 text-slate-200 border border-slate-300/40 flex items-center justify-center text-xs font-black mb-2 shadow-md gap-1">
+								<FaMedal className="text-slate-300" size={13} /> 2nd
+							</div>
+							<div className="relative w-16 h-16 mb-2">
+								{usersList[1].avatarUrl ? (
+									<img src={usersList[1].avatarUrl} alt="Avatar" className="w-16 h-16 rounded-full object-cover border-2 border-slate-300 shadow-md" />
+								) : (
+									<div className="w-16 h-16 rounded-full bg-slate-800 border-2 border-slate-300 flex items-center justify-center text-slate-300">
+										<FaUser size={24} />
+									</div>
+								)}
+							</div>
+							<Link href={`/profile?uid=${usersList[1].uid}`} className="font-extrabold text-sm text-text-primary hover:text-brand-orange transition truncate max-w-full">
+								{usersList[1].displayName}
+							</Link>
+							<p className="text-[11px] text-text-muted font-medium truncate max-w-full">{usersList[1].school || "BeastCode Coder"}</p>
+							<div className="mt-3 px-3 py-1 rounded-full text-xs font-black bg-slate-300/10 text-slate-200 border border-slate-300/30">
+								{renderMetric(usersList[1])}
+							</div>
+						</div>
+					)}
+
+					{/* RANK #1 - GOLD */}
+					{usersList[0] && (
+						<div className="podium-gold rounded-2xl p-6 flex flex-col items-center text-center relative order-1 md:order-2 transition-all duration-300 hover:-translate-y-2 md:-translate-y-3 z-10">
+							<div className="w-10 h-10 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/50 flex items-center justify-center text-sm font-black mb-2 shadow-lg glow-brand gap-1">
+								<FaCrown className="text-amber-400" size={15} /> 1st
+							</div>
+							<div className="relative w-20 h-20 mb-2">
+								{usersList[0].avatarUrl ? (
+									<img src={usersList[0].avatarUrl} alt="Avatar" className="w-20 h-20 rounded-full object-cover border-2 border-amber-400 shadow-xl" />
+								) : (
+									<div className="w-20 h-20 rounded-full bg-amber-950 border-2 border-amber-400 flex items-center justify-center text-amber-400">
+										<FaUser size={28} />
+									</div>
+								)}
+								<span className="absolute -top-2 -right-1 p-1 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-400 shadow-md">
+									<FaTrophy size={14} />
+								</span>
+							</div>
+							<Link href={`/profile?uid=${usersList[0].uid}`} className="font-black text-base text-text-primary hover:text-brand-orange transition truncate max-w-full glow-text">
+								{usersList[0].displayName}
+							</Link>
+							<p className="text-xs text-amber-400 font-semibold truncate max-w-full">{usersList[0].school || "Top Champion"}</p>
+							<div className="mt-3 px-4 py-1.5 rounded-full text-sm font-black bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-glow-sm">
+								{renderMetric(usersList[0])}
+							</div>
+						</div>
+					)}
+
+					{/* RANK #3 - BRONZE */}
+					{usersList[2] && (
+						<div className="podium-bronze rounded-2xl p-5 flex flex-col items-center text-center relative order-3 md:order-3 transition-all duration-300 hover:-translate-y-1">
+							<div className="w-8 h-8 rounded-full bg-amber-700/20 text-amber-500 border border-amber-700/40 flex items-center justify-center text-xs font-black mb-2 shadow-md gap-1">
+								<FaMedal className="text-amber-500" size={13} /> 3rd
+							</div>
+							<div className="relative w-16 h-16 mb-2">
+								{usersList[2].avatarUrl ? (
+									<img src={usersList[2].avatarUrl} alt="Avatar" className="w-16 h-16 rounded-full object-cover border-2 border-amber-600 shadow-md" />
+								) : (
+									<div className="w-16 h-16 rounded-full bg-amber-950 border-2 border-amber-600 flex items-center justify-center text-amber-500">
+										<FaUser size={24} />
+									</div>
+								)}
+							</div>
+							<Link href={`/profile?uid=${usersList[2].uid}`} className="font-extrabold text-sm text-text-primary hover:text-brand-orange transition truncate max-w-full">
+								{usersList[2].displayName}
+							</Link>
+							<p className="text-[11px] text-text-muted font-medium truncate max-w-full">{usersList[2].school || "BeastCode Coder"}</p>
+							<div className="mt-3 px-3 py-1 rounded-full text-xs font-black bg-amber-700/10 text-amber-500 border border-amber-700/30">
+								{renderMetric(usersList[2])}
+							</div>
+						</div>
+					)}
+				</div>
+			)}
+
 			{/* Filters Control Dashboard Panel */}
 			<div className="rounded-2xl p-4 md:p-6 border space-y-4" style={{ background: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}>
 				<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -448,14 +533,14 @@ const Leaderboard: React.FC = () => {
 					{user && (
 						<button
 							onClick={handleJumpToMe}
-							className="px-4 py-2 rounded-xl text-xs font-black border transition"
+							className="px-4 py-2 rounded-xl text-xs font-black border transition inline-flex items-center gap-1.5"
 							style={{
 								borderColor: "var(--border-default)",
 								background: "var(--bg-elevated)",
 								color: "var(--text-primary)"
 							}}
 						>
-							📍 Jump to My Rank
+							<FaMapMarkerAlt className="text-brand-orange" size={11} /> Jump to My Rank
 						</button>
 					)}
 				</div>
@@ -521,7 +606,7 @@ const Leaderboard: React.FC = () => {
 								<tr>
 									<td colSpan={6} className="px-6 py-12 text-center">
 										<div className="flex flex-col items-center justify-center gap-4">
-											<span className="text-3xl">📡</span>
+											<FaExclamationTriangle className="text-brand-orange" size={28} />
 											<p className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
 												{error}
 											</p>

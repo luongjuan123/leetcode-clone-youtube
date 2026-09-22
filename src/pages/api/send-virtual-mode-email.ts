@@ -3,6 +3,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { getAdminAuth } from "@/firebase/firebaseAdmin";
 import { NotificationDispatcher } from "@/utils/notificationDispatcher";
 import { NotificationRecipientService } from "@/utils/notificationRecipientService";
+import { getSiteUrl } from "@/utils/siteConfig";
 
 type ResponseData = {
 	success: boolean;
@@ -80,7 +81,7 @@ async function handler(
 		});
 
 		// 4. Asynchronously queue emails using central dispatcher
-		const appOrigin = origin || "https://beastcode.codes";
+		const appOrigin = (origin && !origin.includes(".run.app") && !origin.includes(".hosted.app")) ? origin : getSiteUrl();
 		const contestUrl = `${appOrigin}/contests/${contestId}`;
 		
 		(async () => {

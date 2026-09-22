@@ -5,6 +5,7 @@ import { useAdmin } from "@/hooks/useAdmin";
 import Topbar from "@/components/Topbar/Topbar";
 import { getFriendlyErrorMessage } from "@/utils/errorFilter";
 import { auth } from "@/firebase/firebase";
+import BeastCodeSelect from "@/components/UI/BeastCodeSelect";
 import {
 	FaUserShield,
 	FaBan,
@@ -731,31 +732,33 @@ export default function UserDetailPage() {
 						<div className="space-y-4 mb-6">
 							<div>
 								<label className="text-xs font-bold block mb-1 text-gray-400 uppercase tracking-wider">Duration</label>
-								<select
+								<BeastCodeSelect
+									options={[
+										{ value: "1 day", label: "1 Day" },
+										{ value: "7 days", label: "7 Days" },
+										{ value: "30 days", label: "30 Days" },
+										{ value: "Permanent", label: "Permanent" }
+									]}
 									value={suspendDuration}
-									onChange={(e) => setSuspendDuration(e.target.value)}
-									className="w-full bg-dark-layer-2 border border-gray-850 text-sm rounded-lg px-3 py-2 text-white outline-none focus:border-red-500 transition cursor-pointer"
-								>
-									<option value="1 day">1 Day</option>
-									<option value="7 days">7 Days</option>
-									<option value="30 days">30 Days</option>
-									<option value="Permanent">Permanent</option>
-								</select>
+									onChange={(val) => setSuspendDuration(val)}
+									size="md"
+								/>
 							</div>
 
 							<div>
 								<label className="text-xs font-bold block mb-1 text-gray-400 uppercase tracking-wider">Reason</label>
-								<select
+								<BeastCodeSelect
+									options={[
+										{ value: "Spam", label: "Spam & Advertisement" },
+										{ value: "Harassment", label: "Harassment / Abusive behavior" },
+										{ value: "Plagiarism", label: "Plagiarism / Cheating" },
+										{ value: "Terms Violation", label: "Violation of Terms of Service" },
+										{ value: "Other", label: "Other (specify in notes)" }
+									]}
 									value={suspendReason}
-									onChange={(e) => setSuspendReason(e.target.value)}
-									className="w-full bg-dark-layer-2 border border-gray-850 text-sm rounded-lg px-3 py-2 text-white outline-none focus:border-red-500 transition cursor-pointer"
-								>
-									<option value="Spam">Spam & Advertisement</option>
-									<option value="Harassment">Harassment / Abusive behavior</option>
-									<option value="Plagiarism">Plagiarism / Cheating</option>
-									<option value="Terms Violation">Violation of Terms of Service</option>
-									<option value="Other">Other (specify in notes)</option>
-								</select>
+									onChange={(val) => setSuspendReason(val)}
+									size="md"
+								/>
 							</div>
 
 							<div>
@@ -813,16 +816,17 @@ export default function UserDetailPage() {
 						<div className="space-y-4 mb-6">
 							<div>
 								<label className="text-xs font-bold block mb-1 text-gray-400 uppercase tracking-wider">Unban Reason</label>
-								<select
+								<BeastCodeSelect
+									options={[
+										{ value: "Appeal accepted", label: "Appeal accepted" },
+										{ value: "Suspension duration complete", label: "Suspension duration complete" },
+										{ value: "False positive check", label: "False positive correction" },
+										{ value: "Other", label: "Other (specify in notes)" }
+									]}
 									value={unsuspendReason}
-									onChange={(e) => setUnsuspendReason(e.target.value)}
-									className="w-full bg-dark-layer-2 border border-gray-850 text-sm rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 transition cursor-pointer"
-								>
-									<option value="Appeal accepted">Appeal accepted</option>
-									<option value="Suspension duration complete">Suspension duration complete</option>
-									<option value="False positive check">False positive correction</option>
-									<option value="Other">Other (specify in notes)</option>
-								</select>
+									onChange={(val) => setUnsuspendReason(val)}
+									size="md"
+								/>
 							</div>
 
 							<div>
@@ -886,16 +890,17 @@ export default function UserDetailPage() {
 						<div className="space-y-4 mb-6">
 							<div>
 								<label className="text-xs font-bold block mb-1 text-gray-400 uppercase tracking-wider">Reason for Deletion</label>
-								<select
+								<BeastCodeSelect
+									options={[
+										{ value: "Request by user", label: "Requested by user (Right to be Forgotten)" },
+										{ value: "Terms Violation", label: "Severe / Repeated platform abuse" },
+										{ value: "Duplicate Account", label: "Cleanup of duplicate account" },
+										{ value: "Other", label: "Other (specify in notes)" }
+									]}
 									value={deleteReason}
-									onChange={(e) => setDeleteReason(e.target.value)}
-									className="w-full bg-dark-layer-2 border border-gray-850 text-sm rounded-lg px-3 py-2 text-white outline-none focus:border-red-500 transition cursor-pointer"
-								>
-									<option value="Request by user">Requested by user (Right to be Forgotten)</option>
-									<option value="Terms Violation">Severe / Repeated platform abuse</option>
-									<option value="Duplicate Account">Cleanup of duplicate account</option>
-									<option value="Other">Other (specify in notes)</option>
-								</select>
+									onChange={(val) => setDeleteReason(val)}
+									size="md"
+								/>
 							</div>
 
 							<div>

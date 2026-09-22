@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from "next";
 import { getAdminFirestore, getAdminAuth } from "@/firebase/firebaseAdmin";
 import { checkOrgPermission, emitOrgEvent } from "@/utils/orgEngine";
+import { buildAbsoluteUrl } from "@/utils/siteConfig";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
 	const orgId = req.query.id as string;
@@ -46,7 +47,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 			const certId = "cert-" + Math.random().toString(36).slice(2, 12).toUpperCase();
 
 			// Generate a simulated QR code data URL pointing to verification endpoint
-			const qrCodeDataUrl = `https://beastcode.codes/qr-verify/${certId}`;
+			const qrCodeDataUrl = buildAbsoluteUrl(`/qr-verify/${certId}`);
 
 			const newCertificate = {
 				id: certId,

@@ -4,6 +4,7 @@ import { auth, firestore } from "@/firebase/firebase";
 import { useAuthState } from "react-firebase-hooks/auth";
 import { doc, getDoc } from "firebase/firestore";
 import useHasMounted from "@/hooks/useHasMounted";
+import BeastCodeSelect from "@/components/UI/BeastCodeSelect";
 import {
 	FaBell,
 	FaHistory,
@@ -381,8 +382,13 @@ export default function AdminNotificationsPage() {
 					</div>
 				)}
 
-				{/* Navigation Tabs */}
-				<div className="flex border-b border-border-subtle gap-2">
+				<div
+					className="flex items-center gap-1.5 p-1 rounded-2xl border transition-all duration-300 w-max max-w-full mb-4"
+					style={{
+						backgroundColor: "var(--bg-dark-layer-1)",
+						borderColor: "var(--border-subtle)",
+					}}
+				>
 					{[
 						{ id: "overview", label: "Overview & Analytics", icon: <FaBell /> },
 						{ id: "history", label: "Queue Logs & History", icon: <FaHistory /> },
@@ -394,11 +400,15 @@ export default function AdminNotificationsPage() {
 							<button
 								key={tab.id}
 								onClick={() => setActiveTab(tab.id as any)}
-								className={`px-5 py-3 text-xs font-bold flex items-center gap-2 transition-all border-b-2 -mb-[2px] ${
+								className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all duration-300 border ${
 									isActive
-										? "border-brand-orange text-brand-orange bg-brand-glow rounded-t-lg"
-										: "border-transparent text-text-secondary hover:text-text-primary"
+										? "border-border-accent glow-sm font-extrabold"
+										: "border-transparent text-text-secondary hover:text-text-primary hover:bg-dark-fill-3"
 								}`}
+								style={{
+									backgroundColor: isActive ? "var(--bg-surface)" : "transparent",
+									color: isActive ? "var(--brand-orange)" : "var(--text-secondary)",
+								}}
 							>
 								{tab.icon}
 								{tab.label}
@@ -673,17 +683,12 @@ export default function AdminNotificationsPage() {
 									<label className="text-[11px] font-bold" style={{ color: "var(--text-muted)" }}>
 										Choose Event Type
 									</label>
-									<select
+									<BeastCodeSelect
+										options={eventTypeList}
 										value={previewEvent}
-										onChange={(e) => setPreviewEvent(e.target.value)}
-										className="w-full px-3 py-2 text-xs font-medium rounded-lg bg-dark-fill-3 border border-border-subtle text-text-primary focus:outline-none focus:border-brand-orange"
-									>
-										{eventTypeList.map((evt) => (
-											<option key={evt.value} value={evt.value}>
-												{evt.label}
-											</option>
-										))}
-									</select>
+										onChange={(val) => setPreviewEvent(val)}
+										size="sm"
+									/>
 								</div>
 
 								<div className="space-y-2">
@@ -769,17 +774,12 @@ export default function AdminNotificationsPage() {
 								<label className="text-[10px] font-bold" style={{ color: "var(--text-muted)" }}>
 									Notification Event Type
 								</label>
-								<select
+								<BeastCodeSelect
+									options={eventTypeList}
 									value={testEvent}
-									onChange={(e) => setTestEvent(e.target.value)}
-									className="w-full px-3 py-2 text-xs rounded-lg bg-dark-fill-3 border border-border-subtle text-text-primary focus:outline-none focus:border-brand-orange"
-								>
-									{eventTypeList.map((evt) => (
-										<option key={evt.value} value={evt.value}>
-											{evt.label}
-										</option>
-									))}
-								</select>
+									onChange={(val) => setTestEvent(val)}
+									size="sm"
+								/>
 							</div>
 
 							<div className="space-y-2">

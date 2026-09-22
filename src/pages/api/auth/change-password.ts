@@ -2,7 +2,8 @@ import { withApiErrorHandler } from "@/utils/apiErrorHandler";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getAdminAuth, getAdminFirestore } from "@/firebase/firebaseAdmin";
 import { EmailService } from "@/utils/emailService";
-import { EmailLayout, EmailHeader, EmailFooter, InfoRow, InfoTable, DangerBox, COLORS } from "@/utils/emailComponents";
+import { COLORS } from "@/utils/emailComponents";
+import { getEmailHtml } from "@/utils/emailTemplate";
 import { analysePassword, BANNED_SEQUENCES, PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH } from "@/utils/passwordPolicy";
 import crypto from "crypto";
 
@@ -44,44 +45,18 @@ function isRateLimited(ip: string): boolean {
 
 // ─── Security notification email ──────────────────────────────────────────────
 function buildChangedEmail(ip: string, country: string, device: string, time: string): string {
-	const detailsContent = `
-		${InfoRow({ label: "Time", value: time, accentColor: COLORS.danger })}
-		${InfoRow({ label: "IP Address", value: ip, accentColor: COLORS.danger })}
-		${InfoRow({ label: "Location", value: country, accentColor: COLORS.danger })}
-		${InfoRow({ label: "Device", value: device, accentColor: COLORS.danger })}
-	`;
-
-	const bodyContent = `
-		${EmailHeader({ headerTitle: "SECURITY NOTICE", accentColor: COLORS.danger })}
-		<tr>
-			<td style="padding: 40px 35px 35px 35px; background-color: ${COLORS.card}; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-				<h1 style="margin: 0 0 20px 0; font-size: 24px; font-weight: 800; line-height: 1.3; color: ${COLORS.primaryText}; letter-spacing: -0.5px;">
-					Security Notice: Password Changed
-				</h1>
-				
-				<p style="margin: 0 0 20px 0; font-size: 15px; line-height: 1.6; color: ${COLORS.secondaryText}; font-weight: 500;">
-					Hello,
-				</p>
-				
-				<p style="margin: 0 0 30px 0; font-size: 14px; line-height: 1.6; color: ${COLORS.mutedText};">
-					The password for your BeastCode account was recently updated. Here are the security details for this action:
-				</p>
-
-				${InfoTable({ content: detailsContent, accentColor: COLORS.danger })}
-
-				${DangerBox({
-					title: "Unrecognized Action?",
-					message: "If you did not perform this change, please contact support immediately to secure your account."
-				})}
-			</td>
-		</tr>
-		${EmailFooter({})}
-	`;
-
-	return EmailLayout({
-		title: "Your BeastCode Password Was Changed",
-		previewText: "Security Notice: The password for your BeastCode account was updated.",
-		bodyContent
+	return getEmailHtml({
+		headerTitle: "SECURITY NOTICE",
+		accentColor: COLORS.danger,
+		title: "Security Notice: Password Changed",
+		leadText: "Hello,",
+		description: "The password for your BeastCode account was recently updated. Here are the security details for this action. If you did not perform this change, please contact support immediately to secure your account.",
+		details: [
+			{ label: "Time", value: time },
+			{ label: "IP Address", value: ip },
+			{ label: "Location", value: country },
+			{ label: "Device", value: device }
+		]
 	});
 }
 

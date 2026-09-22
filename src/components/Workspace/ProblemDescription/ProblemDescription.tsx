@@ -2,7 +2,7 @@ import CircleSkeleton from "@/components/Skeletons/CircleSkeleton";
 import RectangleSkeleton from "@/components/Skeletons/RectangleSkeleton";
 import { auth, firestore } from "@/firebase/firebase";
 import { DBProblem, Problem } from "@/utils/types/problem";
-import { arrayRemove, arrayUnion, doc, getDoc, runTransaction, updateDoc } from "firebase/firestore";
+import { arrayRemove, arrayUnion, doc, getDoc, runTransaction, updateDoc, onSnapshot } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { useAuthState } from "react-firebase-hooks/auth";
 import { AiFillLike, AiFillDislike, AiOutlineLoading3Quarters, AiFillStar } from "react-icons/ai";
@@ -378,9 +378,13 @@ const ProblemDescription: React.FC<ProblemDescriptionProps> = ({
 
 				{/* Examples / Samples Section */}
 				<div className="space-y-8 pt-8 border-t border-border-subtle" style={{ borderColor: "var(--border-subtle)" }}>
-					{problem.examples.filter(ex => !!ex.isSample).map((example, index) => (
-						<ExampleBlock key={example.id || index} example={example} index={index} />
-					))}
+					{(() => {
+						const sampleExamples = (problem.examples || []).filter(ex => !!ex.isSample);
+						const displayExamples = sampleExamples.length > 0 ? sampleExamples : (problem.examples || []);
+						return displayExamples.map((example, index) => (
+							<ExampleBlock key={example.id || index} example={example} index={index} />
+						));
+					})()}
 				</div>
 
 				{/* Tags Badges */}
@@ -567,15 +571,19 @@ function useGetUsersDataOnProblem(problemId: string) {
 	const [user] = useAuthState(auth);
 
 	useEffect(() => {
-		const getUsersDataOnProblem = async () => {
-			const userRef = doc(firestore, "users", user!.uid);
-			const userSnap = await getDoc(userRef);
+		if (!user) {
+			setData({ liked: false, disliked: false, starred: false, solved: false });
+			return;
+		}
+
+		const userRef = doc(firestore, "users", user.uid);
+		const unsubscribe = onSnapshot(userRef, (userSnap) => {
 			if (userSnap.exists()) {
-				const data = userSnap.data();
-				const solvedProblems = data.solvedProblems || [];
-				const likedProblems = data.likedProblems || [];
-				const dislikedProblems = data.dislikedProblems || [];
-				const starredProblems = data.starredProblems || [];
+				const userData = userSnap.data();
+				const solvedProblems = userData.solvedProblems || [];
+				const likedProblems = userData.likedProblems || [];
+				const dislikedProblems = userData.dislikedProblems || [];
+				const starredProblems = userData.starredProblems || [];
 				setData({
 					liked: likedProblems.includes(problemId),
 					disliked: dislikedProblems.includes(problemId),
@@ -583,10 +591,11 @@ function useGetUsersDataOnProblem(problemId: string) {
 					solved: solvedProblems.includes(problemId),
 				});
 			}
-		};
+		}, (err) => {
+			console.error("Error listening to user data on problem:", err);
+		});
 
-		if (user) getUsersDataOnProblem();
-		return () => setData({ liked: false, disliked: false, starred: false, solved: false });
+		return () => unsubscribe();
 	}, [problemId, user]);
 
 	return { ...data, setData };

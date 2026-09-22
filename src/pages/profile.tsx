@@ -18,11 +18,13 @@ import {
 	FaCamera,
 	FaInfoCircle,
 	FaCopy,
+	FaCommentDots,
 } from "react-icons/fa";
 import ThreadsBoard from "@/components/Threads/Threads";
 import SecondaryNav from "@/components/TabsNavigation/SecondaryNav";
 import { calculateExperience } from "@/utils/experienceConfig";
 import { getCountryName } from "@/utils/countryData";
+import BeastCodeSelect from "@/components/UI/BeastCodeSelect";
 
 interface UserProfile {
 	displayName: string;
@@ -360,6 +362,27 @@ const ProfilePage: React.FC = () => {
 		}
 	};
 
+	const handleMessageUser = async () => {
+		if (!user || !uid) return;
+		try {
+			const idToken = await user.getIdToken();
+			const res = await fetch("/api/chat/conversations", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${idToken}`,
+				},
+				body: JSON.stringify({ type: "direct", targetUid: uid }),
+			});
+			const data = await res.json();
+			if (data.success && data.conversation) {
+				router.push(`/messages/${data.conversation.id}`);
+			}
+		} catch (error) {
+			console.error("Message user error:", error);
+		}
+	};
+
 	// Handle avatar file selection — compress & convert to base64
 	const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
 		if (isReadOnly) return;
@@ -529,16 +552,16 @@ const ProfilePage: React.FC = () => {
 	);
 
 	return (
-		<main className='bg-dark-layer-2 min-h-screen text-dark-gray-8 pb-16'>
+		<main className='min-h-screen pb-16 hero-gradient' style={{ background: "var(--bg-base)", fontFamily: "var(--font-sans)" }}>
 			<Topbar />
 
-			<div className='max-w-[1100px] mx-auto px-6 mt-8'>
-				<h1 className='text-2xl font-bold mb-4 text-shadow-glow' style={{ color: "var(--text-primary)" }}>
+			<div className='max-w-[1100px] mx-auto px-6 pt-8'>
+				<h1 className='text-3xl font-extrabold mb-6 text-text-primary glow-text'>
 					{isReadOnly ? `${profile.displayName}'s Profile` : "My Profile Dashboard"}
 				</h1>
 
 				{/* Follow Button & Social counts block */}
-				<div className='flex items-center gap-5 mb-8 select-none bg-dark-surface border border-gray-850 px-5 py-3 rounded-2xl max-w-sm shadow-sm dark:shadow-none'>
+				<div className='flex items-center gap-5 mb-8 select-none bg-dark-layer-1 border border-border-default px-6 py-4 rounded-2xl max-w-md shadow-md glassmorphic'>
 					{isReadOnly && (
 						<div className="flex gap-2">
 							<button
@@ -549,6 +572,14 @@ const ProfilePage: React.FC = () => {
 									}`}
 							>
 								{isFollowing ? "Following" : "Follow"}
+							</button>
+							<button
+								type="button"
+								onClick={handleMessageUser}
+								className="flex items-center gap-1.5 px-6 py-2 rounded-xl text-xs font-bold transition duration-200 shadow-md bg-dark-fill-3 hover:bg-dark-fill-2 text-brand-orange border border-brand-orange/40 hover:border-brand-orange"
+							>
+								<FaCommentDots size={13} />
+								<span>Message</span>
 							</button>
 							<button
 								type="button"
@@ -1211,20 +1242,20 @@ const ProfilePage: React.FC = () => {
 								<label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">
 									Violation Category <span className="text-red-500">*</span>
 								</label>
-								<select
+								<BeastCodeSelect
+									options={[
+										{ value: "", label: "Select a reason..." },
+										{ value: "Cheating / Plagiarism", label: "Cheating / Plagiarism (copying code/solutions)" },
+										{ value: "Abusive Behavior", label: "Abusive Behavior (toxic posts/comments)" },
+										{ value: "Spam", label: "Spam (advertising/flooding the leaderboard)" },
+										{ value: "Impersonation", label: "Impersonation (pretending to be another user/org)" },
+										{ value: "Harassment", label: "Harassment (stalking/hate speech)" },
+										{ value: "Other", label: "Other (specify below)" }
+									]}
 									value={reportReason}
-									onChange={(e) => setReportReason(e.target.value)}
-									required
-									className="w-full bg-dark-layer-2 border border-gray-850 text-white rounded-lg p-2.5 outline-none focus:ring-1 focus:ring-brand-orange"
-								>
-									<option value="">Select a reason...</option>
-									<option value="Cheating / Plagiarism">Cheating / Plagiarism (copying code/solutions)</option>
-									<option value="Abusive Behavior">Abusive Behavior (toxic posts/comments)</option>
-									<option value="Spam">Spam (advertising/flooding the leaderboard)</option>
-									<option value="Impersonation">Impersonation (pretending to be another user/org)</option>
-									<option value="Harassment">Harassment (stalking/hate speech)</option>
-									<option value="Other">Other (specify below)</option>
-								</select>
+									onChange={(val) => setReportReason(val)}
+									size="md"
+								/>
 							</div>
 
 							<div>

@@ -66,6 +66,14 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
 	if (redis) {
 		try {
+			// Check if standings are marked dirty in Redis
+			const isDirty = await redis.get(`contest:${contestId}:dirty`);
+			if (isDirty === "true") {
+				await redis.del(`contest:${contestId}:standings`);
+				await redis.del(`contest:${contestId}:standings:frozen`);
+				await redis.del(`contest:${contestId}:dirty`);
+			}
+
 			if (serveLive) {
 				// Condition B: get live standings
 				const liveStandingsStr = await redis.get(`contest:${contestId}:standings`);

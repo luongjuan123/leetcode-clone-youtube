@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from "react";
 import { useNotifications, RawNotification } from "@/context/RealtimeNotificationProvider";
 import Link from "next/link";
+import OrganizationAvatar from "@/components/Organizations/OrganizationAvatar";
+import { auth } from "@/firebase/firebase";
 import {
 	FaBell,
 	FaCheckDouble,
@@ -13,7 +15,12 @@ import {
 	FaTrophy,
 	FaUserCog,
 	FaArrowRight,
-	FaCircle
+	FaCircle,
+	FaCheck,
+	FaTimes,
+	FaInfoCircle,
+	FaCrown,
+	FaUsers
 } from "react-icons/fa";
 
 interface GroupedNotification {
@@ -47,6 +54,12 @@ export default function NotificationCenter() {
 	const [searchQuery, setSearchQuery] = useState("");
 	const [activeCategory, setActiveCategory] = useState<string>("all");
 	const [visibleCount, setVisibleCount] = useState(15);
+
+	// Track invitation response actions locally for instant state transitions
+	const [respondingInvites, setRespondingInvites] = useState<Record<string, string>>({});
+
+	// Modal State
+	const [selectedInvite, setSelectedInvite] = useState<any>(null);
 
 	// Get Icon based on category / type
 	const getNotifIcon = (category: string, type: string) => {
@@ -206,6 +219,52 @@ export default function NotificationCenter() {
 		return filteredAndGroupedNotifications.slice(0, visibleCount);
 	}, [filteredAndGroupedNotifications, visibleCount]);
 
+	// Handle Organization invitation response
+	const handleOrgInviteRespond = async (notifId: string, inviteId: string, action: "accept" | "decline") => {
+		setRespondingInvites((prev) => ({ ...prev, [inviteId]: action === "accept" ? "accepting" : "declining" }));
+		try {
+			const idToken = await auth.currentUser?.getIdToken();
+			if (!idToken) throw new Error("Unauthenticated");
+
+			const res = await fetch(`/api/users/invitations/${inviteId}/respond`, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${idToken}`,
+				},
+				body: JSON.stringify({ action }),
+			});
+
+			const data = await res.json();
+			if (data.success) {
+				setRespondingInvites((prev) => ({ ...prev, [inviteId]: action === "accept" ? "Accepted" : "Declined" }));
+				// Mark notification as read
+				await markAsRead(notifId);
+				// Dispatch custom event to notify orgs list page to refresh in real-time
+				window.dispatchEvent(new Event("org-joined"));
+
+				// Update selected invite modal state if open
+				if (selectedInvite && selectedInvite.inviteId === inviteId) {
+					setSelectedInvite((prev: any) => prev ? { ...prev, status: action === "accept" ? "Accepted" : "Declined" } : null);
+				}
+			} else {
+				alert(data.error || `Failed to ${action} invitation.`);
+				setRespondingInvites((prev) => {
+					const next = { ...prev };
+					delete next[inviteId];
+					return next;
+				});
+			}
+		} catch (err: any) {
+			alert(err.message || "An error occurred.");
+			setRespondingInvites((prev) => {
+				const next = { ...prev };
+				delete next[inviteId];
+				return next;
+			});
+		}
+	};
+
 	return (
 		<div className="max-w-[760px] mx-auto px-4 mt-8 space-y-6">
 			{/* Top Controls Bar */}
@@ -359,6 +418,159 @@ export default function NotificationCenter() {
 								}
 							}
 
+							const firstRaw = notif.rawNotifications[0];
+							const isOrgInvite = notif.type === "ORGANIZATION_EVENT" && firstRaw?.metadata?.action === "member.invited";
+
+							if (isOrgInvite) {
+								const inviteMeta = firstRaw?.metadata || {};
+								const inviteId = inviteMeta.inviteId;
+								const orgName = inviteMeta.orgName || notif.title || "Workspace";
+								const orgLogo = inviteMeta.orgLogo || firstRaw?.fromAvatarUrl || "";
+								const orgType = inviteMeta.orgType || "Organization";
+								const orgVisibility = inviteMeta.orgVisibility || "public";
+								const invitedRole = inviteMeta.roleId || "member";
+								const inviterName = inviteMeta.inviterName || firstRaw?.fromDisplayName || "Admin";
+								
+								// Status priority: local state responding, then database metadata status, then default pending
+								const currentStatus = respondingInvites[inviteId] || inviteMeta.status || "Pending";
+
+								return (
+									<div
+										key={notif.id}
+										onClick={() => {
+											if (hasUnread) {
+												notif.ids.forEach((id) => markAsRead(id));
+											}
+										}}
+										className={`group flex flex-col md:flex-row gap-5 p-6 rounded-2xl transition-all duration-300 animate-fade-in ${
+											hasUnread
+												? "border border-border-accent bg-brand-glow shadow-glow-sm"
+												: "border border-border-subtle bg-dark-layer-1 hover:border-border-accent"
+										}`}
+										style={{
+											backgroundImage: hasUnread
+												? "radial-gradient(circle at top right, var(--brand-glow), transparent 60%)"
+												: "none",
+										}}
+									>
+										{/* Left: Organization Logo / Initial */}
+										<div className="flex-shrink-0 flex items-start gap-4">
+											{/* Unread Status Dot */}
+											<div className="pt-3 w-2">
+												{hasUnread && (
+													<FaCircle className="text-brand-orange animate-pulse" size={8} />
+												)}
+											</div>
+
+											<OrganizationAvatar
+												src={orgLogo}
+												name={orgName}
+												size="lg"
+												className="border border-border-subtle shadow-md shrink-0"
+											/>
+										</div>
+
+										{/* Middle: Invite details */}
+										<div className="flex-1 min-w-0 space-y-2">
+											<div className="flex flex-wrap items-center gap-2">
+												<span className="text-[10px] text-brand-orange uppercase font-black tracking-widest bg-brand-orange/10 px-2 py-0.5 rounded border border-brand-orange/20">
+													Workspace Invitation
+												</span>
+												<span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded border ${
+													currentStatus === "Pending" || currentStatus === "accepting" || currentStatus === "declining"
+														? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+														: currentStatus === "Accepted"
+														? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+														: "bg-red-500/10 text-red-400 border-red-500/20"
+												}`}>
+													{currentStatus === "accepting" ? "Accepting..." : currentStatus === "declining" ? "Declining..." : currentStatus}
+												</span>
+												<span className="text-[9px] text-text-muted font-mono ml-auto">
+													{formatRelativeTime(notif.createdAt)}
+												</span>
+											</div>
+
+											<h3 className="text-sm font-black text-text-primary">
+												Join {orgName}
+											</h3>
+
+											<p className="text-xs text-text-muted leading-relaxed">
+												<span className="font-bold text-text-secondary">@{inviterName}</span> invited you to join this workspace as a <span className="font-bold text-brand-orange uppercase tracking-wider text-[10px] bg-brand-orange/10 px-1.5 py-0.5 rounded border border-brand-orange/20">{invitedRole}</span>.
+											</p>
+
+											{/* Organization Meta Row */}
+											<div className="flex flex-wrap gap-2.5 pt-1.5">
+												<span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-dark-fill-3 border border-border-subtle text-text-muted">
+													Type: {orgType}
+												</span>
+												<span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border ${
+													orgVisibility === "public"
+														? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+														: orgVisibility === "private"
+														? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+														: "bg-red-500/10 text-red-400 border-red-500/20"
+												}`}>
+													Visibility: {orgVisibility}
+												</span>
+											</div>
+										</div>
+
+										{/* Right: Actions */}
+										<div className="flex flex-row md:flex-col justify-end md:justify-center items-stretch gap-2.5 min-w-[130px] shrink-0 pt-2 md:pt-0">
+											{(currentStatus === "Pending" || currentStatus === "accepting" || currentStatus === "declining") ? (
+												<>
+													<button
+														disabled={currentStatus !== "Pending"}
+														onClick={(e) => {
+															e.stopPropagation();
+															handleOrgInviteRespond(notif.id, inviteId, "accept");
+														}}
+														className="flex-1 md:flex-initial bg-emerald-500 hover:bg-emerald-600 text-dark-layer-1 font-black text-[10px] uppercase tracking-wider py-2 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/10 active:scale-95 disabled:opacity-50"
+													>
+														<FaCheck size={9} /> Accept
+													</button>
+													<button
+														disabled={currentStatus !== "Pending"}
+														onClick={(e) => {
+															e.stopPropagation();
+															handleOrgInviteRespond(notif.id, inviteId, "decline");
+														}}
+														className="flex-1 md:flex-initial bg-dark-fill-3 hover:bg-red-950/20 border border-border-subtle hover:border-red-900/50 text-text-secondary hover:text-red-400 font-bold text-[10px] uppercase tracking-wider py-2 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50"
+													>
+														<FaTimes size={9} /> Decline
+													</button>
+												</>
+											) : null}
+
+											<button
+												onClick={(e) => {
+													e.stopPropagation();
+													setSelectedInvite({
+														notifId: notif.id,
+														inviteId,
+														orgId: inviteMeta.orgId,
+														orgName,
+														orgLogo,
+														orgType,
+														orgVisibility,
+														invitedRole,
+														inviterName,
+														status: currentStatus,
+														orgDescription: inviteMeta.orgDescription,
+														orgMemberCount: inviteMeta.orgMemberCount,
+														orgOwnerUid: inviteMeta.orgOwnerUid,
+														createdAt: notif.createdAt
+													});
+												}}
+												className="flex-1 md:flex-initial bg-dark-fill-3 hover:bg-dark-fill-2 border border-border-subtle hover:border-border-accent text-text-secondary hover:text-text-primary font-bold text-[10px] uppercase tracking-wider py-2 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 active:scale-95"
+											>
+												<FaInfoCircle size={9} /> Details
+											</button>
+										</div>
+									</div>
+								);
+							}
+
 							return (
 								<div
 									key={notif.id}
@@ -499,6 +711,131 @@ export default function NotificationCenter() {
 				>
 					Load Older Notifications
 				</button>
+			)}
+
+			{/* ── DETAIL MODAL OVERLAY ── */}
+			{selectedInvite && (
+				<div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+					{/* Backdrop */}
+					<div
+						className="absolute inset-0 bg-black/60 backdrop-blur-sm cursor-pointer"
+						onClick={() => setSelectedInvite(null)}
+					/>
+
+					{/* Modal Card */}
+					<div
+						className="relative w-full max-w-md rounded-2xl overflow-hidden shadow-2xl border border-border-subtle z-10 animate-scale-up"
+						style={{
+							background: "var(--bg-elevated)",
+						}}
+					>
+						{/* Header banner glow */}
+						<div className="h-16 bg-gradient-to-r from-brand-orange/20 via-amber-500/10 to-brand-orange/20 border-b border-border-subtle/50" />
+
+						{/* Close button */}
+						<button
+							onClick={() => setSelectedInvite(null)}
+							className="absolute top-4 right-4 text-text-muted hover:text-text-primary transition"
+						>
+							<FaTimes size={16} />
+						</button>
+
+						<div className="p-6 -mt-10 flex flex-col items-center text-center">
+							{/* Logo */}
+							<OrganizationAvatar
+								src={selectedInvite.orgLogo}
+								name={selectedInvite.orgName}
+								size={80}
+								className="border-4 border-[var(--bg-elevated)] shadow-xl mb-4 shrink-0"
+							/>
+
+							<span className="text-[9px] text-brand-orange uppercase font-black tracking-widest bg-brand-orange/10 px-2 py-0.5 rounded border border-brand-orange/20 mb-2">
+								Invitation details
+							</span>
+
+							<h2 className="text-lg font-black text-text-primary leading-tight">
+								{selectedInvite.orgName}
+							</h2>
+
+							{/* Badges */}
+							<div className="flex gap-2 mt-2">
+								<span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-dark-fill-3 border border-border-subtle text-text-muted">
+									Type: {selectedInvite.orgType}
+								</span>
+								<span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border ${
+									selectedInvite.orgVisibility === "public"
+										? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+										: selectedInvite.orgVisibility === "private"
+										? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+										: "bg-red-500/10 text-red-400 border-red-500/20"
+								}`}>
+									{selectedInvite.orgVisibility}
+								</span>
+							</div>
+
+							{/* Stats */}
+							<div className="flex gap-4 items-center justify-center mt-4 mb-5 text-[11px] text-text-muted font-bold bg-dark-fill-3/50 border border-border-subtle/60 rounded-lg px-3 py-1.5">
+								<span className="flex items-center gap-1">
+									<FaUsers className="text-brand-orange" size={11} />
+									{selectedInvite.orgMemberCount || 0} members
+								</span>
+								<span className="w-1 h-1 rounded-full bg-border-subtle" />
+								<span className="flex items-center gap-1">
+									<FaCrown className="text-amber-400" size={11} />
+									Invited By: @{selectedInvite.inviterName}
+								</span>
+							</div>
+
+							{/* Invited Role box */}
+							<div className="w-full bg-dark-fill-3 border border-border-subtle rounded-xl p-4 text-left mb-6">
+								<span className="text-[9px] text-text-muted font-bold uppercase tracking-wider block mb-1">Invited Role</span>
+								<div className="flex items-center gap-1.5">
+									<FaShieldAlt className="text-brand-orange" size={12} />
+									<span className="text-xs font-black text-text-primary uppercase tracking-wider">
+										{selectedInvite.invitedRole}
+									</span>
+								</div>
+								<p className="text-[11px] text-text-muted mt-2 leading-relaxed">
+									{selectedInvite.orgDescription || "You will gain standard workspace access, allowing you to view and solve internal problem sets, join contests, and coordinate announcements."}
+								</p>
+							</div>
+
+							{/* Action buttons inside Modal */}
+							<div className="w-full flex gap-3">
+								{(selectedInvite.status === "Pending" || selectedInvite.status === "accepting" || selectedInvite.status === "declining") ? (
+									<>
+										<button
+											disabled={selectedInvite.status !== "Pending"}
+											onClick={() => {
+												handleOrgInviteRespond(selectedInvite.notifId, selectedInvite.inviteId, "decline");
+											}}
+											className="flex-1 bg-dark-fill-3 hover:bg-red-950/20 border border-border-subtle hover:border-red-900/50 text-text-secondary hover:text-red-400 font-bold text-xs uppercase tracking-wider py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50"
+										>
+											<FaTimes size={10} /> Decline
+										</button>
+										<button
+											disabled={selectedInvite.status !== "Pending"}
+											onClick={() => {
+												handleOrgInviteRespond(selectedInvite.notifId, selectedInvite.inviteId, "accept");
+											}}
+											className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-dark-layer-1 font-black text-xs uppercase tracking-wider py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/10 active:scale-95 disabled:opacity-50"
+										>
+											<FaCheck size={10} /> Accept & Join
+										</button>
+									</>
+								) : (
+									<div className="w-full text-center py-2">
+										<p className={`text-xs font-bold ${
+											selectedInvite.status === "Accepted" ? "text-emerald-400" : "text-red-400"
+										}`}>
+											Invitation has been {selectedInvite.status}
+										</p>
+									</div>
+								)}
+							</div>
+						</div>
+					</div>
+				</div>
 			)}
 		</div>
 	);

@@ -3,10 +3,15 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { getEmailHtml } from "@/utils/emailTemplate";
 import { NotificationDispatcher, BeastNotificationEvent } from "@/utils/notificationDispatcher";
 import { getEventConfig } from "@/utils/notificationTemplates";
+import { buildAbsoluteUrl } from "@/utils/siteConfig";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
 	if (req.method !== "POST" && req.method !== "GET") {
 		return res.status(405).json({ success: false, message: "Method Not Allowed" });
+	}
+
+	if (process.env.NODE_ENV === "production" && req.query.allowProdPreview !== "true") {
+		return res.status(403).json({ success: false, message: "Email preview is disabled in production environments." });
 	}
 
 	const eventType = (req.query.eventType || req.body.eventType || "AUTH_WELCOME") as BeastNotificationEvent;
@@ -43,7 +48,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 				timeLeftText: "Save your streak in the next 3 hours!"
 			},
 			customContent: "This is a custom broadcast body text demonstrating the template content block rendering inside the BeastCode notification engine layout structure.",
-			ctaUrl: "https://beastcode--beastcode-7555e.asia-southeast1.hosted.app"
+			ctaUrl: buildAbsoluteUrl("/")
 		};
 
 		// Retrieve the config directly using the getEventConfig utility

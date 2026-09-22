@@ -71,20 +71,28 @@ const Login: React.FC<LoginProps> = () => {
 	const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
 		e.preventDefault();
 		if (!validateForm() || loading || googleLoading || githubLoading) return;
+		setErrors((prev) => ({ ...prev, general: undefined }));
 
 		try {
-			const newUser = await signInWithEmailAndPassword(inputs.email, inputs.password);
-			if (!newUser) return;
-			router.push("/");
+			const res = await signInWithEmailAndPassword(inputs.email.trim(), inputs.password);
+			if (res && res.user) {
+				setAuthModalState((prev) => ({ ...prev, isOpen: false }));
+				if (router.query.prev) {
+					router.push(router.query.prev as string);
+				}
+			}
 		} catch (err: any) {
 			// Handled by useEffect matching firebase hooks state
 		}
 	};
 
 	useEffect(() => {
-		if (user || googleUser || githubUser) {
+		const authenticatedUser = user?.user || googleUser?.user || githubUser?.user;
+		if (authenticatedUser) {
 			setAuthModalState((prev) => ({ ...prev, isOpen: false }));
-			router.push("/");
+			if (router.query.prev) {
+				router.push(router.query.prev as string);
+			}
 		}
 	}, [user, googleUser, githubUser, router, setAuthModalState]);
 

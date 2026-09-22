@@ -4,6 +4,8 @@ import { auth, firestore } from "@/firebase/firebase";
 import { useAuthState } from "react-firebase-hooks/auth";
 import { doc, getDoc, collection, getDocs, query, where } from "firebase/firestore";
 import Link from "next/link";
+import { useSetRecoilState } from "recoil";
+import { authModalState } from "@/atoms/authModalAtom";
 
 interface ModState {
 	status: string;
@@ -20,6 +22,7 @@ const AccountAppealPage: React.FC = () => {
 	const [user, loadingAuth] = useAuthState(auth);
 	const router = useRouter();
 	const { refId } = router.query;
+	const setAuthModalState = useSetRecoilState(authModalState);
 
 	const [loadingData, setLoadingData] = useState(true);
 	const [modState, setModState] = useState<ModState | null>(null);
@@ -102,13 +105,15 @@ const AccountAppealPage: React.FC = () => {
 						setModState({ status: "UNKNOWN" });
 					}
 				} else {
-					// No user and no refId: redirect to login
-					router.push("/auth");
+					// No user and no refId: open login modal and redirect to home
+					setAuthModalState({ isOpen: true, type: "login" });
+					router.replace("/");
 				}
 			} catch (err) {
 				console.error("Failed to load account status:", err);
 				if (!user && !refId) {
-					router.push("/auth");
+					setAuthModalState({ isOpen: true, type: "login" });
+					router.replace("/");
 				}
 			} finally {
 				setLoadingData(false);
@@ -545,12 +550,13 @@ const AccountAppealPage: React.FC = () => {
 								Logout Session
 							</button>
 						) : (
-							<Link
-								href="/auth"
+							<button
+								type="button"
+								onClick={() => setAuthModalState({ isOpen: true, type: "login" })}
 								className="px-4 py-2 bg-brand-orange hover:bg-brand-orange-s text-black text-xs font-bold rounded-lg transition"
 							>
 								Log In to Dashboard
-							</Link>
+							</button>
 						)}
 					</div>
 				</div>

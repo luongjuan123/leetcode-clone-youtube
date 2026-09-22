@@ -23,6 +23,17 @@ export const translateFirebaseError = (code: string): string => {
 			return "This sign-in method is currently disabled.";
 		case "auth/network-request-failed":
 			return "Network connection issue. Please check your internet.";
+		case "auth/popup-blocked":
+			return "The browser blocked the authentication popup. Please enable popups for this site.";
+		case "auth/too-many-requests":
+			return "Too many requests. Please try again later.";
+		case "auth/expired-action-code":
+			return "The action code/link has expired or is invalid.";
+		case "auth/credential-already-in-use":
+			return "This credential is already linked to another account.";
+		case "auth/invalid-credential":
+		case "auth/invalid-login-credentials":
+			return "Invalid login credentials. Please check your email or password.";
 		default:
 			return "An unexpected error occurred. Please try again.";
 	}

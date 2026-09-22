@@ -2,14 +2,13 @@ import { withApiErrorHandler } from "@/utils/apiErrorHandler";
 import { NextApiRequest, NextApiResponse } from "next";
 import Stripe from "stripe";
 
-// Initialize Stripe with the secret key from environment variables
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
-	apiVersion: "2022-11-15" as any, // Match a stable API version
+	apiVersion: "2023-10-16" as any,
 });
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
 	if (req.method !== "POST") {
-		return res.status(455).json({ error: "Method not allowed" });
+		return res.status(405).json({ error: "Method not allowed" });
 	}
 
 	try {
@@ -18,6 +17,18 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 		if (!amount || amount <= 0) {
 			return res.status(400).json({ error: "Invalid amount" });
 		}
+
+		const secretKey = process.env.STRIPE_SECRET_KEY;
+		if (!secretKey) {
+			return res.status(400).json({
+				error: "STRIPE_SECRET_KEY is not configured in .env.local. Please add your Stripe API keys to process real credit card payments.",
+				missingKeys: true,
+			});
+		}
+
+		const stripe = new Stripe(secretKey, {
+			apiVersion: "2023-10-16" as any,
+		});
 
 		// Create a PaymentIntent with the specified amount and currency
 		const paymentIntent = await stripe.paymentIntents.create({

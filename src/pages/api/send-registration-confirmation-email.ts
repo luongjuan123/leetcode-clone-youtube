@@ -3,6 +3,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { getAdminAuth, getAdminFirestore } from "@/firebase/firebaseAdmin";
 import { NotificationDispatcher } from "@/utils/notificationDispatcher";
 import { NotificationRecipientService } from "@/utils/notificationRecipientService";
+import { buildAbsoluteUrl } from "@/utils/siteConfig";
 
 type ResponseData = {
 	success: boolean;
@@ -76,8 +77,7 @@ async function handler(
 			contestTitle = "BeastCode Tournament Grand Prix";
 		}
 
-		const origin = req.headers.host ? `http://${req.headers.host}` : "https://beastcode.codes";
-		const contestUrl = `${origin}/contests/${contestId}`;
+		const contestUrl = buildAbsoluteUrl(`/contests/${contestId}`);
 
 		// 3. Dispatch confirmation notification
 		const result = await NotificationDispatcher.dispatch("CONTEST_REG_CONFIRM", {

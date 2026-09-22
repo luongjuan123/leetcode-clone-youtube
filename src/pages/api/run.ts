@@ -169,7 +169,7 @@ async function runBatchWithJudge0(
 	language: SupportedLanguage,
 	stdins: string[],
 	limits: ExecutionProfileSettings,
-	onStatusUpdate?: (stage: string, progress?: { current: number; total: number }) => void
+	onStatusUpdate?: (stage: string, progress?: { current: number; total: number }) => Promise<void> | void
 ): Promise<{ stdout: string; stderr: string; code: number | null; timedOut: boolean; memoryLimitExceeded?: boolean; outputLimitExceeded?: boolean; compileError?: boolean }[]> {
 	const langMap: Record<SupportedLanguage, number> = {
 		javascript: 102,
@@ -274,7 +274,7 @@ async function runBatchWithJudge0(
 			dataSubmissions = pollResults.flat();
 			
 			const finishedCount = dataSubmissions.filter((s: any) => s.status?.id > 2).length;
-			onStatusUpdate?.("running", { current: finishedCount, total: allTokens.length });
+			await onStatusUpdate?.("running", { current: finishedCount, total: allTokens.length });
 
 			// Check if all submissions have finished (status.id > 2)
 			const allFinished = dataSubmissions.every((s: any) => s.status?.id > 2);
@@ -357,6 +357,8 @@ interface TestCaseResult {
 	expected: string;
 	actual: string;
 	error?: string;
+	runtime?: number;
+	memory?: number;
 }
 
 interface RunResponse {
@@ -414,7 +416,7 @@ function runCommandWithStdin(
 
 		const isSandboxEnabled = checkSandboxPermissions();
 		
-		if (!isSandboxEnabled && process.env.NODE_ENV !== "development") {
+		if (!isSandboxEnabled && process.env.NODE_ENV !== "development" && process.env.NODE_ENV !== "test") {
 			resolve({
 				stdout: "",
 				stderr: "Security Error: Local sandbox permissions missing in production environment.",
@@ -624,7 +626,7 @@ async function runCodeInternal(
 	language: SupportedLanguage,
 	testcases: any[],
 	isCustomInput?: boolean,
-	onStatusUpdate?: (stage: string, progress?: { current: number; total: number }) => void,
+	onStatusUpdate?: (stage: string, progress?: { current: number; total: number }) => Promise<void> | void,
 	cachedProblemData?: any
 ): Promise<RunResponse> {
 	let customChecker: any = null;
@@ -670,6 +672,16 @@ async function runCodeInternal(
 		return { success: false, error: "Missing required fields" };
 	}
 
+	if (testcases.length === 0) {
+		return {
+			success: false,
+			error: "No test cases provided for execution",
+			passedCount: 0,
+			totalCount: 0,
+			testResults: []
+		};
+	}
+
 	let useRemote = false;
 	if (language === "python" && !checkLocalCommand("python3")) {
 		useRemote = true;
@@ -683,7 +695,7 @@ async function runCodeInternal(
 
 	if (useRemote) {
 		try {
-			onStatusUpdate?.("queued");
+			await onStatusUpdate?.("queued");
 			const stdins = testcases.map(tc => tc.inputText || "");
 			const executions = await runBatchWithJudge0(userCode, language, stdins, limits, onStatusUpdate);
 
@@ -692,7 +704,7 @@ async function runCodeInternal(
 			let maxRuntime = 0;
 			let maxMemory = 0;
 
-			onStatusUpdate?.("evaluating");
+			await onStatusUpdate?.("evaluating");
 			for (let i = 0; i < testcases.length; i++) {
 				const tc = testcases[i];
 				const inputData = tc.inputText || "";
@@ -766,8 +778,8 @@ async function runCodeInternal(
 			}
 
 			const passedCount = testResults.filter((r) => r.passed).length;
-			const totalCount = testResults.length;
-			const allPassed = passedCount === totalCount;
+			const totalCount = testcases.length;
+			const allPassed = totalCount > 0 && passedCount === totalCount;
 
 			if (allPassed) {
 				return { success: true, passedCount, totalCount, testResults, runtime: maxRuntime, memory: maxMemory };
@@ -840,7 +852,7 @@ async function runCodeInternal(
 
 		// Handle Compilation if required
 		if (isCompileRequired) {
-			onStatusUpdate?.("compiling");
+			await onStatusUpdate?.("compiling");
 			const compileResult = await new Promise<{ code: number | null; stderr: string }>((resolve) => {
 				exec(compileCommand, (err, stdout, stderr) => {
 					resolve({ code: err ? (err.code ?? 1) : 0, stderr: stderr || err?.message || "" });
@@ -863,7 +875,7 @@ async function runCodeInternal(
 		let maxMemory = 0;
 
 		for (let i = 0; i < testcases.length; i++) {
-			onStatusUpdate?.("running", { current: i + 1, total: testcases.length });
+			await onStatusUpdate?.("running", { current: i + 1, total: testcases.length });
 			const tc = testcases[i];
 			const inputData = tc.inputText || "";
 			const expectedOutput = cleanOutput(tc.outputText || "");
@@ -939,15 +951,36 @@ async function runCodeInternal(
 				};
 			}
 
-			// For local execution, stop on first failure to conserve host resource
-			if (!passed) {
+			// Cumulative execution safety guard: prevent serverless timeout if large suite takes too long
+			if (Date.now() - localStartTime > 25000 && i < testcases.length - 1) {
+				for (let j = i + 1; j < testcases.length; j++) {
+					const remTc = testcases[j];
+					testResults.push({
+						passed: false,
+						input: remTc.inputText || "",
+						expected: cleanOutput(remTc.outputText || ""),
+						actual: "Time Limit Exceeded (Skipped)",
+						error: "Time Limit Exceeded",
+						runtime: 0,
+						memory: 0
+					});
+				}
+				if (!firstFailure) {
+					firstFailure = {
+						index: i + 2,
+						input: testcases[i + 1]?.inputText || "",
+						expected: cleanOutput(testcases[i + 1]?.outputText || ""),
+						actual: "Time Limit Exceeded (Skipped)",
+						error: "Time Limit Exceeded"
+					};
+				}
 				break;
 			}
 		}
 
 		const passedCount = testResults.filter((r) => r.passed).length;
-		const totalCount = testResults.length;
-		const allPassed = passedCount === testcases.length;
+		const totalCount = testcases.length;
+		const allPassed = totalCount > 0 && passedCount === totalCount;
 
 		if (allPassed) {
 			return { success: true, passedCount, totalCount, testResults, runtime: maxRuntime, memory: maxMemory };
@@ -983,10 +1016,20 @@ export async function runCode(
 	language: SupportedLanguage,
 	testcases: any[],
 	isCustomInput?: boolean,
-	onStatusUpdate?: (stage: string, progress?: { current: number; total: number }) => void
+	onStatusUpdate?: (stage: string, progress?: { current: number; total: number }) => Promise<void> | void
 ): Promise<RunResponse> {
 	if (!userCode || !language || !testcases || !Array.isArray(testcases)) {
 		return { success: false, error: "Missing required fields" };
+	}
+
+	if (testcases.length === 0) {
+		return {
+			success: false,
+			error: "No test cases provided for execution",
+			passedCount: 0,
+			totalCount: 0,
+			testResults: []
+		};
 	}
 
 	let problemUpdatedAt = 0;
@@ -1021,7 +1064,7 @@ export async function runCode(
 				const cached = await redis.get(`judge:cache:${executionHash}`);
 				if (cached) {
 					const cachedResponse = JSON.parse(cached);
-					onStatusUpdate?.("completed");
+					await onStatusUpdate?.("completed");
 					return cachedResponse;
 				}
 			}

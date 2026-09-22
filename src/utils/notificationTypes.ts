@@ -39,6 +39,9 @@ export type BeastNotificationEvent =
 	| "THREAD_MENTION"
 	| "THREAD_LIKE"
 	| "THREAD_QUOTE"
+	// Chat & Messaging
+	| "CHAT_DIRECT_MESSAGE"
+	| "CHAT_MENTION"
 	// Account
 	| "ACC_PROFILE_UPDATED"
 	| "ACC_PASSWORD_CHANGED"

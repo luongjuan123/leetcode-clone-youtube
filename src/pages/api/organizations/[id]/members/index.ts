@@ -77,8 +77,8 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
 					username: profile.username || "",
 					avatarUrl: profile.avatarUrl || "",
 					email: profile.email || "",
-					problemsSolved: profile.problemsSolved || 0,
-					contestRating: profile.contestRating || 0,
+					problemsSolved: (profile.solvedProblems || []).length,
+					contestRating: profile.contestRating !== undefined ? profile.contestRating : 1500,
 				};
 			});
 

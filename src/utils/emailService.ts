@@ -32,19 +32,21 @@ export class EmailService {
 
 		const smtpHost = process.env.SMTP_HOST;
 		const smtpPort = parseInt(process.env.SMTP_PORT || "587");
-		const smtpUser = process.env.SMTP_USER;
-		const smtpPass = process.env.SMTP_PASS;
-		const smtpFrom = process.env.SMTP_FROM || '"BeastCode System" <system@beastcode.codes>';
+		const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER || process.env.MAIL_USER;
+		const smtpPass = process.env.SMTP_PASS || process.env.SMTP_PASSWORD || process.env.EMAIL_PASSWORD || process.env.MAIL_PASSWORD;
+		const smtpFrom = process.env.SMTP_FROM || process.env.EMAIL_FROM || (smtpUser ? `"BeastCode Platform" <${smtpUser}>` : '"BeastCode" <support@beastcode.codes>');
 
 		if (smtpHost && smtpUser && smtpPass) {
+			console.log(`[EMAIL DEBUG] Initializing SMTP Transporter for host=${smtpHost}:${smtpPort}, user=${smtpUser}`);
 			this.transporter = nodemailer.createTransport({
 				host: smtpHost,
 				port: smtpPort,
 				secure: smtpPort === 465,
 				auth: { user: smtpUser, pass: smtpPass }
 			});
-			this.mailFrom = '"BeastCode" <bomemebo6996@gmail.com>';
+			this.mailFrom = smtpFrom;
 		} else {
+			console.warn(`[EMAIL DEBUG] Missing SMTP credentials: host=${!!smtpHost}, user=${!!smtpUser}, pass=${!!smtpPass}`);
 			// fallback: Create a dummy test SMTP account (Ethereal Email) with a 3-second timeout
 			try {
 				const testAccountPromise = nodemailer.createTestAccount();
@@ -62,9 +64,9 @@ export class EmailService {
 					}
 				});
 				this.mailFrom = `"BeastCode Test Account" <${testAccount.user}>`;
-				console.log(`[EmailService] Configured Ethereal SMTP with user: ${testAccount.user}`);
+				console.log(`[EMAIL DEBUG] Configured fallback Ethereal SMTP with user: ${testAccount.user}`);
 			} catch (etherealErr: any) {
-				console.warn("[EmailService Warn] Ethereal SMTP setup failed or timed out:", etherealErr.message);
+				console.warn("[EMAIL DEBUG] Ethereal SMTP setup failed or timed out:", etherealErr.message);
 				this.transporter = null;
 				this.mailFrom = '"BeastCode Local Failsafe" <failsafe@beastcode.codes>';
 			}
@@ -114,153 +116,144 @@ export class EmailService {
 			return { processedCount: 0, durationMs: Date.now() - startTime, details: [] };
 		}
 
+		console.log(`[EMAIL DEBUG] Queue processing started for ${activeItems.length} task(s).`);
 		const { transporter, mailFrom } = await this.getTransporter();
 		const results: any[] = [];
 
-		for (const item of activeItems) {
-			const itemRef = db.collection("emailQueue").doc(item.id);
-			
-			// Mark item as processing to prevent race conditions
-			await itemRef.update({ status: "processing" });
+		await Promise.all(
+			activeItems.map(async (item) => {
+				const itemRef = db.collection("emailQueue").doc(item.id);
+				
+				// Mark item as processing to prevent race conditions
+				await itemRef.update({ status: "processing" });
 
-			const processStart = Date.now();
-			let success = false;
-			let errorMsg = "";
-			let testPreviewUrl = "";
+				const processStart = Date.now();
+				let success = false;
+				let errorMsg = "";
+				let testPreviewUrl = "";
+				let messageId = "";
 
-			if (transporter) {
-				try {
-					const info = await transporter.sendMail({
-						from: mailFrom,
-						to: item.toEmail,
-						subject: item.subject,
-						html: item.emailHtml
-					});
-
-					success = true;
-					// Ethereal SMTP helper for local dev preview
-					if (mailFrom.includes("ethereal.email")) {
-						testPreviewUrl = nodemailer.getTestMessageUrl(info) || "";
-					}
-				} catch (sendErr: any) {
-					errorMsg = sendErr.message || "Failed to send email via SMTP transporter.";
-					console.error(`[EmailService Queue Failure] Failed to send to ${item.toEmail}:`, sendErr);
-				}
-			} else {
-				errorMsg = "No SMTP transporter or test account available.";
-			}
-
-			// If SMTP fails, write to the classic 'mail' collection as a secondary failsafe trigger!
-			if (!success) {
-				try {
-					await db.collection("mail").add({
-						to: item.toEmail,
-						message: {
+				if (transporter) {
+					try {
+						console.log(`[EMAIL DEBUG] Queue processing item ${item.id} -> ${item.toEmail} (${item.subject})`);
+						const info = await transporter.sendMail({
+							from: mailFrom,
+							to: item.toEmail,
 							subject: item.subject,
 							html: item.emailHtml
-						},
-						queuedAt: Date.now(),
-						sourceQueueTaskId: item.id
-					});
-					console.log(`[EmailService Failsafe] Queued fallback document for user ${item.toEmail} in 'mail' collection.`);
-				} catch (mailFsErr: any) {
-					console.error("[EmailService Failsafe Error] Failed to write fallback mail document:", mailFsErr);
-				}
-			}
+						});
 
-			const duration = Date.now() - processStart;
+						success = true;
+						messageId = info.messageId || "";
+						console.log(`[EMAIL DEBUG] Provider accepted queue message ${item.id}. Message ID: ${messageId}, Response: ${info.response}`);
 
-			if (success) {
-				await itemRef.update({
-					status: "sent",
-					sentAt: Date.now(),
-					deliveryDurationMs: duration,
-					previewUrl: testPreviewUrl || null,
-					error: null
-				});
-
-				// Log to duplicates / limits collection
-				await logNotificationSent(item.toEmail, item.category, item.eventId);
-
-				// Record stats transactionally
-				const statsRef = db.collection("emailStats").doc("analytics");
-				try {
-					await db.runTransaction(async (transaction) => {
-						const docSnap = await transaction.get(statsRef);
-						if (!docSnap.exists) {
-							transaction.set(statsRef, {
-								sentCount: 1,
-								failedCount: 0,
-								totalDurationMs: duration,
-								averageDurationMs: duration
-							});
-						} else {
-							const data = docSnap.data() || {};
-							const newSent = (data.sentCount || 0) + 1;
-							const newTotalDuration = (data.totalDurationMs || 0) + duration;
-							transaction.update(statsRef, {
-								sentCount: newSent,
-								totalDurationMs: newTotalDuration,
-								averageDurationMs: Math.round(newTotalDuration / newSent)
-							});
+						if (mailFrom.includes("ethereal.email")) {
+							testPreviewUrl = nodemailer.getTestMessageUrl(info) || "";
 						}
-					});
-				} catch (statsErr) {
-					console.warn("[EmailService Stats Warn] Failed to update analytics:", statsErr);
+					} catch (sendErr: any) {
+						errorMsg = sendErr.message || "Failed to send email via SMTP transporter.";
+						console.error(`[EMAIL DEBUG] Provider rejected queue message ${item.id} (${item.toEmail}):`, sendErr);
+					}
+				} else {
+					errorMsg = "No SMTP transporter or test account available.";
+					console.error(`[EMAIL DEBUG] Queue task ${item.id} failed: No SMTP transporter available.`);
 				}
 
-				results.push({
-					id: item.id,
-					recipient: item.toEmail,
-					status: "sent",
-					previewUrl: testPreviewUrl || undefined
-				});
-			} else {
-				const nextCount = item.retryCount + 1;
-				// Exponential backoff: retry in 2^nextCount minutes
-				const backoffMinutes = Math.pow(2, nextCount);
-				const nextRetryAt = Date.now() + backoffMinutes * 60 * 1000;
+				const duration = Date.now() - processStart;
 
-				await itemRef.update({
-					status: "failed",
-					retryCount: nextCount,
-					nextRetryAt,
-					error: errorMsg
-				});
-
-				// Record failed stats transactionally
-				const statsRef = db.collection("emailStats").doc("analytics");
-				try {
-					await db.runTransaction(async (transaction) => {
-						const docSnap = await transaction.get(statsRef);
-						if (!docSnap.exists) {
-							transaction.set(statsRef, {
-								sentCount: 0,
-								failedCount: 1,
-								totalDurationMs: 0,
-								averageDurationMs: 0
-							});
-						} else {
-							const data = docSnap.data() || {};
-							transaction.update(statsRef, {
-								failedCount: (data.failedCount || 0) + 1
-							});
-						}
+				if (success) {
+					await itemRef.update({
+						status: "sent",
+						sentAt: Date.now(),
+						messageId,
+						deliveryDurationMs: duration,
+						previewUrl: testPreviewUrl || null,
+						error: null
 					});
-				} catch (statsErr) {
-					console.warn("[EmailService Stats Warn] Failed to update analytics for failure:", statsErr);
-				}
 
-				results.push({
-					id: item.id,
-					recipient: item.toEmail,
-					status: "failed",
-					retryCount: nextCount,
-					nextRetryAt: new Date(nextRetryAt).toLocaleString(),
-					error: errorMsg
-				});
-			}
-		}
+					// Log to duplicates / limits collection
+					await logNotificationSent(item.toEmail, item.category, item.eventId);
+
+					// Record stats transactionally
+					const statsRef = db.collection("emailStats").doc("analytics");
+					try {
+						await db.runTransaction(async (transaction) => {
+							const docSnap = await transaction.get(statsRef);
+							if (!docSnap.exists) {
+								transaction.set(statsRef, {
+									sentCount: 1,
+									failedCount: 0,
+									totalDurationMs: duration,
+									averageDurationMs: duration
+								});
+							} else {
+								const data = docSnap.data() || {};
+								const newSent = (data.sentCount || 0) + 1;
+								const newTotalDuration = (data.totalDurationMs || 0) + duration;
+								transaction.update(statsRef, {
+									sentCount: newSent,
+									totalDurationMs: newTotalDuration,
+									averageDurationMs: Math.round(newTotalDuration / newSent)
+								});
+							}
+						});
+					} catch (statsErr) {
+						console.warn("[EmailService Stats Warn] Failed to update analytics:", statsErr);
+					}
+
+					results.push({
+						id: item.id,
+						recipient: item.toEmail,
+						status: "sent",
+						messageId,
+						previewUrl: testPreviewUrl || undefined
+					});
+				} else {
+					const nextCount = item.retryCount + 1;
+					const backoffMinutes = Math.pow(2, nextCount);
+					const nextRetryAt = Date.now() + backoffMinutes * 60 * 1000;
+
+					await itemRef.update({
+						status: "failed",
+						retryCount: nextCount,
+						nextRetryAt,
+						error: errorMsg
+					});
+
+					// Record failed stats transactionally
+					const statsRef = db.collection("emailStats").doc("analytics");
+					try {
+						await db.runTransaction(async (transaction) => {
+							const docSnap = await transaction.get(statsRef);
+							if (!docSnap.exists) {
+								transaction.set(statsRef, {
+									sentCount: 0,
+									failedCount: 1,
+									totalDurationMs: 0,
+									averageDurationMs: 0
+								});
+							} else {
+								const data = docSnap.data() || {};
+								transaction.update(statsRef, {
+									failedCount: (data.failedCount || 0) + 1
+								});
+							}
+						});
+					} catch (statsErr) {
+						console.warn("[EmailService Stats Warn] Failed to update analytics for failure:", statsErr);
+					}
+
+					results.push({
+						id: item.id,
+						recipient: item.toEmail,
+						status: "failed",
+						retryCount: nextCount,
+						nextRetryAt: new Date(nextRetryAt).toLocaleString(),
+						error: errorMsg
+					});
+				}
+			})
+		);
 
 		return {
 			processedCount: activeItems.length,
@@ -270,59 +263,60 @@ export class EmailService {
 	}
 
 	/**
-	 * Sends an email directly and synchronously. Falls back to classic firestore 'mail' collection if SMTP is not ready.
+	 * Sends an email directly and synchronously via SMTP.
+	 * Returns rich delivery details object.
 	 */
-	public static async sendDirectEmail(to: string, subject: string, html: string): Promise<boolean> {
+	public static async sendDirectEmailResult(to: string, subject: string, html: string): Promise<{
+		success: boolean;
+		messageId?: string;
+		response?: string;
+		error?: string;
+	}> {
+		console.log(`[EMAIL DEBUG] Email service invoked for recipient: ${to}`);
+		console.log(`[EMAIL DEBUG] Subject: "${subject}"`);
+		console.log(`[EMAIL DEBUG] Template rendered successfully (HTML size: ${html.length} bytes)`);
+
 		const { transporter, mailFrom } = await this.getTransporter();
 		if (!transporter) {
-			console.warn("[EmailService Direct Send Warn] No transporter available. Writing fallback document to 'mail' collection.");
-			try {
-				const db = getAdminFirestore();
-				await db.collection("mail").add({
-					to,
-					message: {
-						subject,
-						html
-					},
-					queuedAt: Date.now()
-				});
-				return true;
-			} catch (err) {
-				console.error("[EmailService Direct Send Fallback Error] Failed to write fallback mail document:", err);
-				return false;
-			}
+			const errMsg = "SMTP transporter not available. Please verify server environment variables (SMTP_HOST, SMTP_USER, SMTP_PASS).";
+			console.error(`[EMAIL DEBUG] ${errMsg}`);
+			return { success: false, error: errMsg };
 		}
 
 		try {
+			console.log(`[EMAIL DEBUG] Attempting SMTP connection to send email to ${to}...`);
 			const info = await transporter.sendMail({
 				from: mailFrom,
 				to,
 				subject,
 				html
 			});
-			if (mailFrom.includes("ethereal.email")) {
-				console.log(`[EmailService] Sent direct Ethereal test message preview: ${nodemailer.getTestMessageUrl(info)}`);
-			} else {
-				console.log(`[EmailService] Sent direct email successfully to: ${to}`);
-			}
-			return true;
+
+			console.log(`[EMAIL DEBUG] Provider ACCEPTED message for ${to}!`);
+			console.log(`[EMAIL DEBUG] Provider Message ID: ${info.messageId}`);
+			console.log(`[EMAIL DEBUG] Provider Response: ${info.response}`);
+
+			return {
+				success: true,
+				messageId: info.messageId,
+				response: info.response
+			};
 		} catch (sendErr: any) {
-			console.error(`[EmailService Direct Send Error] SMTP failed to send to ${to}. Retrying via 'mail' fallback collection:`, sendErr.message);
-			try {
-				const db = getAdminFirestore();
-				await db.collection("mail").add({
-					to,
-					message: {
-						subject,
-						html
-					},
-					queuedAt: Date.now()
-				});
-				return true;
-			} catch (fallbackErr) {
-				console.error("[EmailService Direct Send Fallback Error] Failed to write fallback mail document after SMTP exception:", fallbackErr);
-				return false;
-			}
+			const errMsg = sendErr.message || "Unknown SMTP provider delivery failure.";
+			console.error(`[EMAIL DEBUG] Provider REJECTED message for ${to}:`, sendErr);
+			return {
+				success: false,
+				error: errMsg
+			};
 		}
+	}
+
+	/**
+	 * Sends an email directly and synchronously.
+	 * Returns true ONLY if SMTP provider accepted the message.
+	 */
+	public static async sendDirectEmail(to: string, subject: string, html: string): Promise<boolean> {
+		const res = await this.sendDirectEmailResult(to, subject, html);
+		return res.success;
 	}
 }

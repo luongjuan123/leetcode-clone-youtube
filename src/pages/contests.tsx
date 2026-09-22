@@ -15,7 +15,7 @@ import { authModalState } from "@/atoms/authModalAtom";
 import {
 	FaGlobe, FaLock, FaCalendarAlt, FaHourglassHalf, FaHistory,
 	FaCheckCircle, FaUserCheck, FaTrophy, FaChevronRight,
-	FaSpinner, FaArrowRight, FaUniversity
+	FaSpinner, FaArrowRight, FaUniversity, FaClock
 } from "react-icons/fa";
 
 interface ContestItem {
@@ -34,6 +34,36 @@ interface ContestItem {
 	university?: string;
 	leaderboardFreeze: number;
 }
+
+const LiveCountdown: React.FC<{ targetTime: number }> = ({ targetTime }) => {
+	const [timeLeft, setTimeLeft] = useState("");
+
+	useEffect(() => {
+		const updateTimer = () => {
+			const now = Date.now();
+			const diff = Math.max(0, targetTime - now);
+			if (diff <= 0) {
+				setTimeLeft("00:00:00");
+				return;
+			}
+			const hrs = Math.floor(diff / (1000 * 60 * 60));
+			const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+			const secs = Math.floor((diff % (1000 * 60)) / 1000);
+			setTimeLeft(
+				`${hrs.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
+			);
+		};
+		updateTimer();
+		const interval = setInterval(updateTimer, 1000);
+		return () => clearInterval(interval);
+	}, [targetTime]);
+
+	return (
+		<span className="font-mono font-bold text-xs px-2.5 py-1 rounded-lg bg-black/60 text-brand-orange border border-brand-orange/30 shadow-glow-sm inline-flex items-center gap-1">
+			<FaClock className="text-brand-orange" size={11} /> {timeLeft}
+		</span>
+	);
+};
 
 export default function ContestsPage() {
 	const hasMounted = useHasMounted();
@@ -327,7 +357,7 @@ export default function ContestsPage() {
 	const totalPastPages = Math.ceil(past.length / pastPageSize);
 
 	return (
-		<main className='bg-dark-layer-2 min-h-screen pb-16 font-sans text-white'>
+		<main className='min-h-screen pb-16 font-sans text-text-primary hero-gradient' style={{ background: "var(--bg-base)" }}>
 			<Topbar />
 
 			{/* Status Alert Banner */}
@@ -341,20 +371,33 @@ export default function ContestsPage() {
 				</div>
 			)}
 
-			<div className='max-w-[1000px] mx-auto px-4 pt-8'>
-				<div className='mb-8'>
-					<h1 className='text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-brand-orange to-yellow-500'>
-						BeastCode Contests
-					</h1>
-					<p className='text-sm text-gray-400 mt-1'>
-						Compete in real-time, test your algorithms, and build your community profile.
-					</p>
+			<div className='max-w-[1060px] mx-auto px-4 pt-10'>
+				{/* ── HERO BANNER ── */}
+				<div className='mb-10 bg-dark-layer-1 p-6 rounded-2xl border border-border-default shadow-lg glassmorphic flex flex-col md:flex-row items-start md:items-center justify-between gap-4'>
+					<div>
+						<div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold bg-brand-orange/10 text-brand-orange border border-brand-orange/20 mb-3">
+							<span className="w-2 h-2 rounded-full bg-brand-orange animate-pulse" />
+							Real-Time Coding Arenas
+						</div>
+						<h1 className='text-3xl font-extrabold text-text-primary glow-text'>
+							BeastCode Contests
+						</h1>
+						<p className='text-sm text-text-secondary mt-1 max-w-xl'>
+							Compete in real-time tournaments, solve timed algorithm challenges, and build your platform rating.
+						</p>
+					</div>
+					<div className="flex items-center gap-3">
+						<div className="stat-card flex flex-col items-center justify-center min-w-[110px] text-center">
+							<span className="text-xl font-black text-brand-orange">{contests.length}</span>
+							<span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Total Contests</span>
+						</div>
+					</div>
 				</div>
 
 				{loading ? (
 					<div className='flex flex-col justify-center items-center py-20 gap-4'>
 						<div className='w-12 h-12 border-4 border-brand-orange border-t-transparent rounded-full animate-spin'></div>
-						<div className='text-gray-400'>Loading Arena...</div>
+						<div className='text-text-muted font-semibold text-sm'>Loading Contests...</div>
 					</div>
 				) : (
 					<div className='space-y-10'>
@@ -370,18 +413,21 @@ export default function ContestsPage() {
 									{running.map((c) => {
 										const isReg = userRegistrations[c.id];
 										return (
-											<div key={c.id} className='rounded-2xl border overflow-hidden transition-all duration-300 hover:-translate-y-0.5' style={{ background: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}>
-												<div className='h-28 bg-cover bg-center relative' style={{ backgroundImage: `url(${c.banner})` }}>
-													<div className='absolute inset-0 bg-black/40 backdrop-blur-[1px]' />
+											<div key={c.id} className='rounded-2xl border overflow-hidden transition-all duration-300 hover:-translate-y-0.5 glass-card' style={{ background: "var(--bg-surface)", borderColor: "var(--border-default)" }}>
+												<div className='h-32 bg-cover bg-center relative' style={{ backgroundImage: `url(${c.banner})` }}>
+													<div className='absolute inset-0 bg-black/50 backdrop-blur-[1px]' />
+													<div className='absolute top-3 right-3'>
+														<LiveCountdown targetTime={c.endTime} />
+													</div>
 													<div className='absolute bottom-3 left-4 right-4'>
-														<span className='text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-emerald-600 text-white rounded'>
+														<span className='text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-emerald-600 text-white rounded shadow-md'>
 															{c.status === "frozen" ? "Frozen" : "Active"}
 														</span>
-														<h3 className='text-lg font-bold text-white mt-1 leading-tight'>{c.title}</h3>
+														<h3 className='text-lg font-bold text-white mt-1 leading-tight glow-text'>{c.title}</h3>
 													</div>
 												</div>
 												<div className='p-5 space-y-4'>
-													<p className='text-xs text-gray-400 line-clamp-2'>{c.description}</p>
+													<p className='text-xs text-text-secondary line-clamp-2'>{c.description}</p>
 													<div className='flex items-center justify-between text-xs font-semibold' style={{ color: "var(--text-secondary)" }}>
 														<span className='flex items-center gap-1.5'><FaHourglassHalf className='text-brand-orange' /> {c.duration} mins</span>
 														<span className='flex items-center gap-1.5 capitalize'>

@@ -119,11 +119,25 @@ const ContestProblemPage: React.FC = () => {
 				const dbTags = data.tags && Array.isArray(data.tags)
 					? data.tags
 					: [];
+				const rawEx: any[] = Array.isArray(data.examples) ? data.examples : [];
+				let publicSamples = rawEx.filter((ex) => Boolean(ex && ex.isSample));
+				if (publicSamples.length === 0 && rawEx.length > 0) {
+					publicSamples = rawEx.slice(0, 3).map((ex, idx) => ({ ...ex, isSample: true, id: ex.id || idx + 1 }));
+				}
+				const sanitizedSamples = publicSamples.map((s, idx) => ({
+					id: s.id || idx + 1,
+					inputText: s.inputText || "",
+					outputText: s.outputText || "",
+					explanation: s.explanation || "",
+					img: s.img || "",
+					isSample: true,
+				}));
+
 				probObj = {
 					id: problemDoc.id,
 					title: data.title || "",
 					problemStatement: data.problemStatement || "",
-					examples: data.examples || [],
+					examples: sanitizedSamples,
 					constraints: data.constraints || "",
 					starterCode: data.starterCode || "",
 					handlerFunction: data.handlerFunction || "",

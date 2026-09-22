@@ -26,16 +26,11 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
 		return res.status(400).json({ success: false, error: "Invalid path format" });
 	}
 
-	const category = parts[0]; // "appeals" or "evidence"
+	const category = parts[0]; // "appeals", "evidence", or "avatars"
 	const filename = parts.slice(1).join("/");
 
-	if (category !== "appeals" && category !== "evidence") {
+	if (category !== "appeals" && category !== "evidence" && category !== "avatars") {
 		return res.status(403).json({ success: false, error: "Access denied. Invalid category." });
-	}
-
-	const user = req.user;
-	if (!user) {
-		return res.status(401).json({ success: false, error: "Unauthorized" });
 	}
 
 	const db = getAdminFirestore();
@@ -43,39 +38,48 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
 	// 2. Perform Access Control Checks
 	let authorized = false;
 
-	if (user.role === "admin" || user.isAdmin) {
+	if (category === "avatars") {
 		authorized = true;
 	} else {
-		if (category === "appeals") {
-			// Find the appeal record and check if the user is the owner (targetUid)
-			const appealsSnap = await db.collection("moderationAppeals")
-				.where("targetUid", "==", user.uid)
-				.get();
+		const user = req.user;
+		if (!user) {
+			return res.status(401).json({ success: false, error: "Unauthorized" });
+		}
 
-			for (const doc of appealsSnap.docs) {
-				const data = doc.data();
-				const hasMatch = data.evidenceUrls?.some((url: string) => 
-					url.includes(filename) || url.includes(normalizedPath)
-				);
-				if (hasMatch) {
-					authorized = true;
-					break;
+		if (user.role === "admin" || user.isAdmin) {
+			authorized = true;
+		} else {
+			if (category === "appeals") {
+				// Find the appeal record and check if the user is the owner (targetUid)
+				const appealsSnap = await db.collection("moderationAppeals")
+					.where("targetUid", "==", user.uid)
+					.get();
+
+				for (const doc of appealsSnap.docs) {
+					const data = doc.data();
+					const hasMatch = data.evidenceUrls?.some((url: string) => 
+						url.includes(filename) || url.includes(normalizedPath)
+					);
+					if (hasMatch) {
+						authorized = true;
+						break;
+					}
 				}
-			}
-		} else if (category === "evidence") {
-			// Find the report record and check if the user is the reporter (reporterUid)
-			const reportsSnap = await db.collection("userReports")
-				.where("reporterUid", "==", user.uid)
-				.get();
+			} else if (category === "evidence") {
+				// Find the report record and check if the user is the reporter (reporterUid)
+				const reportsSnap = await db.collection("userReports")
+					.where("reporterUid", "==", user.uid)
+					.get();
 
-			for (const doc of reportsSnap.docs) {
-				const data = doc.data();
-				const hasMatch = data.evidenceUrls?.some((url: string) => 
-					url.includes(filename) || url.includes(normalizedPath)
-				);
-				if (hasMatch) {
-					authorized = true;
-					break;
+				for (const doc of reportsSnap.docs) {
+					const data = doc.data();
+					const hasMatch = data.evidenceUrls?.some((url: string) => 
+						url.includes(filename) || url.includes(normalizedPath)
+					);
+					if (hasMatch) {
+						authorized = true;
+						break;
+					}
 				}
 			}
 		}

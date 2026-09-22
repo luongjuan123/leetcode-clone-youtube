@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/router";
 import Topbar from "@/components/Topbar/Topbar";
 import { auth } from "@/firebase/firebase";
 import { useAuthState } from "react-firebase-hooks/auth";
+import BeastCodeSelect from "@/components/UI/BeastCodeSelect";
+import OrganizationAvatar from "@/components/Organizations/OrganizationAvatar";
 import {
 	FaGlobe,
 	FaLock,
@@ -44,7 +46,19 @@ import {
 	FaChevronRight,
 	FaCalendarCheck,
 	FaClipboardList,
+	FaCrown,
+	FaShieldAlt,
+	FaRegClock,
+	FaTimesCircle,
+	FaUndoAlt,
+	FaStar,
+	FaRegStar,
+	FaCamera,
+	FaBuilding,
+	FaUser,
+	FaComments,
 } from "react-icons/fa";
+import { OrgChatTab } from "@/components/Organizations/OrgChatTab";
 
 interface Organization {
 	id: string;
@@ -62,7 +76,10 @@ interface Organization {
 	memberCount: number;
 	contestCount: number;
 	problemCount: number;
+	avatar?: string;
 	avatarUrl: string;
+	avatarStoragePath?: string;
+	avatarUpdatedAt?: number;
 	bannerUrl: string;
 	verified: boolean;
 	contactEmail: string;
@@ -129,9 +146,24 @@ export default function OrgWorkspacePage() {
 	// Search / Filter states
 	const [memberSearch, setMemberSearch] = useState("");
 	const [memberRoleFilter, setMemberRoleFilter] = useState("");
+	const [memberSort, setMemberSort] = useState("newest"); // newest, oldest, rating, alphabetical, activity
 	const [problemSearch, setProblemSearch] = useState("");
 	const [contestSearch, setContestSearch] = useState("");
 	const [fileSearch, setFileSearch] = useState("");
+
+	// V2 Organization features states
+	const [inviteSearchInput, setInviteSearchInput] = useState("");
+	const [inviteSearchResults, setInviteSearchResults] = useState<any[]>([]);
+	const [inviteSearchLoading, setInviteSearchLoading] = useState(false);
+	const [selectedInviteUser, setSelectedInviteUser] = useState<any | null>(null);
+	const [inviteExpiresDays, setInviteExpiresDays] = useState(7);
+	const [invitationsList, setInvitationsList] = useState<any[]>([]);
+	const [inviteLinksList, setInviteLinksList] = useState<any[]>([]);
+
+	const [linkRole, setLinkRole] = useState("member");
+	const [linkMaxUses, setLinkMaxUses] = useState(-1);
+	const [linkExpiresDays, setLinkExpiresDays] = useState(-1);
+	const [linkPassword, setLinkPassword] = useState("");
 
 	// Slider Over Drawer State for Member Profile
 	const [selectedMember, setSelectedMember] = useState<any | null>(null);
@@ -195,6 +227,140 @@ export default function OrgWorkspacePage() {
 
 	const [actionLoading, setActionLoading] = useState(false);
 
+	const avatarInputRef = useRef<HTMLInputElement>(null);
+	const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+	const [avatarBase64, setAvatarBase64] = useState<string | null>(null);
+
+	const compressImage = (base64Str: string): Promise<string> => {
+		return new Promise((resolve) => {
+			const img = new Image();
+			img.src = base64Str;
+			img.onload = () => {
+				const canvas = document.createElement("canvas");
+				let width = img.width;
+				let height = img.height;
+				const maxDim = 512;
+				if (width > maxDim || height > maxDim) {
+					if (width > height) {
+						height = Math.round((height * maxDim) / width);
+						width = maxDim;
+					} else {
+						width = Math.round((width * maxDim) / height);
+						height = maxDim;
+					}
+				}
+				canvas.width = width;
+				canvas.height = height;
+				const ctx = canvas.getContext("2d");
+				if (ctx) {
+					ctx.drawImage(img, 0, 0, width, height);
+					resolve(canvas.toDataURL("image/jpeg", 0.85));
+				} else {
+					resolve(base64Str);
+				}
+			};
+			img.onerror = () => {
+				resolve(base64Str);
+			};
+		});
+	};
+
+	const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+		const file = e.target.files?.[0];
+		if (!file) return;
+
+		const allowedTypes = ["image/png", "image/jpg", "image/jpeg", "image/webp"];
+		if (!allowedTypes.includes(file.type)) {
+			triggerFeedback("error", "Only PNG, JPG, JPEG, and WEBP formats are supported.");
+			return;
+		}
+
+		if (file.size > 5 * 1024 * 1024) {
+			triggerFeedback("error", "File size must be less than 5MB.");
+			return;
+		}
+
+		const reader = new FileReader();
+		reader.onloadend = async () => {
+			const base64String = reader.result as string;
+			try {
+				const compressed = await compressImage(base64String);
+				setAvatarPreview(compressed);
+				setAvatarBase64(compressed);
+			} catch (err) {
+				setAvatarPreview(base64String);
+				setAvatarBase64(base64String);
+			}
+		};
+		reader.readAsDataURL(file);
+	};
+
+	const handleUploadAvatar = async () => {
+		if (!user || !org || !avatarBase64) return;
+		setActionLoading(true);
+		try {
+			const idToken = await user.getIdToken();
+			const res = await fetch(`/api/organizations/${org.id}/avatar`, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${idToken}`,
+				},
+				body: JSON.stringify({ avatarBase64 }),
+			});
+			const data = await res.json();
+			if (data.success) {
+				triggerFeedback("success", "Organization avatar updated successfully.");
+				setAvatarBase64(null);
+				setOrg({
+					...org,
+					avatar: data.avatarUrl,
+					avatarUrl: data.avatarUrl,
+				});
+				fetchOrgDetails();
+			} else {
+				triggerFeedback("error", data.error || "Failed to upload avatar.");
+			}
+		} catch (err: any) {
+			triggerFeedback("error", err.message);
+		} finally {
+			setActionLoading(false);
+		}
+	};
+
+	const handleRemoveAvatar = async () => {
+		if (!user || !org) return;
+		if (!confirm("Are you sure you want to remove the organization avatar?")) return;
+		setActionLoading(true);
+		try {
+			const idToken = await user.getIdToken();
+			const res = await fetch(`/api/organizations/${org.id}/avatar`, {
+				method: "DELETE",
+				headers: {
+					Authorization: `Bearer ${idToken}`,
+				},
+			});
+			const data = await res.json();
+			if (data.success) {
+				triggerFeedback("success", "Organization avatar removed successfully.");
+				setAvatarPreview(null);
+				setAvatarBase64(null);
+				setOrg({
+					...org,
+					avatar: "",
+					avatarUrl: "",
+				});
+				fetchOrgDetails();
+			} else {
+				triggerFeedback("error", data.error || "Failed to remove avatar.");
+			}
+		} catch (err: any) {
+			triggerFeedback("error", err.message);
+		} finally {
+			setActionLoading(false);
+		}
+	};
+
 	const triggerFeedback = (type: "success" | "error", message: any) => {
 		const msgStr = typeof message === "object" && message !== null
 			? (message.message || message.error || JSON.stringify(message))
@@ -223,6 +389,11 @@ export default function OrgWorkspacePage() {
 				setOrg(data.organization);
 				setUserRole(data.userRole);
 				setErrorMsg("");
+				if (data.organization.avatarUrl || data.organization.avatar) {
+					setAvatarPreview(data.organization.avatarUrl || data.organization.avatar);
+				} else {
+					setAvatarPreview(null);
+				}
 			} else {
 				setOrg(null);
 				setUserRole(null);
@@ -255,6 +426,16 @@ export default function OrgWorkspacePage() {
 				const res = await fetch(`/api/organizations/${org.id}/members`, { headers });
 				const data = await res.json();
 				if (data.success) setMembers(data.members || []);
+
+				if (tab === "members" && hasPerm("organization.inviteMember")) {
+					const invRes = await fetch(`/api/organizations/${org.id}/invitations`, { headers });
+					const invData = await invRes.json();
+					if (invData.success) setInvitationsList(invData.invitations || []);
+
+					const linkRes = await fetch(`/api/organizations/${org.id}/invite-links`, { headers });
+					const linkData = await linkRes.json();
+					if (linkData.success) setInviteLinksList(linkData.inviteLinks || []);
+				}
 			}
 			if (tab === "contests" || tab === "overview") {
 				const res = await fetch(`/api/organizations/${org.id}/contests`, { headers });
@@ -480,30 +661,202 @@ export default function OrgWorkspacePage() {
 		}
 	};
 
+	const handleInviteSearch = async (val: string) => {
+		setInviteSearchInput(val);
+		if (!val.trim()) {
+			setInviteSearchResults([]);
+			return;
+		}
+		setInviteSearchLoading(true);
+		try {
+			const idToken = await user?.getIdToken();
+			const res = await fetch(`/api/organizations/${org?.id}/search-invite-users?q=${encodeURIComponent(val)}`, {
+				headers: { Authorization: `Bearer ${idToken}` }
+			});
+			const data = await res.json();
+			if (data.success) {
+				setInviteSearchResults(data.users || []);
+			}
+		} catch (err) {
+			console.error("Search users error:", err);
+		} finally {
+			setInviteSearchLoading(false);
+		}
+	};
+
 	const handleInviteMember = async (e: React.FormEvent) => {
 		e.preventDefault();
 		if (!user || !org) return;
 		setActionLoading(true);
 		try {
 			const idToken = await user.getIdToken();
+			const body: any = {
+				roleId: inviteRole,
+				expiresDays: inviteExpiresDays,
+			};
+
+			if (selectedInviteUser) {
+				body.targetUid = selectedInviteUser.uid;
+			} else if (inviteSearchInput.includes("@")) {
+				body.email = inviteSearchInput.trim();
+			} else {
+				body.username = inviteSearchInput.trim();
+			}
+
 			const res = await fetch(`/api/organizations/${org.id}/invitations`, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
 					Authorization: `Bearer ${idToken}`,
 				},
+				body: JSON.stringify(body),
+			});
+			const data = await res.json();
+			if (data.success) {
+				triggerFeedback("success", "Invitation sent successfully!");
+				setInviteSearchInput("");
+				setSelectedInviteUser(null);
+				fetchTabContent();
+			} else {
+				triggerFeedback("error", data.error || "Failed to invite member.");
+			}
+		} catch (err: any) {
+			triggerFeedback("error", err.message);
+		} finally {
+			setActionLoading(false);
+		}
+	};
+
+	const handleCancelInvite = async (inviteId: string) => {
+		if (!user || !org) return;
+		setActionLoading(true);
+		try {
+			const idToken = await user.getIdToken();
+			const res = await fetch(`/api/organizations/${org.id}/invitations/${inviteId}`, {
+				method: "DELETE",
+				headers: {
+					Authorization: `Bearer ${idToken}`,
+				},
+			});
+			const data = await res.json();
+			if (data.success) {
+				triggerFeedback("success", "Invitation cancelled.");
+				fetchTabContent();
+			} else {
+				triggerFeedback("error", data.error || "Failed to cancel invitation.");
+			}
+		} catch (err: any) {
+			triggerFeedback("error", err.message);
+		} finally {
+			setActionLoading(false);
+		}
+	};
+
+	const handleResendInvite = async (inviteId: string) => {
+		if (!user || !org) return;
+		setActionLoading(true);
+		try {
+			const idToken = await user.getIdToken();
+			const res = await fetch(`/api/organizations/${org.id}/invitations/${inviteId}`, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${idToken}`,
+				},
+				body: JSON.stringify({ action: "resend" }),
+			});
+			const data = await res.json();
+			if (data.success) {
+				triggerFeedback("success", "Invitation resent successfully.");
+				fetchTabContent();
+			} else {
+				triggerFeedback("error", data.error || "Failed to resend invitation.");
+			}
+		} catch (err: any) {
+			triggerFeedback("error", err.message);
+		} finally {
+			setActionLoading(false);
+		}
+	};
+
+	const handleExpireInvite = async (inviteId: string) => {
+		if (!user || !org) return;
+		setActionLoading(true);
+		try {
+			const idToken = await user.getIdToken();
+			const res = await fetch(`/api/organizations/${org.id}/invitations/${inviteId}`, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${idToken}`,
+				},
+				body: JSON.stringify({ action: "expire" }),
+			});
+			const data = await res.json();
+			if (data.success) {
+				triggerFeedback("success", "Invitation force-expired.");
+				fetchTabContent();
+			} else {
+				triggerFeedback("error", data.error || "Failed to expire invitation.");
+			}
+		} catch (err: any) {
+			triggerFeedback("error", err.message);
+		} finally {
+			setActionLoading(false);
+		}
+	};
+
+	const handleCreateInviteLink = async (e: React.FormEvent) => {
+		e.preventDefault();
+		if (!user || !org) return;
+		setActionLoading(true);
+		try {
+			const idToken = await user.getIdToken();
+			const res = await fetch(`/api/organizations/${org.id}/invite-links`, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${idToken}`,
+				},
 				body: JSON.stringify({
-					email: inviteIdentifier,
-					roleId: inviteRole,
+					roleId: linkRole,
+					maxUses: linkMaxUses,
+					expiresDays: linkExpiresDays,
+					password: linkPassword,
 				}),
 			});
 			const data = await res.json();
 			if (data.success) {
-				triggerFeedback("success", "Invitation sent to target email!");
-				setInviteIdentifier("");
+				triggerFeedback("success", "Invite link created successfully!");
+				setLinkPassword("");
 				fetchTabContent();
 			} else {
-				triggerFeedback("error", data.error || "Failed to invite member.");
+				triggerFeedback("error", data.error || "Failed to generate link.");
+			}
+		} catch (err: any) {
+			triggerFeedback("error", err.message);
+		} finally {
+			setActionLoading(false);
+		}
+	};
+
+	const handleRevokeInviteLink = async (token: string) => {
+		if (!user || !org) return;
+		setActionLoading(true);
+		try {
+			const idToken = await user.getIdToken();
+			const res = await fetch(`/api/organizations/${org.id}/invite-links/${token}`, {
+				method: "DELETE",
+				headers: {
+					Authorization: `Bearer ${idToken}`,
+				},
+			});
+			const data = await res.json();
+			if (data.success) {
+				triggerFeedback("success", "Invite link revoked.");
+				fetchTabContent();
+			} else {
+				triggerFeedback("error", data.error || "Failed to revoke link.");
 			}
 		} catch (err: any) {
 			triggerFeedback("error", err.message);
@@ -1452,9 +1805,23 @@ export default function OrgWorkspacePage() {
 	// Client-side Filters
 	const filteredMembers = members.filter((m) => {
 		const searchVal = memberSearch.toLowerCase();
-		const nameMatch = m.displayName?.toLowerCase().includes(searchVal) || m.uid?.toLowerCase().includes(searchVal);
+		const nameMatch = m.displayName?.toLowerCase().includes(searchVal) || m.uid?.toLowerCase().includes(searchVal) || m.username?.toLowerCase().includes(searchVal);
 		const roleMatch = !memberRoleFilter || m.role === memberRoleFilter;
 		return nameMatch && roleMatch;
+	});
+
+	// Apply Member Sorting
+	filteredMembers.sort((a, b) => {
+		if (memberSort === "newest") return (b.joinedAt || 0) - (a.joinedAt || 0);
+		if (memberSort === "oldest") return (a.joinedAt || 0) - (b.joinedAt || 0);
+		if (memberSort === "rating") return (b.contestRating || 1500) - (a.contestRating || 1500);
+		if (memberSort === "activity") return (b.lastActive || 0) - (a.lastActive || 0);
+		if (memberSort === "alphabetical") {
+			const nameA = (a.displayName || "").toLowerCase();
+			const nameB = (b.displayName || "").toLowerCase();
+			return nameA.localeCompare(nameB);
+		}
+		return 0;
 	});
 
 	const filteredProblems = problems.filter((p) =>
@@ -1470,7 +1837,7 @@ export default function OrgWorkspacePage() {
 	);
 
 	return (
-		<main className="bg-dark-layer-2 min-h-screen pb-16 font-sans text-white">
+		<main className="min-h-screen pb-16 font-sans text-text-primary hero-gradient" style={{ background: "var(--bg-base)" }}>
 			<Topbar />
 
 			{/* Status Feedback Toast */}
@@ -1487,33 +1854,33 @@ export default function OrgWorkspacePage() {
 			)}
 
 			{/* Org Banner & Header */}
-			<div className="relative border-b border-gray-850">
+			<div className="relative border-b border-border-default">
 				<div
 					className="h-48 md:h-64 bg-cover bg-center"
 					style={{
 						backgroundImage: org.bannerUrl
 							? `url(${org.bannerUrl})`
-							: `linear-gradient(135deg, #0d0d0f 0%, #ff8c0015 100%)`,
+							: `linear-gradient(135deg, rgba(249, 115, 22, 0.2) 0%, rgba(15, 23, 42, 0.95) 100%)`,
 					}}
 				>
-					<div className="absolute inset-0 bg-black/55" />
+					<div className="absolute inset-0 bg-black/60 backdrop-blur-[1px]" />
 				</div>
 
-				<div className="max-w-[1200px] mx-auto px-6 relative z-10 -mt-20 flex flex-col md:flex-row items-start md:items-end justify-between gap-6 pb-6">
+				<div className="max-w-[1240px] mx-auto px-6 relative z-10 -mt-20 flex flex-col md:flex-row items-start md:items-end justify-between gap-6 pb-6">
 					<div className="flex flex-col md:flex-row items-start md:items-end gap-5">
-						<div className="w-28 h-28 md:w-36 md:h-36 rounded-2xl border-4 border-dark-layer-2 bg-dark-surface overflow-hidden shrink-0 flex items-center justify-center shadow-lg">
-							{org.avatarUrl ? (
-								<img src={org.avatarUrl} alt={org.name} className="w-full h-full object-cover" />
-							) : (
-								<span className="text-4xl font-extrabold text-brand-orange">
-									{org.name.slice(0, 2).toUpperCase()}
-								</span>
-							)}
-						</div>
+						<OrganizationAvatar
+							organization={org}
+							size="2xl"
+							className="border-4 border-border-default shadow-xl relative group transition-transform duration-300 group-hover:scale-[1.03]"
+						/>
 						<div className="mb-1">
 							<div className="flex items-center gap-2 flex-wrap">
-								<h1 className="text-2xl md:text-3xl font-extrabold text-white">{org.name}</h1>
-								{org.verified && <FaCheckCircle className="text-blue-400" size={16} />}
+								<h1 className="text-2xl md:text-3xl font-black text-text-primary glow-text">{org.name}</h1>
+								{org.verified && (
+									<span className="text-[10px] uppercase font-extrabold tracking-wider px-2.5 py-0.5 rounded-full bg-brand-orange/10 text-brand-orange border border-brand-orange/30 flex items-center gap-1">
+										<FaCheckCircle size={10} /> Verified Workspace
+									</span>
+								)}
 								<span className="text-[9px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded bg-gray-850 text-gray-400 border border-gray-800 flex items-center gap-1.5">
 									{org.visibility === "public" ? <FaGlobe size={8} /> : <FaLock size={8} />}
 									{org.visibility}
@@ -1540,7 +1907,13 @@ export default function OrgWorkspacePage() {
 									</a>
 								)}
 								<span className="flex items-center gap-1.5">
-									<FaUsers size={12} className="text-brand-orange" /> {org.memberCount} Members
+									<FaUsers size={12} className="text-brand-orange" /> {org.memberCount || 0} Members
+								</span>
+								<span className="flex items-center gap-1.5">
+									<FaTrophy size={12} className="text-yellow-500" /> {org.contestCount || 0} Contests
+								</span>
+								<span className="flex items-center gap-1.5">
+									<FaQuestionCircle size={12} className="text-emerald-500" /> {org.problemCount || 0} Problems
 								</span>
 							</div>
 						</div>
@@ -1596,6 +1969,7 @@ export default function OrgWorkspacePage() {
 
 					{[
 						{ id: "overview", label: "Overview", icon: <FaGlobe /> },
+						{ id: "chat", label: "Realtime Chat", icon: <FaComments /> },
 						{ id: "members", label: "Members", icon: <FaUsers /> },
 						{ id: "teams", label: "Competitor Teams", icon: <FaUsers /> },
 						{ id: "contests", label: "Contests", icon: <FaTrophy /> },
@@ -1639,6 +2013,13 @@ export default function OrgWorkspacePage() {
 				{/* Panel Content Area */}
 				<section className="flex-1 min-w-0 bg-dark-surface border border-gray-850 rounded-2xl p-6 shadow-sm">
 					
+					{/* REALTIME CHAT TAB */}
+					{tab === "chat" && (
+						<div className="animate-fade-in">
+							<OrgChatTab org={org as any} user={user} userRole={userRole} />
+						</div>
+					)}
+
 					{/* OVERVIEW TAB */}
 					{tab === "overview" && (
 						<div className="space-y-8 animate-fade-in">
@@ -1689,152 +2070,504 @@ export default function OrgWorkspacePage() {
 
 					{/* MEMBERS TAB */}
 					{tab === "members" && (
-						<div className="space-y-6 animate-fade-in">
-							<div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-								<h2 className="text-base font-bold text-white">Member Directory</h2>
-								{hasPerm("organization.inviteMember") && (
-									<form onSubmit={handleInviteMember} className="flex gap-2 w-full md:w-auto">
-										<input
-											type="email"
-											placeholder="Invite email..."
-											value={inviteIdentifier}
-											onChange={(e) => setInviteIdentifier(e.target.value)}
-											className="bg-dark-layer-2 border border-gray-850 text-xs rounded-xl px-3 py-2 outline-none flex-1 md:w-52 focus:border-brand-orange"
-											required
-										/>
-										<select
-											value={inviteRole}
-											onChange={(e) => setInviteRole(e.target.value)}
-											className="bg-dark-layer-2 border border-gray-850 text-xs rounded-xl px-3 py-2 text-white outline-none cursor-pointer"
-										>
-											<option value="member">Member</option>
-											<option value="moderator">Moderator</option>
-											<option value="recruiter">Recruiter</option>
-											<option value="contest_manager">Contest Mgr</option>
-											<option value="problem_manager">Problem Mgr</option>
-										</select>
-										<button
-											type="submit"
-											disabled={actionLoading}
-											className="bg-brand-orange hover:bg-brand-orange-s text-bg-base px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0"
-											style={{ color: "var(--bg-base)" }}
-										>
-											<FaPlus /> Add
-										</button>
-									</form>
-								)}
-							</div>
+						<div className="space-y-10 animate-fade-in">
+							{/* Member Directory */}
+							<div className="space-y-4">
+								<div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+									<div>
+										<h2 className="text-lg font-black text-white">Member Directory</h2>
+										<p className="text-xs text-gray-500">Manage, filter, and review all members currently registered in this workspace.</p>
+									</div>
+									<div className="text-xs font-semibold text-gray-400 bg-dark-layer-1 px-3 py-1.5 rounded-lg border border-gray-850">
+										Total: {members.length} members
+									</div>
+								</div>
 
-							{/* Toolbar Filters */}
-							<div className="flex gap-3 bg-dark-layer-2/50 p-4 border border-gray-850 rounded-xl items-center flex-wrap">
-								<div className="relative flex-1 min-w-[200px]">
-									<span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">
-										<FaSearch size={11} />
-									</span>
-									<input
-										type="text"
-										placeholder="Search directory..."
-										value={memberSearch}
-										onChange={(e) => setMemberSearch(e.target.value)}
-										className="bg-dark-layer-2 border border-gray-800 text-xs rounded-lg pl-8 pr-3 py-1.5 w-full outline-none focus:border-brand-orange"
+								{/* Toolbar Filters & Sorters */}
+								<div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-dark-layer-2/50 p-4 border border-gray-850 rounded-2xl">
+									<div className="relative">
+										<span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-500 pointer-events-none">
+											<FaSearch size={12} />
+										</span>
+										<input
+											type="text"
+											placeholder="Search by name, UID, username..."
+											value={memberSearch}
+											onChange={(e) => setMemberSearch(e.target.value)}
+											className="w-full bg-dark-layer-2 border border-gray-850 text-xs rounded-xl pl-9 pr-4 py-2.5 outline-none focus:border-brand-orange text-white"
+										/>
+									</div>
+
+									<BeastCodeSelect
+										options={[
+											{ value: "", label: "All Roles" },
+											{ value: "owner", label: "Owner" },
+											{ value: "co-owner", label: "Co-Owner" },
+											{ value: "admin", label: "Admin" },
+											{ value: "coach", label: "Coach" },
+											{ value: "instructor", label: "Instructor" },
+											{ value: "ta", label: "Teaching Assistant" },
+											{ value: "moderator", label: "Moderator" },
+											{ value: "contest_manager", label: "Contest Manager" },
+											{ value: "problem_manager", label: "Problem Manager" },
+											{ value: "recruiter", label: "Recruiter" },
+											{ value: "member", label: "Member" }
+										]}
+										value={memberRoleFilter}
+										onChange={(val) => setMemberRoleFilter(val)}
+										size="sm"
+										className="w-48"
+									/>
+
+									<BeastCodeSelect
+										options={[
+											{ value: "newest", label: "Sort by: Newest Joined" },
+											{ value: "oldest", label: "Sort by: Oldest Joined" },
+											{ value: "rating", label: "Sort by: Highest Rating" },
+											{ value: "alphabetical", label: "Sort by: Alphabetical (A-Z)" },
+											{ value: "activity", label: "Sort by: Last Active" }
+										]}
+										value={memberSort}
+										onChange={(val) => setMemberSort(val)}
+										size="sm"
+										className="w-56"
 									/>
 								</div>
-								<select
-									value={memberRoleFilter}
-									onChange={(e) => setMemberRoleFilter(e.target.value)}
-									className="bg-dark-layer-2 border border-gray-800 text-xs rounded-lg px-3 py-1.5 text-gray-400 outline-none cursor-pointer"
-								>
-									<option value="">All Roles</option>
-									<option value="owner">Owner</option>
-									<option value="admin">Admin</option>
-									<option value="moderator">Moderator</option>
-									<option value="member">Member</option>
-								</select>
-							</div>
 
-							<div className="overflow-x-auto border border-gray-850 rounded-xl">
-								<table className="w-full text-left text-xs text-gray-300">
-									<thead>
-										<tr className="bg-dark-layer-1 border-b border-gray-850">
-											<th className="px-5 py-3">Member Details</th>
-											<th className="px-5 py-3">Workspace Role</th>
-											<th className="px-5 py-3">Problems Solved</th>
-											<th className="px-5 py-3">Rating</th>
-											{hasPerm("organization.assignRole") && <th className="px-5 py-3 text-right">Settings</th>}
-										</tr>
-									</thead>
-									<tbody className="divide-y divide-gray-850">
-										{filteredMembers.map((m) => (
-											<tr
-												key={m.uid}
-												className="hover:bg-dark-fill-3 transition cursor-pointer"
-												onClick={() => {
-													setSelectedMember(m);
-													setDrawerTab("overview");
-												}}
-											>
-												<td className="px-5 py-3 flex items-center gap-3">
-													<div className="w-8 h-8 rounded-full bg-dark-layer-2 shrink-0 overflow-hidden flex items-center justify-center border border-gray-700">
-														{m.avatarUrl ? (
-															<img src={m.avatarUrl} alt={m.displayName} className="w-full h-full object-cover" />
-														) : (
-															<span className="text-[10px] text-gray-400 font-bold">
-																{m.displayName?.slice(0, 2).toUpperCase() || "MB"}
-															</span>
-														)}
-													</div>
-													<div className="min-w-0">
-														<p className="font-bold text-white truncate max-w-[150px]">
-															{m.displayName || "Workspace Member"}
-														</p>
-														<p className="text-[9px] text-gray-500 font-mono mt-0.5 truncate max-w-[120px]" title={m.uid}>
-															UID: {m.uid}
-														</p>
-													</div>
-												</td>
-												<td className="px-5 py-3 capitalize text-gray-400 font-semibold">{m.role}</td>
-												<td className="px-5 py-3 font-mono">{m.problemsSolved ?? 0}</td>
-												<td className="px-5 py-3 font-mono text-yellow-500">{m.contestRating ?? 1500}</td>
-												{hasPerm("organization.assignRole") && (
-													<td className="px-5 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-														<div className="flex justify-end items-center gap-2">
-															{m.role !== "owner" && (
-																<select
-																	value={m.role}
-																	onChange={(e) => handleUpdateMemberRole(m.uid, e.target.value)}
-																	className="bg-dark-layer-2 border border-gray-800 text-[10px] rounded-lg px-2 py-1 outline-none text-white cursor-pointer"
-																>
-																	<option value="member">Member</option>
-																	<option value="moderator">Moderator</option>
-																	<option value="recruiter">Recruiter</option>
-																	<option value="contest_manager">Contest Mgr</option>
-																	<option value="problem_manager">Problem Mgr</option>
-																	<option value="admin">Admin</option>
-																</select>
-															)}
-															{m.role !== "owner" && m.uid !== user?.uid && (
-																<button
-																	onClick={() => handleRemoveMember(m.uid)}
-																	className="text-red-500 hover:text-red-400 p-1.5 transition hover:bg-dark-fill-2 rounded cursor-pointer"
-																	title="Remove member"
-																>
-																	<FaUserMinus size={12} />
-																</button>
+								{/* Directory Table */}
+								<div className="overflow-x-auto border border-gray-850 rounded-2xl bg-dark-surface">
+									<table className="w-full text-left text-xs text-gray-300">
+										<thead>
+											<tr className="bg-dark-layer-1 border-b border-gray-850 text-gray-400 font-bold">
+												<th className="px-5 py-4">User</th>
+												<th className="px-5 py-4">Workspace Role</th>
+												<th className="px-5 py-4">Problems Solved</th>
+												<th className="px-5 py-4">Contest Rating</th>
+												<th className="px-5 py-4">Joined Date</th>
+												{hasPerm("organization.assignRole") && <th className="px-5 py-4 text-right">Settings</th>}
+											</tr>
+										</thead>
+										<tbody className="divide-y divide-gray-850/60">
+											{filteredMembers.map((m) => (
+												<tr
+													key={m.uid}
+													className="hover:bg-dark-layer-1/50 transition cursor-pointer"
+													onClick={() => {
+														setSelectedMember(m);
+														setDrawerTab("overview");
+													}}
+												>
+													<td className="px-5 py-4 flex items-center gap-3">
+														<div className="w-9 h-9 rounded-xl bg-dark-layer-2 shrink-0 overflow-hidden flex items-center justify-center border border-gray-800">
+															{m.avatarUrl || m.avatar ? (
+																<img src={m.avatarUrl || m.avatar} alt={m.displayName} className="w-full h-full object-cover" />
+															) : (
+																<span className="text-xs font-bold text-gray-400">
+																	{m.displayName?.slice(0, 2).toUpperCase() || "MB"}
+																</span>
 															)}
 														</div>
+														<div className="min-w-0">
+															<p className="font-bold text-white truncate max-w-[160px]">
+																{m.displayName || "Workspace Member"}
+															</p>
+															<p className="text-[10px] text-gray-500 font-mono truncate max-w-[140px]">
+																@{m.username || m.uid?.substring(0, 10)}
+															</p>
+														</div>
 													</td>
-												)}
-											</tr>
-										))}
+													<td className="px-5 py-4">
+														<span className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded border ${
+															m.role === "owner"
+																? "bg-red-500/10 text-red-400 border-red-500/20"
+																: m.role === "admin"
+																? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20"
+																: "bg-gray-800 text-gray-400 border-gray-800/80"
+														}`}>
+															{m.role}
+														</span>
+													</td>
+													<td className="px-5 py-4 font-mono font-bold text-gray-400">{m.problemsSolved ?? 0}</td>
+													<td className="px-5 py-4 font-mono font-bold text-yellow-500">{m.contestRating ?? 1500}</td>
+													<td className="px-5 py-4 text-gray-500">
+														{m.joinedAt ? new Date(m.joinedAt).toLocaleDateString() : "N/A"}
+													</td>
+													{hasPerm("organization.assignRole") && (
+														<td className="px-5 py-4 text-right" onClick={(e) => e.stopPropagation()}>
+															<div className="flex justify-end items-center gap-2">
+																{m.role !== "owner" && (
+																	<BeastCodeSelect
+																		options={[
+																			{ value: "member", label: "Member" },
+																			{ value: "moderator", label: "Moderator" },
+																			{ value: "recruiter", label: "Recruiter" },
+																			{ value: "contest_manager", label: "Contest Mgr" },
+																			{ value: "problem_manager", label: "Problem Mgr" },
+																			{ value: "admin", label: "Admin" }
+																		]}
+																		value={m.role}
+																		onChange={(val) => handleUpdateMemberRole(m.uid, val)}
+																		size="sm"
+																		className="w-32"
+																	/>
+																)}
+																{m.role !== "owner" && m.uid !== user?.uid && (
+																	<button
+																		onClick={() => handleRemoveMember(m.uid)}
+																		className="text-red-500 hover:text-red-400 p-2 transition hover:bg-red-950/20 border border-transparent hover:border-red-900/30 rounded-xl cursor-pointer"
+																		title="Remove member"
+																	>
+																		<FaUserMinus size={13} />
+																	</button>
+																)}
+															</div>
+														</td>
+													)}
+												</tr>
+											))}
 
-										{filteredMembers.length === 0 && (
-											<tr>
-												<td colSpan={5} className="text-center py-8 text-gray-500 italic">No workspace members matching filters.</td>
-											</tr>
-										)}
-									</tbody>
-								</table>
+											{filteredMembers.length === 0 && (
+												<tr>
+													<td colSpan={6} className="text-center py-12 text-gray-500 italic">No workspace members matching your criteria.</td>
+												</tr>
+											)}
+										</tbody>
+									</table>
+								</div>
 							</div>
+
+							{hasPerm("organization.inviteMember") && (
+								<>
+									{/* Invite Hub */}
+									<div className="border-t border-gray-850 pt-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
+										{/* Invite user form */}
+										<div className="space-y-4">
+											<div>
+												<h3 className="text-sm font-bold text-white">Invite New Members</h3>
+												<p className="text-xs text-gray-500 mt-0.5">Search users by UID or username, select a role, and send direct invitations.</p>
+											</div>
+
+											<div className="relative">
+												<label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1.5">Search Users</label>
+												<div className="relative">
+													<input
+														type="text"
+														placeholder="Type UID, Username, or Email..."
+														value={inviteSearchInput}
+														onChange={(e) => handleInviteSearch(e.target.value)}
+														className="w-full bg-dark-layer-2 border border-gray-850 focus:border-brand-orange text-xs rounded-xl pl-4 pr-10 py-3 text-white outline-none transition"
+													/>
+													{inviteSearchLoading && (
+														<span className="absolute right-3.5 top-3.5 w-4 h-4 border-2 border-brand-orange border-t-transparent rounded-full animate-spin"></span>
+													)}
+												</div>
+
+												{/* Search dropdown results */}
+												{inviteSearchResults.length > 0 && (
+													<div className="absolute left-0 right-0 top-full mt-2 bg-dark-layer-1 border border-gray-850 rounded-xl overflow-hidden shadow-2xl z-30 max-h-60 overflow-y-auto">
+														{inviteSearchResults.map((u) => (
+															<div
+																key={u.uid}
+																onClick={() => {
+																	setSelectedInviteUser(u);
+																	setInviteSearchResults([]);
+																}}
+																className="p-3 hover:bg-dark-layer-2/80 transition flex items-center gap-3 cursor-pointer border-b border-gray-850/50 last:border-b-0"
+															>
+																<div className="w-8 h-8 rounded-lg bg-dark-layer-2 overflow-hidden flex items-center justify-center shrink-0 border border-gray-850">
+																	{u.avatarUrl ? (
+																		<img src={u.avatarUrl} alt={u.displayName} className="w-full h-full object-cover" />
+																	) : (
+																		<span className="text-[10px] font-bold text-gray-400">U</span>
+																	)}
+																</div>
+																<div className="min-w-0 flex-1">
+																	<div className="flex items-center justify-between">
+																		<p className="text-xs font-bold text-white truncate">{u.displayName}</p>
+																		<span className="text-[9px] text-yellow-500 font-semibold shrink-0">Rating: {u.contestRating || 1500}</span>
+																	</div>
+																	<div className="flex items-center justify-between mt-0.5 text-[9px] text-gray-500 font-mono">
+																		<span>@{u.username}</span>
+																		<span className="truncate max-w-[150px]">{u.currentOrg}</span>
+																	</div>
+																</div>
+															</div>
+														))}
+													</div>
+												)}
+											</div>
+
+											{/* Selected User Details & Config */}
+											{selectedInviteUser && (
+												<div className="bg-dark-layer-2 border border-gray-850 rounded-xl p-4 space-y-4 animate-scale-up">
+													<div className="flex justify-between items-start">
+														<div className="flex gap-3">
+															<div className="w-10 h-10 rounded-lg overflow-hidden border border-gray-800 shrink-0">
+																{selectedInviteUser.avatarUrl ? (
+																	<img src={selectedInviteUser.avatarUrl} alt={selectedInviteUser.displayName} className="w-full h-full object-cover" />
+																) : (
+																	<div className="w-full h-full bg-dark-layer-1 flex items-center justify-center font-bold text-gray-500 text-sm">U</div>
+																)}
+															</div>
+															<div>
+																<h4 className="text-xs font-bold text-white">{selectedInviteUser.displayName}</h4>
+																<p className="text-[10px] text-gray-500 font-mono mt-0.5">@{selectedInviteUser.username} | UID: {selectedInviteUser.uid?.substring(0, 8)}...</p>
+															</div>
+														</div>
+														<button
+															onClick={() => setSelectedInviteUser(null)}
+															className="text-gray-500 hover:text-white transition p-1"
+														>
+															<FaTimes size={12} />
+														</button>
+													</div>
+
+													<form onSubmit={handleInviteMember} className="grid grid-cols-2 gap-3 pt-2">
+														<div>
+															<label className="text-[9px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Assign Role</label>
+															<BeastCodeSelect
+																options={[
+																	{ value: "member", label: "Member" },
+																	{ value: "moderator", label: "Moderator" },
+																	{ value: "recruiter", label: "Recruiter" },
+																	{ value: "contest_manager", label: "Contest Manager" },
+																	{ value: "problem_manager", label: "Problem Manager" },
+																	{ value: "coach", label: "Coach" },
+																	{ value: "admin", label: "Administrator" }
+																]}
+																value={inviteRole}
+																onChange={(val) => setInviteRole(val)}
+																size="sm"
+															/>
+														</div>
+
+														<div>
+															<label className="text-[9px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Expiration</label>
+															<BeastCodeSelect
+																options={[
+																	{ value: "1", label: "1 Day" },
+																	{ value: "3", label: "3 Days" },
+																	{ value: "7", label: "7 Days" },
+																	{ value: "30", label: "30 Days" }
+																]}
+																value={String(inviteExpiresDays)}
+																onChange={(val) => setInviteExpiresDays(parseInt(val, 10))}
+																size="sm"
+															/>
+														</div>
+
+														<div className="col-span-2 pt-2">
+															<button
+																type="submit"
+																disabled={actionLoading}
+																className="w-full bg-brand-orange hover:bg-brand-orange-s text-bg-base font-black text-xs py-2.5 rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-glow-sm"
+																style={{ color: "var(--bg-base)" }}
+															>
+																<FaUserPlus size={12} /> Send Invitation
+															</button>
+														</div>
+													</form>
+												</div>
+											)}
+
+											{!selectedInviteUser && inviteSearchInput && !inviteSearchInput.includes("@") && (
+												<div className="bg-dark-layer-1/50 border border-gray-850 rounded-xl p-3.5 text-center">
+													<p className="text-[11px] text-gray-500">Not seeing user in results? You can also invite direct emails by typing a full email.</p>
+												</div>
+											)}
+										</div>
+
+										{/* Active Invitations List */}
+										<div className="space-y-4">
+											<div>
+												<h3 className="text-sm font-bold text-white">Active Sent Invitations ({invitationsList.filter(i => i.status === "Pending").length})</h3>
+												<p className="text-xs text-gray-500 mt-0.5 font-sans">Track pending workspaces invitations, resend invitations, or revoke access.</p>
+											</div>
+
+											<div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+												{invitationsList.filter(i => i.status === "Pending").map((inv) => (
+													<div key={inv.inviteId} className="bg-dark-surface border border-gray-850 rounded-xl p-4 flex flex-col justify-between hover:border-gray-800 transition">
+														<div className="flex justify-between items-start gap-2">
+															<div className="min-w-0">
+																<p className="text-xs font-bold text-white truncate">{inv.inviteeName || inv.email || "Recipient"}</p>
+																<p className="text-[9px] text-gray-500 font-mono mt-0.5 truncate">
+																	Role: <span className="text-brand-orange font-bold uppercase">{inv.roleId}</span> | Expiry: {new Date(inv.expiresAt).toLocaleDateString()}
+																</p>
+															</div>
+															<span className="text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-brand-orange/10 text-brand-orange border border-brand-orange/20 shrink-0">
+																Pending
+															</span>
+														</div>
+
+														<div className="flex justify-end gap-2 border-t border-gray-850 mt-3 pt-2.5">
+															<button
+																onClick={() => handleCancelInvite(inv.inviteId)}
+																disabled={actionLoading}
+																className="text-gray-400 hover:text-white border border-gray-800 text-[10px] px-2.5 py-1 rounded-lg transition cursor-pointer"
+															>
+																Revoke
+															</button>
+															<button
+																onClick={() => handleResendInvite(inv.inviteId)}
+																disabled={actionLoading}
+																className="bg-brand-orange/10 hover:bg-brand-orange/20 text-brand-orange border border-brand-orange/20 text-[10px] px-2.5 py-1 rounded-lg font-bold transition cursor-pointer"
+															>
+																Resend
+															</button>
+														</div>
+													</div>
+												))}
+
+												{invitationsList.filter(i => i.status === "Pending").length === 0 && (
+													<div className="text-center py-10 border border-dashed border-gray-850 rounded-xl text-gray-500 italic text-xs">
+														No pending invitations active.
+													</div>
+												)}
+											</div>
+										</div>
+									</div>
+
+									{/* Invite Link Section */}
+									<div className="border-t border-gray-850 pt-8 space-y-6">
+										<div>
+											<h3 className="text-sm font-bold text-white">Invite Links Manager</h3>
+											<p className="text-xs text-gray-500 mt-0.5">Generate reusable invitations URLs with limited uses, expiry time, or password protection.</p>
+										</div>
+
+										<div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+											{/* Link generator form */}
+											<form onSubmit={handleCreateInviteLink} className="bg-dark-surface border border-gray-850 rounded-2xl p-5 space-y-4 h-fit">
+												<h4 className="text-xs font-bold text-white uppercase tracking-wider">Generate Link</h4>
+
+												<div>
+													<label className="text-[9px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Link Default Role</label>
+													<BeastCodeSelect
+														options={[
+															{ value: "member", label: "Member" },
+															{ value: "moderator", label: "Moderator" },
+															{ value: "coach", label: "Coach" },
+															{ value: "contest_manager", label: "Contest Manager" }
+														]}
+														value={linkRole}
+														onChange={(val) => setLinkRole(val)}
+														size="sm"
+													/>
+												</div>
+
+												<div className="grid grid-cols-2 gap-3">
+													<div>
+														<label className="text-[9px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Max Uses</label>
+														<BeastCodeSelect
+															options={[
+																{ value: "-1", label: "Unlimited" },
+																{ value: "1", label: "1 Use" },
+																{ value: "5", label: "5 Uses" },
+																{ value: "10", label: "10 Uses" },
+																{ value: "50", label: "50 Uses" }
+															]}
+															value={String(linkMaxUses)}
+															onChange={(val) => setLinkMaxUses(parseInt(val, 10))}
+															size="sm"
+														/>
+													</div>
+
+													<div>
+														<label className="text-[9px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Expires In</label>
+														<BeastCodeSelect
+															options={[
+																{ value: "-1", label: "Never" },
+																{ value: "1", label: "1 Day" },
+																{ value: "3", label: "3 Days" },
+																{ value: "7", label: "7 Days" },
+																{ value: "30", label: "30 Days" }
+															]}
+															value={String(linkExpiresDays)}
+															onChange={(val) => setLinkExpiresDays(parseInt(val, 10))}
+															size="sm"
+														/>
+													</div>
+												</div>
+
+												<div>
+													<label className="text-[9px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Optional Password</label>
+													<input
+														type="password"
+														placeholder="Require pass to join..."
+														value={linkPassword}
+														onChange={(e) => setLinkPassword(e.target.value)}
+														className="w-full bg-dark-layer-2 border border-gray-850 focus:border-brand-orange text-xs rounded-xl p-2.5 text-white outline-none transition"
+													/>
+												</div>
+
+												<button
+													type="submit"
+													disabled={actionLoading}
+													className="w-full bg-brand-orange hover:bg-brand-orange-s text-bg-base font-bold text-xs py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer shadow-glow-sm mt-2"
+													style={{ color: "var(--bg-base)" }}
+												>
+													<FaLink size={11} /> Generate URL
+												</button>
+											</form>
+
+											{/* Active Links List table */}
+											<div className="lg:col-span-2 overflow-x-auto border border-gray-850 rounded-2xl bg-dark-surface p-5 h-fit space-y-4">
+												<h4 className="text-xs font-bold text-white uppercase tracking-wider">Active Links</h4>
+
+												<div className="space-y-3">
+													{inviteLinksList.filter(l => l.status === "active").map((link) => {
+														const inviteUrl = `${window.location.origin}/orgs/invite/${link.linkId}`;
+														return (
+															<div key={link.linkId} className="bg-dark-layer-1 border border-gray-850 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+																<div className="min-w-0">
+																	<div className="flex items-center gap-2">
+																		<span className="text-[10px] font-mono text-gray-400 truncate max-w-[150px]">{link.linkId}</span>
+																		<span className="text-[8px] uppercase font-bold px-1.5 py-0.5 bg-gray-800 text-gray-400 rounded">
+																			{link.roleId}
+																		</span>
+																		{link.password && (
+																			<span className="text-[8px] uppercase font-bold px-1.5 py-0.5 bg-red-500/10 text-red-400 border border-red-500/20 rounded">
+																				Protected
+																			</span>
+																		)}
+																	</div>
+																	<p className="text-[10px] text-gray-500 mt-1">
+																		Uses: {link.useCount} / {link.maxUses > 0 ? link.maxUses : "Unlimited"} | Expiry: {link.expiresAt ? new Date(link.expiresAt).toLocaleDateString() : "Never"}
+																	</p>
+																</div>
+
+																<div className="flex gap-2 w-full sm:w-auto justify-end shrink-0">
+																	<button
+																		onClick={() => {
+																			navigator.clipboard.writeText(inviteUrl);
+																			triggerFeedback("success", "Link copied to clipboard!");
+																		}}
+																		className="bg-dark-fill-3 hover:bg-dark-fill-2 text-white border border-gray-800 text-[10px] px-3 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer"
+																	>
+																		<FaCopy size={10} /> Copy Link
+																	</button>
+																	<button
+																		onClick={() => handleRevokeInviteLink(link.linkId)}
+																		disabled={actionLoading}
+																		className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-[10px] px-3 py-1.5 rounded-lg transition cursor-pointer"
+																	>
+																		Revoke
+																	</button>
+																</div>
+															</div>
+														);
+													})}
+
+													{inviteLinksList.filter(l => l.status === "active").length === 0 && (
+														<div className="text-center py-10 border border-dashed border-gray-850 rounded-xl text-gray-500 italic text-xs">
+															No active invite links generated yet.
+														</div>
+													)}
+												</div>
+											</div>
+										</div>
+									</div>
+								</>
+							)}
 						</div>
 					)}
 
@@ -2139,14 +2872,16 @@ export default function OrgWorkspacePage() {
 											/>
 										</div>
 										<div className="flex items-center justify-between">
-											<select
+											<BeastCodeSelect
+												options={[
+													{ value: "members", label: "Visible to Members" },
+													{ value: "all", label: "Visible to Everyone (Public)" }
+												]}
 												value={newAnnVisibility}
-												onChange={(e) => setNewAnnVisibility(e.target.value)}
-												className="bg-dark-layer-2 border border-gray-800 text-xs rounded-xl px-3 py-2 text-white outline-none cursor-pointer"
-											>
-												<option value="members">Visible to Members</option>
-												<option value="all">Visible to Everyone (Public)</option>
-											</select>
+												onChange={(val) => setNewAnnVisibility(val)}
+												size="sm"
+												className="w-48"
+											/>
 											<button
 												type="submit"
 												disabled={actionLoading}
@@ -2259,14 +2994,16 @@ export default function OrgWorkspacePage() {
 											/>
 										</div>
 										<div className="flex items-center justify-between">
-											<select
+											<BeastCodeSelect
+												options={[
+													{ value: "members", label: "Visible to Members" },
+													{ value: "public", label: "Visible to Guest / Everyone" }
+												]}
 												value={newFileVisibility}
-												onChange={(e) => setNewFileVisibility(e.target.value)}
-												className="bg-dark-layer-2 border border-gray-800 text-xs rounded-xl px-3 py-2 text-white outline-none cursor-pointer"
-											>
-												<option value="members">Visible to Members</option>
-												<option value="public">Visible to Guest / Everyone</option>
-											</select>
+												onChange={(val) => setNewFileVisibility(val)}
+												size="sm"
+												className="w-48"
+											/>
 											<button
 												type="submit"
 												disabled={actionLoading}
@@ -2521,16 +3258,17 @@ export default function OrgWorkspacePage() {
 											<div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
 												<div>
 													<label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Employment Type</label>
-													<select
+													<BeastCodeSelect
+														options={[
+															{ value: "Full-time", label: "Full-time" },
+															{ value: "Part-time", label: "Part-time" },
+															{ value: "Contract", label: "Contract" },
+															{ value: "Internship", label: "Internship" }
+														]}
 														value={newJobType}
-														onChange={(e) => setNewJobType(e.target.value)}
-														className="w-full bg-dark-layer-1 border border-gray-850 text-xs rounded-xl p-2.5 text-white outline-none cursor-pointer"
-													>
-														<option value="Full-time">Full-time</option>
-														<option value="Part-time">Part-time</option>
-														<option value="Contract">Contract</option>
-														<option value="Internship">Internship</option>
-													</select>
+														onChange={(val) => setNewJobType(val)}
+														size="sm"
+													/>
 												</div>
 												<div>
 													<label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Salary Range</label>
@@ -2763,9 +3501,9 @@ export default function OrgWorkspacePage() {
 									<h3 className="font-bold text-white text-xs">About {org.name}</h3>
 									<p className="text-gray-400 leading-relaxed">{companyDetails.description}</p>
 									<div className="grid grid-cols-2 gap-4 text-[10px] text-gray-500 font-mono mt-2">
-										<span>🏢 Industry: {companyDetails.industry}</span>
-										<span>📍 Headquarters: {companyDetails.headquarters}</span>
-										<span>🔗 Website: <a href={companyDetails.website} target="_blank" rel="noreferrer" className="text-brand-orange underline">{companyDetails.website}</a></span>
+										<span><FaBuilding className="inline mr-1 text-brand-orange" /> Industry: {companyDetails.industry}</span>
+										<span><FaMapMarkerAlt className="inline mr-1 text-brand-orange" /> Headquarters: {companyDetails.headquarters}</span>
+										<span><FaGlobe className="inline mr-1 text-brand-orange" /> Website: <a href={companyDetails.website} target="_blank" rel="noreferrer" className="text-brand-orange underline">{companyDetails.website}</a></span>
 									</div>
 								</div>
 							)}
@@ -3264,32 +4002,34 @@ export default function OrgWorkspacePage() {
 													<label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
 														Difficulty
 													</label>
-													<select
+													<BeastCodeSelect
+														options={[
+															{ value: "Easy", label: "Easy" },
+															{ value: "Medium", label: "Medium" },
+															{ value: "Hard", label: "Hard" }
+														]}
 														value={selectedPrivateProblem.difficulty}
-														onChange={(e) => setSelectedPrivateProblem({ ...selectedPrivateProblem, difficulty: e.target.value })}
-														className="w-full bg-dark-layer-1 border border-gray-800 text-xs rounded-lg p-2 text-white outline-none cursor-pointer"
-													>
-														<option value="Easy">Easy</option>
-														<option value="Medium">Medium</option>
-														<option value="Hard">Hard</option>
-													</select>
+														onChange={(val) => setSelectedPrivateProblem({ ...selectedPrivateProblem, difficulty: val })}
+														size="sm"
+													/>
 												</div>
 												<div>
 													<label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
 														Review Workflow Status
 													</label>
-													<select
+													<BeastCodeSelect
+														options={[
+															{ value: "draft", label: "Draft" },
+															{ value: "internal_review", label: "Internal Review" },
+															{ value: "testing", label: "Testing" },
+															{ value: "approved", label: "Approved" },
+															{ value: "published", label: "Published" },
+															{ value: "archived", label: "Archived" }
+														]}
 														value={selectedPrivateProblem.reviewStatus}
-														onChange={(e) => setSelectedPrivateProblem({ ...selectedPrivateProblem, reviewStatus: e.target.value })}
-														className="w-full bg-dark-layer-1 border border-gray-800 text-xs rounded-lg p-2 text-white outline-none cursor-pointer"
-													>
-														<option value="draft">Draft</option>
-														<option value="internal_review">Internal Review</option>
-														<option value="testing">Testing</option>
-														<option value="approved">Approved</option>
-														<option value="published">Published</option>
-														<option value="archived">Archived</option>
-													</select>
+														onChange={(val) => setSelectedPrivateProblem({ ...selectedPrivateProblem, reviewStatus: val })}
+														size="sm"
+													/>
 												</div>
 											</div>
 
@@ -3298,17 +4038,18 @@ export default function OrgWorkspacePage() {
 													<label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
 														Visibility
 													</label>
-													<select
+													<BeastCodeSelect
+														options={[
+															{ value: "organization", label: "Organization Members Only" },
+															{ value: "contest_only", label: "Contest Only" },
+															{ value: "public", label: "Public" },
+															{ value: "hidden", label: "Hidden" },
+															{ value: "archived", label: "Archived" }
+														]}
 														value={selectedPrivateProblem.visibility}
-														onChange={(e) => setSelectedPrivateProblem({ ...selectedPrivateProblem, visibility: e.target.value })}
-														className="w-full bg-dark-layer-1 border border-gray-800 text-xs rounded-lg p-2 text-white outline-none cursor-pointer"
-													>
-														<option value="organization">Organization Members Only</option>
-														<option value="contest_only">Contest Only</option>
-														<option value="public">Public</option>
-														<option value="hidden">Hidden</option>
-														<option value="archived">Archived</option>
-													</select>
+														onChange={(val) => setSelectedPrivateProblem({ ...selectedPrivateProblem, visibility: val })}
+														size="sm"
+													/>
 												</div>
 												<div className="flex items-end">
 													<button
@@ -3525,15 +4266,17 @@ export default function OrgWorkspacePage() {
 													/>
 												</div>
 												<div className="flex items-center justify-between">
-													<select
+													<BeastCodeSelect
+														options={[
+															{ value: "Easy", label: "Easy" },
+															{ value: "Medium", label: "Medium" },
+															{ value: "Hard", label: "Hard" }
+														]}
 														value={newPrivateProblemDifficulty}
-														onChange={(e) => setNewPrivateProblemDifficulty(e.target.value)}
-														className="bg-dark-layer-2 border border-gray-800 text-xs rounded-xl px-3 py-2 text-white outline-none cursor-pointer"
-													>
-														<option value="Easy">Easy</option>
-														<option value="Medium">Medium</option>
-														<option value="Hard">Hard</option>
-													</select>
+														onChange={(val) => setNewPrivateProblemDifficulty(val)}
+														size="sm"
+														className="w-32"
+													/>
 													<button
 														type="submit"
 														disabled={actionLoading}
@@ -3574,7 +4317,7 @@ export default function OrgWorkspacePage() {
 										<div className="space-y-2">
 											{selectedTeam.members?.map((memberUid: string, idx: number) => (
 												<div key={idx} className="flex justify-between items-center bg-dark-layer-1 p-3 rounded border border-gray-850">
-													<span className="font-mono text-gray-400">{memberUid} {memberUid === selectedTeam.captainUid && "👑 (Captain)"}</span>
+													<span className="font-mono text-gray-400">{memberUid} {memberUid === selectedTeam.captainUid && <span className="inline-flex items-center gap-1 text-amber-400 font-semibold text-xs ml-2"><FaCrown size={12} /> (Captain)</span>}</span>
 													<div className="flex items-center gap-2">
 														{selectedTeam.captainUid === user?.uid && memberUid !== user?.uid && (
 															<>
@@ -3948,15 +4691,16 @@ export default function OrgWorkspacePage() {
 												<label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
 													Assignee Scope
 												</label>
-												<select
+												<BeastCodeSelect
+													options={[
+														{ value: "all", label: "All Members" },
+														{ value: "teams", label: "Specific Competitor Teams" },
+														{ value: "members", label: "Specific Members UIDs" }
+													]}
 													value={newAssignmentType}
-													onChange={(e: any) => setNewAssignmentType(e.target.value)}
-													className="w-full bg-dark-layer-2 border border-gray-850 focus:border-brand-orange text-xs rounded-xl p-3 text-white outline-none cursor-pointer"
-												>
-													<option value="all">All Members</option>
-													<option value="teams">Specific Competitor Teams</option>
-													<option value="members">Specific Members UIDs</option>
-												</select>
+													onChange={(val) => setNewAssignmentType(val as "all" | "members" | "teams")}
+													size="sm"
+												/>
 											</div>
 											<div>
 												<label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
@@ -4082,6 +4826,64 @@ export default function OrgWorkspacePage() {
 							<h2 className="text-base font-bold text-white">Workspace Configuration</h2>
 
 							<div className="space-y-4">
+								{/* Organization Avatar Section */}
+								<div className="flex flex-col md:flex-row items-center gap-6 p-5 rounded-2xl bg-dark-layer-2 border border-gray-850 hover:border-gray-800 transition">
+									<div className="relative group cursor-pointer w-24 h-24 shrink-0" onClick={() => avatarInputRef.current?.click()}>
+										<OrganizationAvatar
+											src={avatarPreview}
+											name={org.name}
+											size="xl"
+											className="border-2 border-brand-orange/60 shadow-lg shadow-brand-orange/10 group-hover:scale-[1.02] transition duration-300"
+										/>
+										<div className="absolute inset-0 rounded-2xl bg-black/60 opacity-0 group-hover:opacity-100 transition duration-300 flex items-center justify-center">
+											<FaCamera size={20} className="text-white" />
+										</div>
+									</div>
+
+									<div className="flex-1 text-center md:text-left space-y-2">
+										<h3 className="text-sm font-bold text-white">Organization Logo / Avatar</h3>
+										<p className="text-xs text-gray-500">
+											Customize your workspace&apos;s identity. Supports PNG, JPG, JPEG, or WEBP (Max 5MB).
+										</p>
+										<div className="flex flex-wrap justify-center md:justify-start gap-2 pt-1">
+											<button
+												type="button"
+												onClick={() => avatarInputRef.current?.click()}
+												className="bg-dark-fill-3 hover:bg-dark-fill-2 text-white border border-gray-800 px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+											>
+												Choose Image
+											</button>
+											{avatarBase64 && (
+												<button
+													type="button"
+													onClick={handleUploadAvatar}
+													disabled={actionLoading}
+													className="bg-brand-orange hover:bg-brand-orange-s text-bg-base px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+													style={{ color: "var(--bg-base)" }}
+												>
+													Save Avatar
+												</button>
+											)}
+											{(org.avatarUrl || org.avatar) && (
+												<button
+													type="button"
+													onClick={handleRemoveAvatar}
+													disabled={actionLoading}
+													className="bg-red-950/60 hover:bg-red-900/60 text-red-400 border border-red-900/40 px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+								>
+									Remove Avatar
+								</button>
+											)}
+										</div>
+										<input
+											ref={avatarInputRef}
+											type="file"
+											accept="image/png, image/jpg, image/jpeg, image/webp"
+											className="hidden"
+											onChange={handleAvatarChange}
+										/>
+									</div>
+								</div>
 								<div>
 									<label className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-1.5">
 										Workspace Display Name
@@ -4100,28 +4902,30 @@ export default function OrgWorkspacePage() {
 										<label className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-1.5">
 											Workspace Visibility
 										</label>
-										<select
+										<BeastCodeSelect
+											options={[
+												{ value: "public", label: "Public" },
+												{ value: "private", label: "Private" },
+												{ value: "secret", label: "Secret" }
+											]}
 											value={org.visibility}
-											onChange={(e) => setOrg({ ...org, visibility: e.target.value })}
-											className="w-full bg-dark-layer-2 border border-gray-850 focus:border-brand-orange text-xs rounded-xl p-3 text-white outline-none transition cursor-pointer"
-										>
-											<option value="public">Public</option>
-											<option value="private">Private</option>
-											<option value="secret">Secret</option>
-										</select>
+											onChange={(val) => setOrg({ ...org, visibility: val })}
+											size="sm"
+										/>
 									</div>
 									<div>
 										<label className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-1.5">
 											Recruitment applications Status
 										</label>
-										<select
+										<BeastCodeSelect
+											options={[
+												{ value: "open", label: "Open" },
+												{ value: "closed", label: "Closed" }
+											]}
 											value={org.recruitmentStatus}
-											onChange={(e) => setOrg({ ...org, recruitmentStatus: e.target.value })}
-											className="w-full bg-dark-layer-2 border border-gray-850 focus:border-brand-orange text-xs rounded-xl p-3 text-white outline-none transition cursor-pointer"
-										>
-											<option value="open">Open</option>
-											<option value="closed">Closed</option>
-										</select>
+											onChange={(val) => setOrg({ ...org, recruitmentStatus: val })}
+											size="sm"
+										/>
 									</div>
 								</div>
 
@@ -4239,20 +5043,35 @@ export default function OrgWorkspacePage() {
 						</div>
 
 						{/* Drawer Tabs */}
-						<div className="flex border-b border-gray-850 px-4 bg-dark-layer-2">
-							{["overview", "submissions", "problems"].map((tabName) => (
-								<button
-									key={tabName}
-									onClick={() => setDrawerTab(tabName)}
-									className={`px-4 py-3 text-[10px] font-bold uppercase tracking-wider border-b-2 cursor-pointer transition ${
-										drawerTab === tabName
-											? "border-brand-orange text-brand-orange"
-											: "border-transparent text-gray-500 hover:text-white"
-									}`}
-								>
-									{tabName}
-								</button>
-							))}
+						<div className="p-4 bg-dark-layer-2">
+							<div
+								className="flex items-center gap-1.5 p-1 rounded-2xl border transition-all duration-300 w-max max-w-full"
+								style={{
+									backgroundColor: "var(--bg-dark-layer-1)",
+									borderColor: "var(--border-subtle)",
+								}}
+							>
+								{["overview", "submissions", "problems"].map((tabName) => {
+									const isActive = drawerTab === tabName;
+									return (
+										<button
+											key={tabName}
+											onClick={() => setDrawerTab(tabName)}
+											className={`px-4 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all duration-300 border select-none cursor-pointer ${
+												isActive
+													? "border-border-accent glow-sm font-extrabold"
+													: "border-transparent text-text-secondary hover:text-text-primary hover:bg-dark-fill-3"
+											}`}
+											style={{
+												backgroundColor: isActive ? "var(--bg-surface)" : "transparent",
+												color: isActive ? "var(--brand-orange)" : "var(--text-secondary)",
+											}}
+										>
+											{tabName}
+										</button>
+									);
+								})}
+							</div>
 						</div>
 
 						{/* Drawer Content */}

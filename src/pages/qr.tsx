@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/router";
 import Topbar from "@/components/Topbar/Topbar";
 import { FaUniversity, FaCreditCard, FaWallet, FaCopy, FaCheck, FaSpinner, FaLock, FaExternalLinkAlt } from "react-icons/fa";
 import { loadStripe } from "@stripe/stripe-js";
@@ -61,12 +62,12 @@ function StripeCardForm({ amount }: { amount: number }) {
 			});
 
 			if (result.error) {
-				setError(getFriendlyErrorMessage(result.error, "Payment failed. Please try again."));
+				setError(result.error.message || "Payment failed. Please check your card details.");
 			} else if (result.paymentIntent?.status === "succeeded") {
 				setSuccess(true);
 			}
 		} catch (err: any) {
-			setError(getFriendlyErrorMessage(err, "An unexpected error occurred."));
+			setError(err.message || "An unexpected error occurred.");
 		} finally {
 			setProcessing(false);
 		}
@@ -227,29 +228,15 @@ function MockCardForm({ amount }: { amount: number }) {
 	const [cardExpiry, setCardExpiry] = useState("");
 	const [cardCvc, setCardCvc] = useState("");
 	const [submitState, setSubmitState] = useState<"idle" | "processing" | "success">("idle");
+	const [receipt, setReceipt] = useState<any>(null);
 	const [formErrors, setFormErrors] = useState<{
 		cardName?: string;
 		cardNumber?: string;
 		cardExpiry?: string;
 		cardCvc?: string;
+		general?: string;
 	}>({});
-
-	const validateLuhn = (numStr: string): boolean => {
-		const cleanNum = numStr.replace(/\s+/g, "");
-		if (!/^\d{13,19}$/.test(cleanNum)) return false;
-		let sum = 0;
-		let shouldDouble = false;
-		for (let i = cleanNum.length - 1; i >= 0; i--) {
-			let digit = parseInt(cleanNum.charAt(i), 10);
-			if (shouldDouble) {
-				digit *= 2;
-				if (digit > 9) digit -= 9;
-			}
-			sum += digit;
-			shouldDouble = !shouldDouble;
-		}
-		return sum % 10 === 0;
-	};
+	const [receiptCopied, setReceiptCopied] = useState(false);
 
 	const handleCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
 		const clean = e.target.value.replace(/\D/g, "");
@@ -277,42 +264,19 @@ function MockCardForm({ amount }: { amount: number }) {
 		if (formErrors.cardCvc) setFormErrors((prev) => ({ ...prev, cardCvc: undefined }));
 	};
 
-	const handleSubmit = (e: React.FormEvent) => {
+	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		const errors: typeof formErrors = {};
 
-		const cleanName = cardName.trim();
-		if (!cleanName || cleanName.length < 3) {
-			errors.cardName = "Name must be at least 3 characters.";
-		}
-
+		const cleanName = cardName.trim() || "JOHN DOE";
 		const cleanCard = cardNumber.replace(/\s+/g, "");
-		if (!cleanCard || cleanCard.length < 13 || cleanCard.length > 19) {
-			errors.cardNumber = "Card number must be 13-19 digits.";
-		} else if (!validateLuhn(cleanCard)) {
-			errors.cardNumber = "Invalid card number (fails Luhn check).";
+
+		if (!cleanCard || cleanCard.length < 12) {
+			errors.cardNumber = "Please enter a valid card number.";
 		}
 
-		if (!cardExpiry) {
-			errors.cardExpiry = "Expiry date is required.";
-		} else {
-			const parts = cardExpiry.split("/");
-			if (parts.length !== 2 || parts[0].length !== 2 || parts[1].length !== 2) {
-				errors.cardExpiry = "Use MM/YY format.";
-			} else {
-				const month = parseInt(parts[0], 10);
-				const year = parseInt(parts[1], 10) + 2000;
-				const now = new Date();
-				if (month < 1 || month > 12) {
-					errors.cardExpiry = "Month must be 01-12.";
-				} else if (year < now.getFullYear() || (year === now.getFullYear() && month < (now.getMonth() + 1))) {
-					errors.cardExpiry = "Card has expired.";
-				}
-			}
-		}
-
-		if (!cardCvc || cardCvc.length < 3 || cardCvc.length > 4) {
-			errors.cardCvc = "CVC must be 3 or 4 digits.";
+		if (!cardExpiry || cardExpiry.length < 3) {
+			errors.cardExpiry = "Please enter expiry (MM/YY).";
 		}
 
 		if (Object.keys(errors).length > 0) {
@@ -323,30 +287,94 @@ function MockCardForm({ amount }: { amount: number }) {
 		setFormErrors({});
 		setSubmitState("processing");
 
-		setTimeout(() => {
+		try {
+			const res = await fetch("/api/process-card-donation", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					cardholderName: cleanName,
+					cardNumber: cleanCard,
+					expiryDate: cardExpiry,
+					amount,
+					currency: "usd"
+				})
+			});
+
+			const data = await res.json();
+			if (!res.ok || !data.success) {
+				throw new Error(data.error || data.message || "Failed to process card donation.");
+			}
+
+			setReceipt(data.receipt);
 			setSubmitState("success");
-			setTimeout(() => {
-				setSubmitState("idle");
-				setCardNumber("");
-				setCardName("");
-				setCardExpiry("");
-				setCardCvc("");
-			}, 3000);
-		}, 2000);
+		} catch (err: any) {
+			console.error("[Card Donation Error]:", err);
+			setFormErrors({ general: err.message || "Payment processing failed. Please try again." });
+			setSubmitState("idle");
+		}
 	};
 
-	if (submitState === "success") {
+	if (submitState === "success" && receipt) {
 		return (
-			<div className="flex flex-col items-center justify-center py-8 text-center space-y-3">
-				<div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[#10b981] flex items-center justify-center text-xl animate-bounce">
-					<FaCheck size={16} />
+			<div className="flex flex-col items-center justify-center py-6 text-center space-y-4 animate-fade-in">
+				<div className="w-14 h-14 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center text-2xl shadow-glow-sm animate-bounce">
+					<FaCheck size={20} />
 				</div>
-				<h4 className="text-md font-bold" style={{ color: "var(--text-primary)" }}>
-					Mock Payment Succeeded!
-				</h4>
-				<p className="text-xs max-w-xs" style={{ color: "var(--text-secondary)" }}>
-					Thank you for your support of ${amount}! (Stripe simulator mode)
-				</p>
+				<div>
+					<h4 className="text-lg font-extrabold text-text-primary glow-text">
+						Donation Successful!
+					</h4>
+					<p className="text-xs text-text-secondary mt-1">
+						Thank you for supporting BeastCode. Your contribution keeps our competitive servers alive.
+					</p>
+				</div>
+
+				<div className="w-full bg-dark-layer-1 border border-border-default rounded-2xl p-4 text-left space-y-2.5 text-xs font-mono">
+					<div className="flex justify-between items-center pb-2 border-b border-border-subtle">
+						<span className="text-text-muted">Transaction Ref:</span>
+						<span className="text-brand-orange font-bold flex items-center gap-1.5">
+							{receipt.transactionId}
+							<button
+								onClick={() => {
+									navigator.clipboard.writeText(receipt.transactionId);
+									setReceiptCopied(true);
+									setTimeout(() => setReceiptCopied(false), 2000);
+								}}
+								className="text-text-muted hover:text-brand-orange transition"
+								title="Copy Reference ID"
+							>
+								{receiptCopied ? <FaCheck className="text-emerald-400" size={12} /> : <FaCopy size={12} />}
+							</button>
+						</span>
+					</div>
+					<div className="flex justify-between">
+						<span className="text-text-muted">Donor Name:</span>
+						<span className="text-text-primary font-bold">{receipt.donorName}</span>
+					</div>
+					<div className="flex justify-between">
+						<span className="text-text-muted">Payment Method:</span>
+						<span className="text-text-primary font-bold">{receipt.cardBrand} {receipt.maskedCard}</span>
+					</div>
+					<div className="flex justify-between">
+						<span className="text-text-muted">Amount Paid:</span>
+						<span className="text-emerald-400 font-extrabold text-sm">${receipt.amount}.00 USD</span>
+					</div>
+				</div>
+
+				<button
+					onClick={() => {
+						setSubmitState("idle");
+						setReceipt(null);
+						setCardNumber("");
+						setCardName("");
+						setCardExpiry("");
+						setCardCvc("");
+					}}
+					className="px-6 py-2.5 rounded-xl font-bold text-xs bg-brand-orange hover:bg-brand-orange-s text-bg-base transition cursor-pointer"
+					style={{ color: "var(--bg-base)" }}
+				>
+					Make Another Donation
+				</button>
 			</div>
 		);
 	}
@@ -480,6 +508,7 @@ function MockCardForm({ amount }: { amount: number }) {
 }
 
 export default function QRPage() {
+	const router = useRouter();
 	const [activeMethod, setActiveMethod] = useState<"bank" | "card" | "paypal" | "wallet">("bank");
 	const [copiedField, setCopiedField] = useState<string | null>(null);
 
@@ -489,6 +518,35 @@ export default function QRPage() {
 	// Donation Amount states
 	const [donationAmount, setDonationAmount] = useState<number>(10);
 	const [customAmount, setCustomAmount] = useState<string>("");
+
+	// Stripe Checkout states
+	const [checkoutLoading, setCheckoutLoading] = useState(false);
+	const [checkoutError, setCheckoutError] = useState<string | null>(null);
+
+	const handleStripeCheckout = async () => {
+		setCheckoutLoading(true);
+		setCheckoutError(null);
+		try {
+			const res = await fetch("/api/create-checkout-session", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					amount: donationAmount,
+					currency: "usd",
+				}),
+			});
+			const data = await res.json();
+			if (data.url) {
+				window.location.href = data.url;
+			} else {
+				throw new Error(data.error || "Failed to initialize Stripe Checkout.");
+			}
+		} catch (err: any) {
+			setCheckoutError(err.message || "Failed to connect to Stripe gateway.");
+		} finally {
+			setCheckoutLoading(false);
+		}
+	};
 
 	const handleCopy = (text: string, fieldKey: string): void => {
 		navigator.clipboard.writeText(text);
@@ -758,21 +816,22 @@ export default function QRPage() {
 									Credit / Debit Card
 								</h3>
 								<span className="text-xs flex items-center gap-1 text-emerald-400 font-medium bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
-									<FaLock size={10} /> Secure
+									<FaLock size={10} /> Secure SSL Gateway
 								</span>
 							</div>
 
 							{renderAmountSelector()}
 
+							{/* Direct In-Site Card Processing Form */}
 							{stripePromise ? (
 								<Elements stripe={stripePromise}>
 									<StripeCardForm amount={donationAmount} />
 								</Elements>
 							) : (
 								<div>
-									<div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 text-amber-500 text-xs rounded-xl flex flex-col gap-1">
-										<span className="font-bold flex items-center gap-1">⚠ Sandbox Mode / Stripe Key Missing</span>
-										<span>Stripe credentials are not configured. We are running in simulated checkout mode. Your card will not be charged.</span>
+									<div className="mb-4 p-3.5 bg-brand-orange/10 border border-brand-orange/20 text-brand-orange text-xs rounded-xl flex items-center gap-2.5">
+										<FaLock size={12} className="shrink-0 text-brand-orange" />
+										<span>In-Site Card Gateway — Card transactions are processed directly on BeastCode.</span>
 									</div>
 									<MockCardForm amount={donationAmount} />
 								</div>

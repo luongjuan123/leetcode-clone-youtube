@@ -838,19 +838,18 @@ const EditContest: React.FC = () => {
 									Lifecycle Status
 								</label>
 								<div className='col-span-4'>
-									<select
-										id='status'
+									<BeastCodeSelect
+										options={[
+											{ value: "draft", label: "Draft (Hidden from lists)" },
+											{ value: "scheduled", label: "Scheduled (Visible, registering)" },
+											{ value: "running", label: "Running (Active solving)" },
+											{ value: "ended", label: "Ended (Free standings, editorial open)" },
+											{ value: "archived", label: "Archived (Past standings read-only)" }
+										]}
 										value={status}
-										onChange={(e) => setStatus(e.target.value)}
-										className='border outline-none rounded p-2 text-sm w-full focus:border-brand-orange transition capitalize'
-										style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
-									>
-										<option value='draft'>Draft (Hidden from lists)</option>
-										<option value='scheduled'>Scheduled (Visible, registering)</option>
-										<option value='running'>Running (Active solving)</option>
-										<option value='ended'>Ended (Free standings, editorial open)</option>
-										<option value='archived'>Archived (Past standings read-only)</option>
-									</select>
+										onChange={(val) => setStatus(val)}
+										size="md"
+									/>
 								</div>
 							</div>
 
@@ -942,18 +941,17 @@ const EditContest: React.FC = () => {
 									Visibility
 								</label>
 								<div className='col-span-5'>
-									<select
-										id='visibility'
+									<BeastCodeSelect
+										options={[
+											{ value: "public", label: "Public (Anyone can view & join)" },
+											{ value: "private", label: "Private (Invite/Admin only)" },
+											{ value: "password", label: "Password Protected" },
+											{ value: "university", label: "University Restricted" }
+										]}
 										value={visibility}
-										onChange={(e) => setVisibility(e.target.value)}
-										className='border outline-none rounded p-2 text-sm w-full focus:border-brand-orange transition'
-										style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
-									>
-										<option value='public'>Public (Anyone can view & join)</option>
-										<option value='private'>Private (Invite/Admin only)</option>
-										<option value='password'>Password Protected</option>
-										<option value='university'>University Restricted</option>
-									</select>
+										onChange={(val) => setVisibility(val)}
+										size="md"
+									/>
 								</div>
 							</div>
 
@@ -998,17 +996,16 @@ const EditContest: React.FC = () => {
 									Anti-Cheat Security
 								</label>
 								<div className='col-span-5'>
-									<select
-										id='securityLevel'
+									<BeastCodeSelect
+										options={[
+											{ value: "casual", label: "Casual" },
+											{ value: "standard", label: "Standard (Fullscreen check)" },
+											{ value: "strict", label: "Strict (Fullscreen + immediate lock)" }
+										]}
 										value={securityLevel}
-										onChange={(e) => setSecurityLevel(e.target.value)}
-										className='border outline-none rounded p-2 text-sm w-full focus:border-brand-orange transition'
-										style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
-									>
-										<option value='casual'>Casual</option>
-										<option value='standard'>Standard (Fullscreen check)</option>
-										<option value='strict'>Strict (Fullscreen + immediate lock)</option>
-									</select>
+										onChange={(val) => setSecurityLevel(val)}
+										size="md"
+									/>
 								</div>
 							</div>
 

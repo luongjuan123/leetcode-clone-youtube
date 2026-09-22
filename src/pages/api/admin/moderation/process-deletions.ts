@@ -62,12 +62,36 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
 				}
 			}
 
-			// Delete Firestore docs
-			await db.collection("users").doc(targetUid).delete();
-			await db.collection("userModeration").doc(targetUid).delete();
-
-			// Clean up related documents
+			// Delete Firestore docs and clean up all 19 Firestore collections keyed by UID and user-linked documents
 			const batch = db.batch();
+
+			const uidCollections = [
+				"users",
+				"profiles",
+				"settings",
+				"statistics",
+				"solvedProblems",
+				"contestHistory",
+				"threads",
+				"notifications",
+				"notificationSettings",
+				"security",
+				"sessions",
+				"organizationMembership",
+				"achievements",
+				"bookmarks",
+				"preferences",
+				"theme",
+				"language",
+				"privacy",
+				"userModeration"
+			];
+
+			uidCollections.forEach((colName) => {
+				batch.delete(db.collection(colName).doc(targetUid));
+			});
+
+			// Delete query-matched documents
 			const pwHistory = await db.collection("passwordHistory").where("userId", "==", targetUid).get();
 			pwHistory.docs.forEach((d) => batch.delete(d.ref));
 

@@ -19,7 +19,7 @@ export default function SuspendedPage() {
 		if (loading) return;
 
 		if (!user) {
-			router.replace("/auth");
+			router.replace("/");
 			return;
 		}
 
@@ -48,7 +48,7 @@ export default function SuspendedPage() {
 					} else {
 						// Other authorization issues, log out
 						await signOut(auth);
-						router.replace("/auth");
+						router.replace("/");
 					}
 					setChecking(false);
 				} else {
@@ -72,7 +72,7 @@ export default function SuspendedPage() {
 	const handleLogout = async () => {
 		try {
 			await signOut(auth);
-			router.replace("/auth");
+			router.replace("/");
 		} catch (err) {
 			console.error("Logout error:", err);
 		}

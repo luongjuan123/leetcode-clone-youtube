@@ -2,6 +2,7 @@ import { withApiErrorHandler } from "@/utils/apiErrorHandler";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getAdminAuth, getAdminFirestore } from "@/firebase/firebaseAdmin";
 import { NotificationDispatcher } from "@/utils/notificationDispatcher";
+import { buildAbsoluteUrl } from "@/utils/siteConfig";
 
 type ResponseData = {
 	success: boolean;
@@ -123,27 +124,25 @@ async function handler(
 
 		// 4. Generate secure Firebase password reset link
 		let resetLink = "";
-		const isProd = process.env.NODE_ENV === "production";
-		const baseUrl = isProd ? "https://bomboclatbeastcode.codes" : "http://localhost:3001";
 
 		if (isLocalFallback) {
-			resetLink = `${baseUrl}/reset-password?oobCode=mock-reset-code-${Date.now()}`;
-			console.log(`[Password Reset Simulated Link]: ${resetLink}`);
+			resetLink = buildAbsoluteUrl(`/reset-password?oobCode=mock-reset-code-${Date.now()}`);
+			console.log("[Password Reset Simulated Link generated using canonical host]");
 		} else {
 			try {
 				const actionCodeSettings = {
-					url: `${baseUrl}/reset-password`,
+					url: buildAbsoluteUrl("/reset-password"),
 					handleCodeInApp: true
 				};
 				const firebaseLink = await getAdminAuth().generatePasswordResetLink(emailLower, actionCodeSettings);
 				const urlParams = new URL(firebaseLink).searchParams;
 				const oobCode = urlParams.get("oobCode") || "";
-				resetLink = `${baseUrl}/reset-password?oobCode=${oobCode}`;
+				resetLink = buildAbsoluteUrl(`/reset-password?oobCode=${encodeURIComponent(oobCode)}`);
 			} catch (resetErr: any) {
 				const errMsg = resetErr.message || "";
 				if (resetErr.code === "auth/internal-error" && (errMsg.includes("quota project") || errMsg.includes("identitytoolkit"))) {
-					resetLink = `${baseUrl}/reset-password?oobCode=mock-reset-code-${Date.now()}`;
-					console.log(`[Password Reset Simulated Link]: ${resetLink}`);
+					resetLink = buildAbsoluteUrl(`/reset-password?oobCode=mock-reset-code-${Date.now()}`);
+					console.log("[Password Reset Simulated Link generated using canonical host]");
 				} else {
 					throw resetErr;
 				}

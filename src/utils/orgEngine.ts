@@ -1,5 +1,8 @@
 import { getAdminFirestore } from "@/firebase/firebaseAdmin";
 import { EmailService } from "./emailService";
+import { COLORS } from "./emailComponents";
+import { getEmailHtml } from "./emailTemplate";
+import { buildAbsoluteUrl } from "./siteConfig";
 
 // ============================================================
 // SCHEMAS & INTERFACES
@@ -13,7 +16,11 @@ export interface Organization {
 	shortName: string;
 	description: string;
 	avatar: string;
+	avatarUrl?: string;
+	avatarStoragePath?: string;
+	avatarUpdatedAt?: number;
 	banner: string;
+	bannerUrl?: string;
 	organizationType: string;
 	visibility: "public" | "private" | "secret";
 	verified: boolean;
@@ -598,7 +605,7 @@ export async function emitOrgEvent(
 	orgId: string,
 	actorUid: string,
 	action: string,
-	targetUid: string | null,
+	targetUid: string | null | undefined,
 	resource: string,
 	resourceId: string,
 	metadata: Record<string, any>,
@@ -607,20 +614,40 @@ export async function emitOrgEvent(
 	const db = getAdminFirestore();
 	const now = Date.now();
 
+	// Sanitized target UID
+	const cleanTargetUid = targetUid || null;
+
+	// Helper to clean undefined fields recursively to prevent Firestore crashes
+	const cleanUndefined = (val: any): any => {
+		if (val === null || val === undefined) return null;
+		if (Array.isArray(val)) return val.map(cleanUndefined);
+		if (typeof val === "object") {
+			const cleanObj: any = {};
+			for (const key in val) {
+				if (Object.prototype.hasOwnProperty.call(val, key)) {
+					const v = val[key];
+					cleanObj[key] = v === undefined ? null : cleanUndefined(v);
+				}
+			}
+			return cleanObj;
+		}
+		return val;
+	};
+
 	// 1. Immutable Audit Log Entry
 	const logRef = db.collection("organizationAuditLogs").doc();
-	const auditData: OrganizationAuditLog = {
+	const auditData = cleanUndefined({
 		logId: logRef.id,
 		organizationId: orgId,
 		actorUid,
-		targetUid,
+		targetUid: cleanTargetUid,
 		action,
 		resource,
 		resourceId,
-		metadata,
-		ip,
+		metadata: metadata || {},
+		ip: ip || "127.0.0.1",
 		timestamp: now,
-	};
+	});
 	await logRef.set(auditData);
 
 	// 2. Fetch actor profile name
@@ -633,145 +660,306 @@ export async function emitOrgEvent(
 	const orgData = orgDoc.data() || {};
 	const orgName = orgData.displayName || orgData.name || "Workspace";
 
-	// 4. Generate Internal Notification and Send Emails Based on Event Type
-	if (targetUid) {
-		const targetDoc = await db.collection("users").doc(targetUid).get();
-		const targetData = targetDoc.data() || {};
-		const targetEmail = targetData.email;
+	// 4. Resolve Target Info (could be registered user or email-only guest)
+	let targetEmail = "";
+	let targetName = "there";
+	let targetData: any = {};
 
-		const ctaUrl = `/orgs/${orgData.slug}`;
-
-		let notifTitle = "";
-		let notifBody = "";
-		let emailSubject = "";
-		let emailHtml = "";
-
-		switch (action) {
-			case "member.invited":
-				notifTitle = `✉️ Organization Invitation`;
-				notifBody = `You have been invited to join ${orgName}`;
-				emailSubject = `BeastCode Workspace Invitation: ${orgName}`;
-				emailHtml = `<p>Hi ${targetData.displayName || "there"},</p>
-					<p>You have been invited to join the <strong>${orgName}</strong> workspace on BeastCode.</p>
-					<p>Click <a href="https://beastcode.codes/orgs/${orgData.slug}">here</a> to view the workspace and accept your invitation.</p>`;
-				break;
-			case "member.joined":
-				notifTitle = `👋 Welcome to ${orgName}`;
-				notifBody = `Your application to join ${orgName} has been approved.`;
-				emailSubject = `Welcome to ${orgName} on BeastCode`;
-				emailHtml = `<p>Hi ${targetData.displayName || "there"},</p>
-					<p>Your application to join <strong>${orgName}</strong> has been approved!</p>
-					<p>Log in to view your workspace: <a href="https://beastcode.codes/orgs/${orgData.slug}">Workspace Overview</a>.</p>`;
-				break;
-			case "member.rejected":
-				notifTitle = `⚠️ Application Update`;
-				notifBody = `Your request to join ${orgName} was rejected.`;
-				emailSubject = `Update regarding your BeastCode application for ${orgName}`;
-				emailHtml = `<p>Hi ${targetData.displayName || "there"},</p>
-					<p>Thank you for your interest in <strong>${orgName}</strong>.</p>
-					<p>Unfortunately, your request to join this workspace was rejected by the administrators at this time.</p>`;
-				break;
-			case "role.changed":
-				notifTitle = `🛡️ Role Assignment Update`;
-				notifBody = `Your role inside ${orgName} was changed to: ${metadata.newRole}`;
-				emailSubject = `Role Change in ${orgName}`;
-				emailHtml = `<p>Hi ${targetData.displayName || "there"},</p>
-					<p>Your permissions inside the workspace <strong>${orgName}</strong> have been updated.</p>
-					<p>Your new role is: <strong>${metadata.newRole}</strong>.</p>`;
-				break;
-			case "member.removed":
-				notifTitle = `👋 Removed from Workspace`;
-				notifBody = `You were removed from ${orgName}.`;
-				emailSubject = `Removed from ${orgName} Workspace`;
-				emailHtml = `<p>Hi ${targetData.displayName || "there"},</p>
-					<p>This email is to inform you that you have been removed from the <strong>${orgName}</strong> workspace.</p>`;
-				break;
-			case "candidate.applied":
-				notifTitle = `💼 Job Application Received`;
-				notifBody = `Your application for the position of ${metadata.jobTitle || "Job"} at ${orgName} has been received.`;
-				emailSubject = `Application Received: ${metadata.jobTitle || "Job"} at ${orgName}`;
-				emailHtml = `<p>Hi ${targetData.displayName || "there"},</p>
-					<p>We have successfully received your application for the <strong>${metadata.jobTitle || "Job"}</strong> role. Our team will review your application shortly.</p>`;
-				break;
-			case "candidate.stage_updated":
-				notifTitle = `📈 Application Status Update`;
-				notifBody = `Your application stage for ${metadata.jobTitle || "Job"} has been updated to: ${metadata.stage}`;
-				emailSubject = `Application Status Update: ${orgName}`;
-				emailHtml = `<p>Hi ${targetData.displayName || "there"},</p>
-					<p>Your application status for <strong>${metadata.jobTitle || "Job"}</strong> has been updated to: <strong>${metadata.stage}</strong>.</p>`;
-				break;
-			case "candidate.offer_sent":
-				notifTitle = `🎉 Job Offer Received!`;
-				notifBody = `Congratulations! ${orgName} has extended a job offer to you.`;
-				emailSubject = `Job Offer: ${orgName}`;
-				emailHtml = `<p>Hi ${targetData.displayName || "there"},</p>
-					<p>Congratulations! We are thrilled to extend an offer for the <strong>${metadata.jobTitle || "Job"}</strong> position. Please review the details in your candidate dashboard.</p>`;
-				break;
-			case "candidate.accepted":
-				notifTitle = `🤝 Offer Accepted`;
-				notifBody = `You have accepted the offer from ${orgName}. Welcome aboard!`;
-				emailSubject = `Offer Accepted Confirmation: ${orgName}`;
-				emailHtml = `<p>Hi ${targetData.displayName || "there"},</p>
-					<p>Thank you for accepting our offer! We are excited to welcome you to <strong>${orgName}</strong>.</p>`;
-				break;
-			case "candidate.rejected":
-				notifTitle = `💼 Application Update`;
-				notifBody = `Thank you for your application to ${orgName}. Unfortunately, we are not moving forward at this time.`;
-				emailSubject = `Application Update: ${orgName}`;
-				emailHtml = `<p>Hi ${targetData.displayName || "there"},</p>
-					<p>Thank you for taking the time to apply and speak with us. Unfortunately, we are not moving forward with your application at this time.</p>`;
-				break;
-			case "candidate.assessment_assigned":
-				notifTitle = `📝 Coding Assessment Assigned`;
-				notifBody = `You have been assigned a coding assessment for your application at ${orgName}.`;
-				emailSubject = `Coding Assessment: ${orgName}`;
-				emailHtml = `<p>Hi ${targetData.displayName || "there"},</p>
-					<p>As part of our evaluation, please complete the coding assessment assigned to your application: <a href="https://beastcode.codes/orgs/${orgData.slug}">Start Assessment</a>.</p>`;
-				break;
-			case "candidate.interview_scheduled":
-				notifTitle = `📅 Interview Scheduled`;
-				notifBody = `An interview has been scheduled for your application at ${orgName} on ${metadata.date} at ${metadata.time}.`;
-				emailSubject = `Interview Invitation: ${orgName}`;
-				emailHtml = `<p>Hi ${targetData.displayName || "there"},</p>
-					<p>An interview has been scheduled for your application at <strong>${orgName}</strong>.</p>
-					<p><strong>Date:</strong> ${metadata.date}</p>
-					<p><strong>Time:</strong> ${metadata.time}</p>
-					<p><strong>Meeting Link:</strong> <a href="${metadata.meetingLink || '#'}">${metadata.meetingLink || 'To be provided'}</a></p>`;
-				break;
-			case "certificate.issued":
-				notifTitle = `📜 Certificate Issued`;
-				notifBody = `You have been awarded a verifiable completion certificate from ${orgName}.`;
-				emailSubject = `Verified Certificate Awarded: ${orgName}`;
-				emailHtml = `<p>Hi ${targetData.displayName || "there"},</p>
-					<p>Congratulations! You have been awarded a verifiable certificate of completion by <strong>${orgName}</strong>.</p>`;
-				break;
+	if (cleanTargetUid) {
+		const targetDoc = await db.collection("users").doc(cleanTargetUid).get();
+		if (targetDoc.exists) {
+			targetData = targetDoc.data() || {};
+			targetEmail = targetData.email || "";
+			targetName = targetData.displayName || targetData.username || "there";
 		}
+	}
 
-		if (notifTitle) {
-			// Trigger In-App Notification Center
-			const notifCenterRef = db.collection("notifications").doc();
-			await notifCenterRef.set({
-				toUid: targetUid,
-				fromUid: actorUid,
-				fromDisplayName: actorName,
-				fromAvatarUrl: actorData.avatarUrl || "",
-				type: "ORGANIZATION_EVENT",
-				title: notifTitle,
-				body: notifBody,
-				category: "social",
-				priority: "medium",
-				createdAt: now,
-				read: false,
-				ctaText: "Open Workspace",
-				ctaUrl,
-				metadata: { orgId, action },
+	if (!targetEmail && metadata?.email) {
+		targetEmail = metadata.email;
+	}
+
+	const ctaUrl = `/orgs/${orgData.slug || ""}`;
+
+	let notifTitle = "";
+	let notifBody = "";
+	let emailSubject = "";
+	let emailHtml = "";
+
+	switch (action) {
+		case "member.invited":
+			notifTitle = `✉️ Organization Invitation`;
+			notifBody = `You have been invited to join ${orgName}`;
+			emailSubject = `BeastCode Workspace Invitation: ${orgName}`;
+			emailHtml = getEmailHtml({
+				headerTitle: "WORKSPACE INVITATION",
+				accentColor: COLORS.primary,
+				title: "Workspace Invitation",
+				leadText: `Hi ${targetName},`,
+				description: `You have been invited to join the ${orgName} workspace on BeastCode.`,
+				orgCard: {
+					orgName: orgName,
+					orgAvatar: orgData.avatar,
+					roleName: metadata?.newRole || "Member",
+					detailsText: `Invited by ${actorName || "Workspace Administrator"}`
+				},
+				ctaText: "Accept Invitation",
+				ctaUrl: buildAbsoluteUrl(`/orgs/invitation/${metadata?.inviteId || ''}`)
 			});
-		}
+			break;
+		case "member.joined":
+			notifTitle = `👋 Welcome to ${orgName}`;
+			notifBody = `Your application to join ${orgName} has been approved.`;
+			emailSubject = `Welcome to ${orgName} on BeastCode`;
+			emailHtml = getEmailHtml({
+				headerTitle: "WELCOME TO WORKSPACE",
+				accentColor: COLORS.success,
+				title: "Welcome to the Workspace",
+				leadText: `Hi ${targetName},`,
+				description: `Your application to join ${orgName} has been approved!`,
+				orgCard: {
+					orgName: orgName,
+					orgAvatar: orgData.avatar,
+					roleName: metadata?.newRole || "Member"
+				},
+				ctaText: "Workspace Overview",
+				ctaUrl: buildAbsoluteUrl(`/orgs/${orgData.slug || ''}`)
+			});
+			break;
+		case "member.rejected":
+			notifTitle = `⚠️ Application Update`;
+			notifBody = `Your request to join ${orgName} was rejected.`;
+			emailSubject = `Update regarding your BeastCode application for ${orgName}`;
+			emailHtml = getEmailHtml({
+				headerTitle: "APPLICATION UPDATE",
+				accentColor: COLORS.danger,
+				title: "Application Status Update",
+				leadText: `Hi ${targetName},`,
+				description: `Thank you for your interest in ${orgName}. Unfortunately, your request to join this workspace was rejected by the administrators at this time.`,
+				orgCard: {
+					orgName: orgName,
+					orgAvatar: orgData.avatar
+				}
+			});
+			break;
+		case "role.changed":
+			notifTitle = `🛡️ Role Assignment Update`;
+			notifBody = `Your role inside ${orgName} was changed to: ${metadata?.newRole || ''}`;
+			emailSubject = `Role Change in ${orgName}`;
+			emailHtml = getEmailHtml({
+				headerTitle: "ROLE UPDATE",
+				accentColor: COLORS.accent,
+				title: "Permissions Updated",
+				leadText: `Hi ${targetName},`,
+				description: `Your permissions inside the workspace ${orgName} have been updated.`,
+				orgCard: {
+					orgName: orgName,
+					orgAvatar: orgData.avatar,
+					roleName: metadata?.newRole || "Member"
+				}
+			});
+			break;
+		case "member.removed":
+			notifTitle = `👋 Removed from Workspace`;
+			notifBody = `You were removed from ${orgName}.`;
+			emailSubject = `Removed from ${orgName} Workspace`;
+			emailHtml = getEmailHtml({
+				headerTitle: "WORKSPACE REMOVAL",
+				accentColor: COLORS.danger,
+				title: "Removed from Workspace",
+				leadText: `Hi ${targetName},`,
+				description: `This email is to inform you that you have been removed from the ${orgName} workspace.`,
+				orgCard: {
+					orgName: orgName,
+					orgAvatar: orgData.avatar
+				}
+			});
+			break;
+		case "candidate.applied":
+			notifTitle = `💼 Job Application Received`;
+			notifBody = `Your application for the position of ${metadata?.jobTitle || "Job"} at ${orgName} has been received.`;
+			emailSubject = `Application Received: ${metadata?.jobTitle || "Job"} at ${orgName}`;
+			emailHtml = getEmailHtml({
+				headerTitle: "APPLICATION RECEIVED",
+				accentColor: COLORS.primary,
+				title: "Application Received",
+				leadText: `Hi ${targetName},`,
+				description: `We have successfully received your application for the ${metadata?.jobTitle || "Job"} role. Our team will review your application shortly.`,
+				recruitmentCard: {
+					companyName: orgName,
+					companyLogo: orgData.avatar,
+					jobTitle: metadata?.jobTitle || "Job Candidate",
+					skills: metadata?.skills || [],
+					description: "Thank you for applying!"
+				}
+			});
+			break;
+		case "candidate.stage_updated":
+			notifTitle = `📈 Application Status Update`;
+			notifBody = `Your application stage for ${metadata?.jobTitle || "Job"} has been updated to: ${metadata?.stage || ''}`;
+			emailSubject = `Application Status Update: ${orgName}`;
+			emailHtml = getEmailHtml({
+				headerTitle: "APPLICATION STATUS",
+				accentColor: COLORS.accent,
+				title: "Status Update",
+				leadText: `Hi ${targetName},`,
+				description: `Your application status for the ${metadata?.jobTitle || "Job"} role has been updated.`,
+				recruitmentCard: {
+					companyName: orgName,
+					companyLogo: orgData.avatar,
+					jobTitle: metadata?.jobTitle || "Job Candidate",
+					description: `Current Stage: ${metadata?.stage || "Under Review"}`
+				}
+			});
+			break;
+		case "candidate.offer_sent":
+			notifTitle = `🎉 Job Offer Received!`;
+			notifBody = `Congratulations! ${orgName} has extended a job offer to you.`;
+			emailSubject = `Job Offer: ${orgName}`;
+			emailHtml = getEmailHtml({
+				headerTitle: "JOB OFFER RECEIVED",
+				accentColor: COLORS.success,
+				title: "Congratulations! Job Offer Extended",
+				leadText: `Hi ${targetName},`,
+				description: `Congratulations! We are thrilled to extend an offer for the ${metadata?.jobTitle || "Job"} position. Please review the details in your candidate dashboard.`,
+				recruitmentCard: {
+					companyName: orgName,
+					companyLogo: orgData.avatar,
+					jobTitle: metadata?.jobTitle || "Job Candidate"
+				},
+				ctaText: "Review Offer",
+				ctaUrl: buildAbsoluteUrl(`/orgs/${orgData.slug || ''}`)
+			});
+			break;
+		case "candidate.accepted":
+			notifTitle = `🤝 Offer Accepted`;
+			notifBody = `You have accepted the offer from ${orgName}. Welcome aboard!`;
+			emailSubject = `Offer Accepted Confirmation: ${orgName}`;
+			emailHtml = getEmailHtml({
+				headerTitle: "OFFER ACCEPTED",
+				accentColor: COLORS.success,
+				title: "Offer Accepted Confirmation",
+				leadText: `Hi ${targetName},`,
+				description: `Thank you for accepting our offer! We are excited to welcome you to ${orgName}.`,
+				recruitmentCard: {
+					companyName: orgName,
+					companyLogo: orgData.avatar,
+					jobTitle: metadata?.jobTitle || "Job Candidate"
+				}
+			});
+			break;
+		case "candidate.rejected":
+			notifTitle = `💼 Application Update`;
+			notifBody = `Thank you for your application to ${orgName}. Unfortunately, we are not moving forward at this time.`;
+			emailSubject = `Application Update: ${orgName}`;
+			emailHtml = getEmailHtml({
+				headerTitle: "APPLICATION UPDATE",
+				accentColor: COLORS.secondaryText,
+				title: "Application Status Update",
+				leadText: `Hi ${targetName},`,
+				description: `Thank you for taking the time to apply and speak with us. Unfortunately, we are not moving forward with your application at this time.`,
+				recruitmentCard: {
+					companyName: orgName,
+					companyLogo: orgData.avatar,
+					jobTitle: metadata?.jobTitle || "Job Candidate"
+				}
+			});
+			break;
+		case "candidate.assessment_assigned":
+			notifTitle = `📝 Coding Assessment Assigned`;
+			notifBody = `You have been assigned a coding assessment for your application at ${orgName}.`;
+			emailSubject = `Coding Assessment: ${orgName}`;
+			emailHtml = getEmailHtml({
+				headerTitle: "ASSESSMENT ASSIGNED",
+				accentColor: COLORS.warning,
+				title: "Coding Assessment Assigned",
+				leadText: `Hi ${targetName},`,
+				description: `As part of our evaluation for the ${metadata?.jobTitle || "Job"} position, please complete the coding assessment assigned to your application.`,
+				recruitmentCard: {
+					companyName: orgName,
+					companyLogo: orgData.avatar,
+					jobTitle: metadata?.jobTitle || "Job Candidate"
+				},
+				ctaText: "Start Assessment",
+				ctaUrl: buildAbsoluteUrl(`/orgs/${orgData.slug || ''}`)
+			});
+			break;
+		case "candidate.interview_scheduled":
+			notifTitle = `📅 Interview Scheduled`;
+			notifBody = `An interview has been scheduled for your application at ${orgName} on ${metadata?.date || ''} at ${metadata?.time || ''}.`;
+			emailSubject = `Interview Invitation: ${orgName}`;
+			emailHtml = getEmailHtml({
+				headerTitle: "INTERVIEW SCHEDULED",
+				accentColor: COLORS.accent,
+				title: "Interview Invitation",
+				leadText: `Hi ${targetName},`,
+				description: `An interview has been scheduled for your application at ${orgName}.`,
+				recruitmentCard: {
+					companyName: orgName,
+					companyLogo: orgData.avatar,
+					jobTitle: metadata?.jobTitle || "Job Candidate",
+					description: `Date: ${metadata?.date || ""} | Time: ${metadata?.time || ""}`
+				},
+				ctaText: "Join Meeting",
+				ctaUrl: metadata?.meetingLink || "#"
+			});
+			break;
+		case "certificate.issued":
+			notifTitle = `📜 Certificate Issued`;
+			notifBody = `You have been awarded a verifiable completion certificate from ${orgName}.`;
+			emailSubject = `Verified Certificate Awarded: ${orgName}`;
+			emailHtml = getEmailHtml({
+				headerTitle: "CERTIFICATE ISSUED",
+				accentColor: COLORS.success,
+				title: "Verified Certificate Awarded",
+				leadText: `Hi ${targetName},`,
+				description: `Congratulations! You have been awarded a verifiable certificate of completion by ${orgName}.`,
+				orgCard: {
+					orgName: orgName,
+					orgAvatar: orgData.avatar,
+					detailsText: "Certificate ID: Verifiable Completion Certificate"
+				}
+			});
+			break;
+	}
 
-		if (emailSubject && targetEmail) {
-			// Trigger Email service
-			await EmailService.sendDirectEmail(targetEmail, emailSubject, emailHtml);
-		}
+	// 5. In-App Notification (only if user is registered)
+	if (notifTitle && cleanTargetUid) {
+		const notifCenterRef = db.collection("notifications").doc();
+		const notifData = cleanUndefined({
+			toUid: cleanTargetUid,
+			fromUid: actorUid,
+			fromDisplayName: actorName,
+			fromAvatarUrl: actorData.avatarUrl || "",
+			type: "ORGANIZATION_EVENT",
+			title: notifTitle,
+			body: notifBody,
+			category: "social",
+			priority: "medium",
+			createdAt: now,
+			read: false,
+			ctaText: action === "member.invited" ? "View Invitation" : "Open Workspace",
+			ctaUrl: action === "member.invited" && metadata?.inviteId ? `/orgs/invitation/${metadata.inviteId}` : ctaUrl,
+			metadata: {
+				orgId,
+				action,
+				...metadata,
+				orgName,
+				orgLogo: orgData.avatar || "",
+				orgType: orgData.organizationType || "",
+				orgVisibility: orgData.visibility || "",
+				orgOwnerUid: orgData.ownerUid || "",
+				orgDescription: orgData.description || "",
+				orgMemberCount: orgData.memberCount || 0,
+				inviterName: actorName,
+				expiresAt: metadata?.expiresAt || (now + 7 * 24 * 60 * 60 * 1000)
+			},
+		});
+		await notifCenterRef.set(notifData);
+	}
+
+	// 6. Direct Email notification
+	if (emailSubject && targetEmail) {
+		await EmailService.sendDirectEmail(targetEmail, emailSubject, emailHtml);
 	}
 }
 

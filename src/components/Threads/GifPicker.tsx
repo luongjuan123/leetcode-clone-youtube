@@ -196,31 +196,38 @@ const GifPicker: React.FC<GifPickerProps> = ({ onSelect, onClose }) => {
 
 			{/* Tabs */}
 			{searchQuery.trim() === "" && (
-				<div className="flex justify-between border-b border-[var(--border-subtle)] pb-2 mb-3 text-[10px] font-bold text-[var(--text-muted)] select-none">
-					<button
-						onClick={() => { setActiveTab("trending"); setFocusedIdx(-1); }}
-						className={`flex items-center gap-1 transition ${activeTab === "trending" ? "text-[var(--brand-orange)] border-b-2 border-[var(--brand-orange)] pb-2 -mb-2.5" : "hover:text-[var(--text-primary)]"}`}
-					>
-						<FaFire size={10} /> Trending
-					</button>
-					<button
-						onClick={() => { setActiveTab("categories"); setFocusedIdx(-1); }}
-						className={`flex items-center gap-1 transition ${activeTab === "categories" ? "text-[var(--brand-orange)] border-b-2 border-[var(--brand-orange)] pb-2 -mb-2.5" : "hover:text-[var(--text-primary)]"}`}
-					>
-						<FaFolder size={10} /> Categories
-					</button>
-					<button
-						onClick={() => { setActiveTab("favorites"); setFocusedIdx(-1); }}
-						className={`flex items-center gap-1 transition ${activeTab === "favorites" ? "text-[var(--brand-orange)] border-b-2 border-[var(--brand-orange)] pb-2 -mb-2.5" : "hover:text-[var(--text-primary)]"}`}
-					>
-						<FaHeart size={10} /> Favorites
-					</button>
-					<button
-						onClick={() => { setActiveTab("recent"); setFocusedIdx(-1); }}
-						className={`flex items-center gap-1 transition ${activeTab === "recent" ? "text-[var(--brand-orange)] border-b-2 border-[var(--brand-orange)] pb-2 -mb-2.5" : "hover:text-[var(--text-primary)]"}`}
-					>
-						<FaHistory size={10} /> Recents
-					</button>
+				<div
+					className="flex items-center justify-between gap-1 p-1 rounded-2xl border transition-all duration-300 w-full mb-3"
+					style={{
+						backgroundColor: "var(--bg-dark-layer-1)",
+						borderColor: "var(--border-subtle)",
+					}}
+				>
+					{[
+						{ id: "trending", label: "Trending", icon: <FaFire size={10} /> },
+						{ id: "categories", label: "Categories", icon: <FaFolder size={10} /> },
+						{ id: "favorites", label: "Favorites", icon: <FaHeart size={10} /> },
+						{ id: "recent", label: "Recents", icon: <FaHistory size={10} /> },
+					].map((tab) => {
+						const isActive = activeTab === tab.id;
+						return (
+							<button
+								key={tab.id}
+								onClick={() => { setActiveTab(tab.id as any); setFocusedIdx(-1); }}
+								className={`flex items-center gap-1 px-2 py-1.5 rounded-xl text-[9px] font-bold transition-all duration-300 border select-none cursor-pointer ${
+									isActive
+										? "border-border-accent glow-sm font-extrabold"
+										: "border-transparent text-text-secondary hover:text-text-primary hover:bg-dark-fill-3"
+								}`}
+								style={{
+									backgroundColor: isActive ? "var(--bg-surface)" : "transparent",
+									color: isActive ? "var(--brand-orange)" : "var(--text-secondary)",
+								}}
+							>
+								{tab.icon} {tab.label}
+							</button>
+						);
+					})}
 				</div>
 			)}
 

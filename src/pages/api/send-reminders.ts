@@ -3,6 +3,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { getAdminFirestore } from "@/firebase/firebaseAdmin";
 import { NotificationDispatcher } from "@/utils/notificationDispatcher";
 import { NotificationRecipientService } from "@/utils/notificationRecipientService";
+import { buildAbsoluteUrl } from "@/utils/siteConfig";
 
 type ResponseData = {
 	success: boolean;
@@ -96,8 +97,7 @@ async function handler(
 				continue;
 			}
 
-			const origin = req.headers.host ? `http://${req.headers.host}` : "https://beastcode.codes";
-			const contestUrl = `${origin}/contests/${contest.id}`;
+			const contestUrl = buildAbsoluteUrl(`/contests/${contest.id}`);
 
 			// Send to each targeted recipient using central NotificationDispatcher
 			for (const u of targetedRecipients) {

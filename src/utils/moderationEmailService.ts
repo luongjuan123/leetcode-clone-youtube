@@ -1,7 +1,8 @@
 import { EmailService } from "./emailService";
 import { getEmailHtml } from "./emailTemplate";
+import { getSiteUrl } from "./siteConfig";
 
-const origin = process.env.NEXT_PUBLIC_APP_URL || "https://beastcode--beastcode-7555e.asia-southeast1.hosted.app";
+const origin = getSiteUrl();
 
 export class ModerationEmailService {
 	public static async sendWarningEmail(email: string, reason: string, description: string, expiresAt: number, refId: string): Promise<boolean> {

@@ -1,8 +1,10 @@
 import { getAdminFirestore } from "@/firebase/firebaseAdmin";
 import { getEmailHtml } from "./emailTemplate";
+import { EmailService } from "./emailService";
 import { BeastNotificationEvent, NotificationPayload, DispatchResult } from "./notificationTypes";
 export type { BeastNotificationEvent, NotificationPayload, DispatchResult };
 import { getEventConfig } from "./notificationTemplates";
+import { getSiteUrl } from "./siteConfig";
 
 export function isChannelEnabled(
 	prefs: any,
@@ -39,15 +41,6 @@ export class NotificationDispatcher {
 	): Promise<DispatchResult> {
 		const emailLower = payload.toEmail.toLowerCase().trim();
 		const db = getAdminFirestore();
-
-		// Gatekeeper rule: Explicit hardcoded blacklist
-		if (emailLower === "dungpubgame@gmail.com") {
-			return {
-				success: true,
-				message: "Notification skipped: Recipient email is blacklisted (dungpubgame@gmail.com)",
-				status: "skipped"
-			};
-		}
 
 		const config = getEventConfig(eventType, payload.userName, payload.placeholders || {}, payload.customContent);
 
@@ -109,6 +102,9 @@ export class NotificationDispatcher {
 		}
 
 		// 3. Render HTML for Email
+		const defaultAppUrl = getSiteUrl();
+		const resolvedCtaUrl = payload.ctaUrl || (config.ctaText ? defaultAppUrl : undefined);
+
 		const emailHtml = getEmailHtml({
 			headerTitle: config.headerTitle,
 			accentColor: config.accentColor,
@@ -117,8 +113,12 @@ export class NotificationDispatcher {
 			leadText: config.leadText,
 			description: config.description,
 			details: config.details,
+			contestCard: config.contestCard,
+			orgCard: config.orgCard,
+			otpCode: config.otpCode,
+			otpExpiration: config.otpExpiration,
 			ctaText: config.ctaText,
-			ctaUrl: payload.ctaUrl || config.ctaText ? (payload.ctaUrl || "https://beastcode.codes") : undefined,
+			ctaUrl: resolvedCtaUrl,
 			recipientEmail: emailLower,
 			preferenceType: config.category,
 			footerText: (config as any).footerText
@@ -194,6 +194,11 @@ export class NotificationDispatcher {
 				if (historyRef) {
 					await historyRef.update({ status: "queued", queuedId: queuedRef.id });
 				}
+
+				// Immediately trigger background queue processor so the email delivers without waiting for manual admin clicks
+				EmailService.processQueue().catch((qErr) => {
+					console.error("[EMAIL DEBUG] Immediate queue processor trigger error:", qErr);
+				});
 
 				return {
 					success: true,

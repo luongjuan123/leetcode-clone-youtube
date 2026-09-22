@@ -13,6 +13,7 @@ import {
 	FiDownload
 } from "react-icons/fi";
 import { ConfirmationModal } from "./AdminShared";
+import BeastCodeSelect from "../UI/BeastCodeSelect";
 
 interface ProblemListItem {
 	id: string;
@@ -73,6 +74,31 @@ export const ProblemsTab: React.FC<ProblemsTabProps> = ({
 	const [bulkDiskLimitMb, setDiskLimitMb] = useState(50);
 	const [bulkProcessLimit, setProcessLimit] = useState(15);
 	const [bulkSubmitting, setBulkSubmitting] = useState(false);
+
+	const difficultyOptions = useMemo(() => [
+		{ value: "All", label: "Difficulty: All" },
+		{ value: "Easy", label: "Easy" },
+		{ value: "Medium", label: "Medium" },
+		{ value: "Hard", label: "Hard" }
+	], []);
+
+	const typeOptions = useMemo(() => [
+		{ value: "All", label: "Type: All" },
+		{ value: "Static", label: "Static / Core" },
+		{ value: "Database", label: "Database Only" }
+	], []);
+
+	const tagOptions = useMemo(() => [
+		{ value: "All", label: "Tag: All" },
+		...allTags.map((tag) => ({ value: tag, label: tag }))
+	], [allTags]);
+
+	const sortOptions = useMemo(() => [
+		{ value: "title-asc", label: "Sort: A - Z" },
+		{ value: "title-desc", label: "Sort: Z - A" },
+		{ value: "difficulty-asc", label: "Difficulty: Easy - Hard" },
+		{ value: "difficulty-desc", label: "Difficulty: Hard - Easy" }
+	], []);
 
 	// Filter reset on query updates
 	useEffect(() => {
@@ -246,64 +272,38 @@ export const ProblemsTab: React.FC<ProblemsTabProps> = ({
 
 					{/* Filters selects */}
 					<div className="flex flex-wrap gap-2.5 items-center">
-						{/* Difficulty select */}
-						<div className="relative">
-							<select
-								value={difficultyFilter}
-								onChange={(e) => setDifficultyFilter(e.target.value)}
-								className="appearance-none bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-[11px] font-bold py-1.5 pl-3 pr-8 rounded-xl outline-none cursor-pointer"
-							>
-								<option value="All">Difficulty: All</option>
-								<option value="Easy">Easy</option>
-								<option value="Medium">Medium</option>
-								<option value="Hard">Hard</option>
-							</select>
-							<FiChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none" size={10} />
-						</div>
+						<BeastCodeSelect
+							size="sm"
+							options={difficultyOptions}
+							value={difficultyFilter}
+							onChange={setDifficultyFilter}
+							className="w-36"
+						/>
 
-						{/* Type select */}
-						<div className="relative">
-							<select
-								value={typeFilter}
-								onChange={(e) => setTypeFilter(e.target.value)}
-								className="appearance-none bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-[11px] font-bold py-1.5 pl-3 pr-8 rounded-xl outline-none cursor-pointer"
-							>
-								<option value="All">Type: All</option>
-								<option value="Static">Static / Core</option>
-								<option value="Database">Database Only</option>
-							</select>
-							<FiChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none" size={10} />
-						</div>
+						<BeastCodeSelect
+							size="sm"
+							options={typeOptions}
+							value={typeFilter}
+							onChange={setTypeFilter}
+							className="w-36"
+						/>
 
-						{/* Tag select */}
-						<div className="relative">
-							<select
-								value={tagFilter}
-								onChange={(e) => setTagFilter(e.target.value)}
-								className="appearance-none bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-[11px] font-bold py-1.5 pl-3 pr-8 rounded-xl outline-none cursor-pointer"
-							>
-								<option value="All">Tag: All</option>
-								{allTags.map((tag) => (
-									<option key={tag} value={tag}>{tag}</option>
-								))}
-							</select>
-							<FiChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none" size={10} />
-						</div>
+						<BeastCodeSelect
+							size="sm"
+							options={tagOptions}
+							value={tagFilter}
+							onChange={setTagFilter}
+							className="w-36"
+							searchable={true}
+						/>
 
-						{/* Sort selector */}
-						<div className="relative">
-							<select
-								value={sortBy}
-								onChange={(e) => setSortBy(e.target.value)}
-								className="appearance-none bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-[11px] font-bold py-1.5 pl-3 pr-8 rounded-xl outline-none cursor-pointer"
-							>
-								<option value="title-asc">Sort: A - Z</option>
-								<option value="title-desc">Sort: Z - A</option>
-								<option value="difficulty-asc">Difficulty: Easy - Hard</option>
-								<option value="difficulty-desc">Difficulty: Hard - Easy</option>
-							</select>
-							<FiChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none" size={10} />
-						</div>
+						<BeastCodeSelect
+							size="sm"
+							options={sortOptions}
+							value={sortBy}
+							onChange={setSortBy}
+							className="w-48"
+						/>
 					</div>
 				</div>
 
@@ -650,21 +650,18 @@ export const ProblemsTab: React.FC<ProblemsTabProps> = ({
 								<label htmlFor="bulkProfile" className="text-[10px] font-bold block mb-1 text-[var(--text-secondary)]">
 									Execution Profile
 								</label>
-								<div className="relative">
-									<select
-										id="bulkProfile"
-										value={bulkProfile}
-										onChange={(e) => setBulkProfile(e.target.value)}
-										className="appearance-none bg-[var(--bg-dark-fill-3)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-xs rounded-xl p-2.5 w-full outline-none cursor-pointer"
-									>
-										<option value="fast">Fast (Short algorithmic problems)</option>
-										<option value="normal">Normal (Standard competitive programming)</option>
-										<option value="long">Long (Heavy computations)</option>
-										<option value="machine_learning">Machine Learning (Model training / AI challenges)</option>
-										<option value="custom">Custom (Individual Limits)</option>
-									</select>
-									<FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none" size={12} />
-								</div>
+								<BeastCodeSelect
+									options={[
+										{ value: "fast", label: "Fast (Short algorithmic problems)" },
+										{ value: "normal", label: "Normal (Standard competitive programming)" },
+										{ value: "long", label: "Long (Heavy computations)" },
+										{ value: "machine_learning", label: "Machine Learning (Model training / AI challenges)" },
+										{ value: "custom", label: "Custom (Individual Limits)" }
+									]}
+									value={bulkProfile}
+									onChange={(val) => setBulkProfile(val)}
+									size="sm"
+								/>
 							</div>
 							<div className="p-3 bg-[var(--bg-dark-fill-3)]/40 border border-[var(--border-subtle)] rounded-xl">
 								<span className="text-[10px] font-bold uppercase block mb-2 text-[var(--brand-orange)]">

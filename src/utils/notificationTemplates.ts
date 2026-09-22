@@ -14,6 +14,22 @@ export interface TemplateConfig {
 	ctaText?: string;
 	ctaUrl?: string;
 	footerText?: string;
+	otpCode?: string;
+	otpExpiration?: string;
+	contestCard?: {
+		title: string;
+		startTime: string;
+		duration: string;
+		countdown?: string;
+		bannerUrl?: string;
+	};
+	orgCard?: {
+		orgName: string;
+		orgAvatar?: string;
+		roleName?: string;
+		ownerName?: string;
+		detailsText?: string;
+	};
 }
 
 export const EVENT_TEMPLATES: Record<BeastNotificationEvent, (name: string, ph: Record<string, string>, customContent?: string) => TemplateConfig> = {
@@ -67,7 +83,7 @@ export const EVENT_TEMPLATES: Record<BeastNotificationEvent, (name: string, ph: 
 			{ label: "Expires In", value: "1 Hour", isHighlight: true }
 		],
 		ctaText: "Reset Password",
-		footerText: `BeastCode &bull; Competitive Programming Platform &bull; bomboclatbeastcode.codes<br/>Need help? <a href="mailto:support@bomboclatbeastcode.codes" style="color: #ef4444; text-decoration: none; font-weight: 600;">support@bomboclatbeastcode.codes</a>`
+		footerText: `BeastCode &bull; Competitive Programming Platform &bull; bomboclatbeastcode.codes<br/>Need help? <a href="mailto:support@beastcode.codes" style="color: #ef4444; text-decoration: none; font-weight: 600;">support@beastcode.codes</a>`
 	}),
 
 	AUTH_CHANGE_CONFIRM: (name, ph, customContent) => ({
@@ -132,6 +148,12 @@ export const EVENT_TEMPLATES: Record<BeastNotificationEvent, (name: string, ph: 
 		title: ph.contestTitle || "Contest Scheduled",
 		leadText: `Hello ${name}, a new competitive programming contest has been scheduled on BeastCode!`,
 		description: customContent || "Review the contest details below and secure your spot in the arena.",
+		contestCard: {
+			title: ph.contestTitle || "Contest",
+			startTime: ph.startTime || "N/A",
+			duration: ph.durationText || "120 minutes",
+			bannerUrl: ph.bannerUrl || undefined
+		},
 		details: [
 			{ label: "Contest Name", value: ph.contestTitle || "Contest" },
 			{ label: "Starts At", value: ph.startTime || "N/A" },
@@ -530,6 +552,42 @@ export const EVENT_TEMPLATES: Record<BeastNotificationEvent, (name: string, ph: 
 			{ label: "Thread", value: ph.threadTitle || "Thread" }
 		],
 		ctaText: "View Quote Context"
+	}),
+
+	// Chat & Messaging
+	CHAT_DIRECT_MESSAGE: (name, ph, customContent) => ({
+		category: "thread",
+		priority: "high",
+		subject: `New message from ${ph.senderName || "a user"}`,
+		headerTitle: "Direct Message",
+		accentColor: "#f97316",
+		accentGlowColor: "rgba(249, 115, 22, 0.15)",
+		title: `Message from ${ph.senderName || "User"}`,
+		leadText: `Hello ${name}, you received a new message.`,
+		description: customContent || `"${ph.messagePreview || "Sent you a message"}"`,
+		details: [
+			{ label: "Sender", value: ph.senderName || "User" }
+		],
+		ctaText: "Open Chat",
+		ctaUrl: ph.chatUrl || "/messages"
+	}),
+
+	CHAT_MENTION: (name, ph, customContent) => ({
+		category: "thread",
+		priority: "high",
+		subject: `You were mentioned in ${ph.channelName || "Chat"}`,
+		headerTitle: "Chat Mention",
+		accentColor: "#3b82f6",
+		accentGlowColor: "rgba(59, 130, 246, 0.15)",
+		title: "Mentioned in Chat",
+		leadText: `Hello ${name}, ${ph.senderName || "User"} mentioned you in ${ph.channelName || "Chat"}.`,
+		description: customContent || `"${ph.messagePreview || "Check channel"}"`,
+		details: [
+			{ label: "Channel", value: ph.channelName || "General" },
+			{ label: "By", value: ph.senderName || "User" }
+		],
+		ctaText: "Go to Channel",
+		ctaUrl: ph.chatUrl || "/messages"
 	}),
 
 	// Account

@@ -5,7 +5,7 @@ import { AiFillYoutube } from "react-icons/ai";
 import { IoClose } from "react-icons/io5";
 import { FiSearch } from "react-icons/fi";
 import YouTube from "react-youtube";
-import { collection, doc, getDoc, getDocs, orderBy, query } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, orderBy, query, onSnapshot } from "firebase/firestore";
 import { auth, firestore } from "@/firebase/firebase";
 import { DBProblem } from "@/utils/types/problem";
 import { useAuthState } from "react-firebase-hooks/auth";
@@ -329,17 +329,21 @@ function useGetSolvedProblems() {
 	const [user] = useAuthState(auth);
 
 	useEffect(() => {
-		const getSolvedProblems = async () => {
-			const userRef = doc(firestore, "users", user!.uid);
-			const userDoc = await getDoc(userRef);
+		if (!user) {
+			setSolvedProblems([]);
+			return;
+		}
 
+		const userRef = doc(firestore, "users", user.uid);
+		const unsubscribe = onSnapshot(userRef, (userDoc) => {
 			if (userDoc.exists()) {
 				setSolvedProblems(userDoc.data().solvedProblems || []);
 			}
-		};
+		}, (err) => {
+			console.error("Error listening to solved problems:", err);
+		});
 
-		if (user) getSolvedProblems();
-		if (!user) setSolvedProblems([]);
+		return () => unsubscribe();
 	}, [user]);
 
 	return solvedProblems;

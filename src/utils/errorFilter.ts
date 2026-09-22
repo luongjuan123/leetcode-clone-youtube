@@ -36,7 +36,7 @@ export function getFriendlyErrorMessage(error: any, fallbackMessage: string = "S
 	if (lowerMsg.includes("permission-denied") || lowerMsg.includes("missing or insufficient permissions")) {
 		return "Access denied. You do not have permission to perform this action.";
 	}
-	if (lowerMsg.includes("firestore") || lowerMsg.includes("collection") || lowerMsg.includes("document") || lowerMsg.includes("/")) {
+	if (lowerMsg.includes("firestore") || lowerMsg.includes("@google-cloud/firestore") || lowerMsg.includes("firestore/")) {
 		return "Database connection failure. Please try again later.";
 	}
 

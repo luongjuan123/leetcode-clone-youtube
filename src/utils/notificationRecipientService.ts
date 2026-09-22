@@ -103,8 +103,7 @@ export class NotificationRecipientService {
 		const db = getAdminFirestore();
 		let resolved: RecipientInfo[] = [];
 
-		const senderEmail = (process.env.SMTP_USER || "bomemebo6996@gmail.com").toLowerCase().trim();
-		const blacklist = ["dungpubgame@gmail.com", senderEmail];
+		const blacklist: string[] = [];
 
 		// 1. Resolve Raw User Candidates
 		if (options.targetUid) {
@@ -197,7 +196,7 @@ export class NotificationRecipientService {
 			// Check valid format
 			if (!user.email || !emailRegex.test(user.email)) return false;
 
-			// Prevent blacklisted emails (including the sender SMTP user) from receiving
+			// Prevent blacklisted emails from receiving
 			if (blacklist.includes(user.email)) return false;
 
 			// Check university restrictions
@@ -251,11 +250,11 @@ export class NotificationRecipientService {
 			return true;
 		});
 
-		// 4. Admin Test Mode Override
-		const testModeEnabled = process.env.ADMIN_TEST_MODE === "true" || process.env.NEXT_PUBLIC_ADMIN_TEST_MODE === "true";
-		if (testModeEnabled) {
-			const testEmailsConf = process.env.ADMIN_TEST_EMAILS || "admin@leetcode.com,juan@test.com,admin@test.com";
-			const testEmailsList = testEmailsConf.split(",").map(e => e.trim().toLowerCase());
+		// 4. Admin Test Mode Override (Only if explicitly enabled with non-empty ADMIN_TEST_EMAILS)
+		const testModeEnabled = process.env.ADMIN_TEST_MODE === "true";
+		const testEmailsConf = process.env.ADMIN_TEST_EMAILS;
+		if (testModeEnabled && testEmailsConf && testEmailsConf.trim().length > 0) {
+			const testEmailsList = testEmailsConf.split(",").map(e => e.trim().toLowerCase()).filter(Boolean);
 
 			console.log(`[Notification Test Mode] Activating override. Resolved ${eligible.length} original recipient(s). Redirecting delivery to test accounts:`, testEmailsList);
 

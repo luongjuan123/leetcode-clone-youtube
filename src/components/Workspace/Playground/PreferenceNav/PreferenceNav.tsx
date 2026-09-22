@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { AiOutlineFullscreen, AiOutlineFullscreenExit, AiOutlineSetting } from "react-icons/ai";
 import { ISettings } from "../Playground";
 import SettingsModal from "@/components/Modals/SettingsModal";
+import BeastCodeSelect from "@/components/UI/BeastCodeSelect";
 
 type SupportedLanguage = "javascript" | "python" | "cpp" | "java" | "c";
 
@@ -46,21 +47,19 @@ const PreferenceNav: React.FC<PreferenceNavProps> = ({ setSettings, settings, la
 	return (
 		<div className={`flex items-center justify-between h-11 w-full border-b ${lightTheme ? "bg-gray-100 border-gray-300" : "bg-dark-layer-2 border-transparent"}`}>
 			<div className='flex items-center px-2 gap-3'>
-				<select
+				<BeastCodeSelect
+					size="sm"
+					options={[
+						{ value: "javascript", label: "JavaScript" },
+						{ value: "python", label: "Python 3" },
+						{ value: "cpp", label: "C++ (GCC 10)" },
+						{ value: "java", label: "Java (OpenJDK 15)" },
+						{ value: "c", label: "C (GCC 10)" }
+					]}
 					value={language}
-					onChange={(e) => setLanguage(e.target.value as SupportedLanguage)}
-					className={`cursor-pointer rounded focus:outline-none px-3 py-1.5 text-xs font-semibold border transition-all duration-200 ${
-						lightTheme
-							? "bg-dark-layer-1 text-gray-700 border-gray-350 hover:bg-dark-elevated focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/20"
-							: "bg-dark-layer-2 text-dark-gray-8 border-gray-850 hover:bg-dark-fill-3 focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/20"
-					}`}
-				>
-					<option value='javascript' className={lightTheme ? "bg-dark-layer-1 text-gray-700" : "bg-dark-layer-2 text-dark-gray-8"}>JavaScript</option>
-					<option value='python' className={lightTheme ? "bg-dark-layer-1 text-gray-700" : "bg-dark-layer-2 text-dark-gray-8"}>Python 3</option>
-					<option value='cpp' className={lightTheme ? "bg-dark-layer-1 text-gray-700" : "bg-dark-layer-2 text-dark-gray-8"}>C++ (GCC 10)</option>
-					<option value='java' className={lightTheme ? "bg-dark-layer-1 text-gray-700" : "bg-dark-layer-2 text-dark-gray-8"}>Java (OpenJDK 15)</option>
-					<option value='c' className={lightTheme ? "bg-dark-layer-1 text-gray-700" : "bg-dark-layer-2 text-dark-gray-8"}>C (GCC 10)</option>
-				</select>
+					onChange={(val) => setLanguage(val as SupportedLanguage)}
+					className="w-44 font-semibold"
+				/>
 
 				{/* Sync Status Badge */}
 				<div 

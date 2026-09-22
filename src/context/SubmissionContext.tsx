@@ -191,6 +191,7 @@ export const SubmissionProvider: React.FC<{ problemId: string; contestId?: strin
 			(docSnap) => {
 				if (docSnap.exists()) {
 					const data = docSnap.data();
+					setSelectedSub({ id: docSnap.id, ...data } as Submission);
 					const status = data.status || "submitting";
 					setSubmittingVerdict(data.verdict || "Pending");
 
@@ -279,9 +280,10 @@ export const SubmissionProvider: React.FC<{ problemId: string; contestId?: strin
 		setRunError(null);
 
 		try {
+			const filteredSamples = (problem.examples || []).filter((ex) => ex.isSample);
 			const sampleCases = customInputChecked
 				? [{ inputText: customInputText, outputText: "", isSample: true }]
-				: (problem.examples || []).filter((ex) => ex.isSample);
+				: (filteredSamples.length > 0 ? filteredSamples : (problem.examples || []));
 
 			const idToken = user ? await user.getIdToken() : "";
 			const res = await fetch("/api/run", {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { FaChevronDown, FaSearch, FaTimes } from "react-icons/fa";
+import { FaChevronDown, FaSearch, FaTimes, FaCheck } from "react-icons/fa";
 
 export interface SelectOption {
 	value: string;
@@ -17,6 +17,7 @@ interface BeastCodeSelectProps {
 	maxHeight?: string;
 	className?: string;
 	disabled?: boolean;
+	size?: "sm" | "md" | "lg";
 }
 
 const BeastCodeSelect: React.FC<BeastCodeSelectProps> = ({
@@ -29,6 +30,7 @@ const BeastCodeSelect: React.FC<BeastCodeSelectProps> = ({
 	maxHeight = "280px",
 	className = "",
 	disabled = false,
+	size = "md",
 }) => {
 	const [isOpen, setIsOpen] = useState(false);
 	const [searchQuery, setSearchQuery] = useState("");
@@ -147,19 +149,32 @@ const BeastCodeSelect: React.FC<BeastCodeSelectProps> = ({
 		}
 	};
 
+	// Size-specific styles
+	const triggerPadding = {
+		sm: "px-2.5 py-1.5 rounded-lg text-[11px]",
+		md: "px-3 py-2.5 rounded-xl text-xs",
+		lg: "px-4 py-3 rounded-xl text-sm",
+	}[size];
+
+	const optionPadding = {
+		sm: "px-2.5 py-2 text-[11px]",
+		md: "px-4 py-2.5 text-xs",
+		lg: "px-4 py-3 text-sm",
+	}[size];
+
 	return (
 		<div
 			ref={containerRef}
-			className={`relative w-full select-none font-sans text-sm ${className}`}
+			className={`relative w-full select-none font-sans ${className}`}
 			onKeyDown={handleKeyDown}
 		>
 			{/* Trigger Button */}
 			<div
 				tabIndex={disabled ? -1 : 0}
 				onClick={handleToggle}
-				className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all duration-200 cursor-pointer ${
-					disabled ? "opacity-50 cursor-not-allowed" : "hover:border-brand-orange"
-				} ${isOpen ? "border-brand-orange shadow-glow-sm" : ""}`}
+				className={`w-full flex items-center justify-between border transition-all duration-200 cursor-pointer ${triggerPadding} ${
+					disabled ? "opacity-50 cursor-not-allowed" : "hover:border-[var(--brand-orange)]"
+				} ${isOpen ? "border-[var(--brand-orange)] shadow-glow-sm" : ""}`}
 				style={{
 					background: "var(--bg-elevated)",
 					borderColor: isOpen ? "var(--brand-orange)" : "var(--border-default)",
@@ -170,13 +185,13 @@ const BeastCodeSelect: React.FC<BeastCodeSelectProps> = ({
 				<div className="flex-1 truncate pr-2">
 					{selectedOption ? (
 						<div className="flex items-center justify-between">
-							<span className="font-semibold text-sm" style={{ color: "var(--text-primary)" }}>{selectedOption.label}</span>
+							<span className="font-semibold" style={{ color: "var(--text-primary)" }}>{selectedOption.label}</span>
 							{selectedOption.subLabel && (
-								<span className="text-xs ml-2" style={{ color: "var(--text-muted)" }}>{selectedOption.subLabel}</span>
+								<span className="text-[10px] ml-2 font-medium" style={{ color: "var(--text-muted)" }}>{selectedOption.subLabel}</span>
 							)}
 						</div>
 					) : (
-						placeholder
+						<span style={{ color: "var(--text-muted)" }}>{placeholder}</span>
 					)}
 				</div>
 				<div className="flex items-center gap-1.5 text-gray-500">
@@ -248,7 +263,9 @@ const BeastCodeSelect: React.FC<BeastCodeSelectProps> = ({
 										key={opt.value}
 										onClick={() => handleSelect(opt.value)}
 										onMouseEnter={() => setFocusedIndex(index)}
-										className={`px-4 py-2.5 text-xs flex items-center justify-between cursor-pointer transition-colors duration-150`}
+										className={`flex items-center justify-between cursor-pointer transition-all duration-150 border-l-2 ${optionPadding} ${
+											isSelected ? "border-[var(--brand-orange)]" : "border-transparent"
+										}`}
 										style={{
 											background: isSelected
 												? "var(--brand-glow)"
@@ -262,7 +279,10 @@ const BeastCodeSelect: React.FC<BeastCodeSelectProps> = ({
 												: "var(--text-secondary)",
 										}}
 									>
-										<div className="font-semibold">{opt.label}</div>
+										<div className="flex items-center gap-2">
+											{isSelected && <FaCheck className="text-[var(--brand-orange)] text-[9px] shrink-0" />}
+											<span className="font-semibold">{opt.label}</span>
+										</div>
 										{opt.subLabel && (
 											<div className="text-[10px] ml-2 opacity-80" style={{ color: isSelected ? "var(--brand-orange)" : "var(--text-muted)" }}>
 												{opt.subLabel}

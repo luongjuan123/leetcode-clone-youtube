@@ -3,6 +3,7 @@ import Link from "next/link";
 import { auth } from "@/firebase/firebase";
 import { getFriendlyErrorMessage } from "@/utils/errorFilter";
 import AttachmentGrid from "@/components/AttachmentViewer/AttachmentGrid";
+import BeastCodeSelect from "../UI/BeastCodeSelect";
 import {
 	FaUserShield,
 	FaBan,
@@ -614,30 +615,34 @@ export const ModerationTab: React.FC<ModerationTabProps> = ({ triggerStatusMessa
 
 						<div className="flex items-center gap-2">
 							<span className="text-[var(--text-muted)] text-[10px] font-bold uppercase shrink-0"><FaFilter size={8} /> Role:</span>
-							<select
+							<BeastCodeSelect
+								options={[
+									{ value: "", label: "All Roles" },
+									{ value: "admin", label: "Admin" },
+									{ value: "user", label: "User" }
+								]}
 								value={roleFilter}
-								onChange={(e) => setRoleFilter(e.target.value)}
-								className="flex-1 bg-[var(--bg-dark-fill-3)] border border-[var(--border-subtle)] text-xs rounded-xl px-3 py-2 text-[var(--text-primary)] outline-none focus:border-[var(--brand-orange)] cursor-pointer"
-							>
-								<option value="">All Roles</option>
-								<option value="admin">Admin</option>
-								<option value="user">User</option>
-							</select>
+								onChange={(val) => setRoleFilter(val)}
+								size="sm"
+								className="flex-1 min-w-[120px]"
+							/>
 						</div>
 
 						<div className="flex items-center gap-2">
 							<span className="text-[var(--text-muted)] text-[10px] font-bold uppercase shrink-0"><FaFilter size={8} /> Status:</span>
-							<select
+							<BeastCodeSelect
+								options={[
+									{ value: "", label: "All States" },
+									{ value: "ACTIVE", label: "Active" },
+									{ value: "BANNED", label: "Banned" },
+									{ value: "PENDING_DELETION", label: "Pending Deletion" },
+									{ value: "APPEALED", label: "Appealed" }
+								]}
 								value={statusFilter}
-								onChange={(e) => setStatusFilter(e.target.value)}
-								className="flex-1 bg-[var(--bg-dark-fill-3)] border border-[var(--border-subtle)] text-xs rounded-xl px-3 py-2 text-[var(--text-primary)] outline-none focus:border-[var(--brand-orange)] cursor-pointer"
-							>
-								<option value="">All States</option>
-								<option value="ACTIVE">Active</option>
-								<option value="BANNED">Banned</option>
-								<option value="PENDING_DELETION">Pending Deletion</option>
-								<option value="APPEALED">Appealed</option>
-							</select>
+								onChange={(val) => setStatusFilter(val)}
+								size="sm"
+								className="flex-1 min-w-[140px]"
+							/>
 						</div>
 					</div>
 
@@ -831,17 +836,19 @@ export const ModerationTab: React.FC<ModerationTabProps> = ({ triggerStatusMessa
 					<div className="lg:col-span-6 space-y-4">
 						<div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-3 flex justify-between items-center gap-3 shadow-sm select-none">
 							<span className="text-[10px] uppercase font-bold tracking-wider text-[var(--text-muted)]">Filter Status:</span>
-							<select
+							<BeastCodeSelect
+								options={[
+									{ value: "", label: "All Reports" },
+									{ value: "OPEN", label: "Open" },
+									{ value: "REVIEWING", label: "Reviewing" },
+									{ value: "MERGED", label: "Merged" },
+									{ value: "DISMISSED", label: "Dismissed" }
+								]}
 								value={reportStatusFilter}
-								onChange={(e) => setReportStatusFilter(e.target.value)}
-								className="bg-[var(--bg-dark-fill-3)] border border-[var(--border-subtle)] rounded-lg px-2.5 py-1 text-xs text-[var(--text-primary)] outline-none cursor-pointer"
-							>
-								<option value="">All Reports</option>
-								<option value="OPEN">Open</option>
-								<option value="REVIEWING">Reviewing</option>
-								<option value="MERGED">Merged</option>
-								<option value="DISMISSED">Dismissed</option>
-							</select>
+								onChange={(val) => setReportStatusFilter(val)}
+								size="sm"
+								className="w-48"
+							/>
 						</div>
 
 						{loadingReports ? (
@@ -1015,16 +1022,18 @@ export const ModerationTab: React.FC<ModerationTabProps> = ({ triggerStatusMessa
 					<div className="lg:col-span-6 space-y-4">
 						<div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-3 flex justify-between items-center gap-3 shadow-sm select-none">
 							<span className="text-[10px] uppercase font-bold tracking-wider text-[var(--text-muted)]">Filter Status:</span>
-							<select
+							<BeastCodeSelect
+								options={[
+									{ value: "PENDING", label: "Pending (Active)" },
+									{ value: "APPROVED", label: "Approved" },
+									{ value: "REJECTED", label: "Rejected" },
+									{ value: "ALL", label: "All Appeals" }
+								]}
 								value={appealStatusFilter}
-								onChange={(e) => setAppealStatusFilter(e.target.value)}
-								className="bg-[var(--bg-dark-fill-3)] border border-[var(--border-subtle)] rounded-lg px-2.5 py-1 text-xs text-[var(--text-primary)] outline-none cursor-pointer"
-							>
-								<option value="PENDING">Pending (Active)</option>
-								<option value="APPROVED">Approved</option>
-								<option value="REJECTED">Rejected</option>
-								<option value="ALL">All Appeals</option>
-							</select>
+								onChange={(val) => setAppealStatusFilter(val)}
+								size="sm"
+								className="w-48"
+							/>
 						</div>
 
 						{loadingAppeals ? (
@@ -1289,31 +1298,33 @@ export const ModerationTab: React.FC<ModerationTabProps> = ({ triggerStatusMessa
 						<div className="space-y-4 mb-6 text-xs">
 							<div>
 								<label className="text-[10px] font-bold block mb-1 text-[var(--text-muted)] uppercase tracking-wider">Duration</label>
-								<select
+								<BeastCodeSelect
+									options={[
+										{ value: "1 day", label: "1 Day" },
+										{ value: "7 days", label: "7 Days" },
+										{ value: "30 days", label: "30 Days" },
+										{ value: "Permanent", label: "Permanent" }
+									]}
 									value={suspendDuration}
-									onChange={(e) => setSuspendDuration(e.target.value)}
-									className="w-full bg-[var(--bg-dark-fill-3)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-primary)] outline-none cursor-pointer focus:border-[var(--brand-orange)]"
-								>
-									<option value="1 day">1 Day</option>
-									<option value="7 days">7 Days</option>
-									<option value="30 days">30 Days</option>
-									<option value="Permanent">Permanent</option>
-								</select>
+									onChange={(val) => setSuspendDuration(val)}
+									size="md"
+								/>
 							</div>
 
 							<div>
 								<label className="text-[10px] font-bold block mb-1 text-[var(--text-muted)] uppercase tracking-wider">Reason</label>
-								<select
+								<BeastCodeSelect
+									options={[
+										{ value: "Spam", label: "Spam & Advertisement" },
+										{ value: "Harassment", label: "Harassment / Abusive behavior" },
+										{ value: "Plagiarism", label: "Plagiarism / Cheating" },
+										{ value: "Terms Violation", label: "Violation of Terms of Service" },
+										{ value: "Other", label: "Other (specify in notes)" }
+									]}
 									value={suspendReason}
-									onChange={(e) => setSuspendReason(e.target.value)}
-									className="w-full bg-[var(--bg-dark-fill-3)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-primary)] outline-none cursor-pointer focus:border-[var(--brand-orange)]"
-								>
-									<option value="Spam">Spam & Advertisement</option>
-									<option value="Harassment">Harassment / Abusive behavior</option>
-									<option value="Plagiarism">Plagiarism / Cheating</option>
-									<option value="Terms Violation">Violation of Terms of Service</option>
-									<option value="Other">Other (specify in notes)</option>
-								</select>
+									onChange={(val) => setSuspendReason(val)}
+									size="md"
+								/>
 							</div>
 
 							<div>
@@ -1374,16 +1385,17 @@ export const ModerationTab: React.FC<ModerationTabProps> = ({ triggerStatusMessa
 						<div className="space-y-4 mb-6 text-xs">
 							<div>
 								<label className="text-[10px] font-bold block mb-1 text-[var(--text-muted)] uppercase tracking-wider">Unban Reason</label>
-								<select
+								<BeastCodeSelect
+									options={[
+										{ value: "Appeal accepted", label: "Appeal accepted" },
+										{ value: "Suspension duration complete", label: "Suspension duration complete" },
+										{ value: "False positive check", label: "False positive correction" },
+										{ value: "Other", label: "Other (specify in notes)" }
+									]}
 									value={unsuspendReason}
-									onChange={(e) => setUnsuspendReason(e.target.value)}
-									className="w-full bg-[var(--bg-dark-fill-3)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-primary)] outline-none cursor-pointer focus:border-[var(--brand-orange)]"
-								>
-									<option value="Appeal accepted">Appeal accepted</option>
-									<option value="Suspension duration complete">Suspension duration complete</option>
-									<option value="False positive check">False positive correction</option>
-									<option value="Other">Other (specify in notes)</option>
-								</select>
+									onChange={(val) => setUnsuspendReason(val)}
+									size="md"
+								/>
 							</div>
 
 							<div>
@@ -1445,29 +1457,31 @@ export const ModerationTab: React.FC<ModerationTabProps> = ({ triggerStatusMessa
 						<div className="space-y-4 mb-6 text-xs">
 							<div>
 								<label className="text-[10px] font-bold block mb-1 text-[var(--text-muted)] uppercase tracking-wider">Warning Reason</label>
-								<select
+								<BeastCodeSelect
+									options={[
+										{ value: "Cheating", label: "Cheating / Plagiarism (solutions copy)" },
+										{ value: "Inappropriate Content", label: "Inappropriate profile/content details" },
+										{ value: "Abusive Language", label: "Abusive or toxic posts/comments" },
+										{ value: "Spamming", label: "Spamming / Flooding channels" }
+									]}
 									value={warnReason}
-									onChange={(e) => setWarnReason(e.target.value)}
-									className="w-full bg-[var(--bg-dark-fill-3)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-primary)] outline-none cursor-pointer focus:border-[var(--brand-orange)]"
-								>
-									<option value="Cheating">Cheating / Plagiarism (solutions copy)</option>
-									<option value="Inappropriate Content">Inappropriate profile/content details</option>
-									<option value="Abusive Language">Abusive or toxic posts/comments</option>
-									<option value="Spamming">Spamming / Flooding channels</option>
-								</select>
+									onChange={(val) => setWarnReason(val)}
+									size="md"
+								/>
 							</div>
 
 							<div>
 								<label className="text-[10px] font-bold block mb-1 text-[var(--text-muted)] uppercase tracking-wider">Severity Tier</label>
-								<select
+								<BeastCodeSelect
+									options={[
+										{ value: "LOW", label: "Low (Reminder of community standards)" },
+										{ value: "MEDIUM", label: "Medium (Formal warnings record)" },
+										{ value: "SEVERE", label: "Severe (Triggers ban recommendations)" }
+									]}
 									value={warnSeverity}
-									onChange={(e) => setWarnSeverity(e.target.value)}
-									className="w-full bg-[var(--bg-dark-fill-3)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-primary)] outline-none cursor-pointer focus:border-[var(--brand-orange)]"
-								>
-									<option value="LOW">Low (Reminder of community standards)</option>
-									<option value="MEDIUM">Medium (Formal warnings record)</option>
-									<option value="SEVERE">Severe (Triggers ban recommendations)</option>
-								</select>
+									onChange={(val) => setWarnSeverity(val)}
+									size="md"
+								/>
 							</div>
 
 							<div>
@@ -1535,16 +1549,17 @@ export const ModerationTab: React.FC<ModerationTabProps> = ({ triggerStatusMessa
 						<div className="space-y-4 mb-6 text-xs">
 							<div>
 								<label className="text-[10px] font-bold block mb-1 text-[var(--text-muted)] uppercase tracking-wider">Reason for Deletion</label>
-								<select
+								<BeastCodeSelect
+									options={[
+										{ value: "Request by user", label: "Requested by user (Right to be Forgotten)" },
+										{ value: "Terms Violation", label: "Severe / Repeated platform abuse" },
+										{ value: "Duplicate Account", label: "Cleanup of duplicate account" },
+										{ value: "Other", label: "Other (specify in notes)" }
+									]}
 									value={deleteReason}
-									onChange={(e) => setDeleteReason(e.target.value)}
-									className="w-full bg-[var(--bg-dark-fill-3)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-primary)] outline-none cursor-pointer focus:border-[var(--brand-orange)]"
-								>
-									<option value="Request by user">Requested by user (Right to be Forgotten)</option>
-									<option value="Terms Violation">Severe / Repeated platform abuse</option>
-									<option value="Duplicate Account">Cleanup of duplicate account</option>
-									<option value="Other">Other (specify in notes)</option>
-								</select>
+									onChange={(val) => setDeleteReason(val)}
+									size="md"
+								/>
 							</div>
 
 							<div>

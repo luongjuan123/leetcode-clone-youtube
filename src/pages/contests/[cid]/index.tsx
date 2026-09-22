@@ -21,7 +21,8 @@ import {
 	FaGlobe, FaLock, FaHourglassHalf, FaTrophy, FaVolumeUp,
 	FaQuestionCircle, FaFileAlt, FaComments, FaUsers, FaChartPie,
 	FaSpinner, FaCheckCircle, FaTimesCircle, FaArrowRight,
-	FaFlag, FaBolt, FaCrown, FaCheck, FaTimes, FaList, FaChevronLeft
+	FaFlag, FaBolt, FaCrown, FaCheck, FaTimes, FaList, FaChevronLeft,
+	FaMedal
 } from "react-icons/fa";
 
 interface Contest {
@@ -891,9 +892,9 @@ export default function ContestPortal() {
 									<FaCrown className='text-yellow-500' size={16} /> Prizes & Rewards
 								</h2>
 								<div className='text-sm text-gray-300 leading-relaxed space-y-2.5 pt-1'>
-									<p>🥇 <span className='font-bold text-white'>1st Place</span>: Exclusive Gold BeastCode Badge + 200 XP points</p>
-									<p>🥈 <span className='font-bold text-white'>2nd - 3rd Place</span>: Silver BeastCode Badge + 100 XP points</p>
-									<p>🥉 <span className='font-bold text-white'>Top 10 solvers</span>: Bronze BeastCode Badge + 50 XP points</p>
+									<p><FaTrophy className="inline mr-1.5 text-amber-400" size={13} /><span className='font-bold text-white'>1st Place</span>: Exclusive Gold BeastCode Badge + 200 XP points</p>
+									<p><FaMedal className="inline mr-1.5 text-slate-300" size={13} /><span className='font-bold text-white'>2nd - 3rd Place</span>: Silver BeastCode Badge + 100 XP points</p>
+									<p><FaMedal className="inline mr-1.5 text-amber-600" size={13} /><span className='font-bold text-white'>Top 10 solvers</span>: Bronze BeastCode Badge + 50 XP points</p>
 								</div>
 							</div>
 						</div>

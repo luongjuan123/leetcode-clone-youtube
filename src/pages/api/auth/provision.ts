@@ -63,12 +63,8 @@ async function handler(
 		return res.status(401).json({ success: false, message: "Token verification failed." });
 	}
 
-	// ── STRICT email verification gate ─────────────────────────────────────────
 	if (!decodedToken.email_verified) {
-		return res.status(403).json({
-			success: false,
-			message: "Email verification required before provisioning.",
-		});
+		return res.status(403).json({ success: false, message: "Email verification is required before provisioning your profile." });
 	}
 
 	const uid = decodedToken.uid;
@@ -97,6 +93,7 @@ async function handler(
 		const username = deriveUsername(displayName, email);
 		const now = Date.now();
 
+		// 1. users/{uid}
 		tx.set(userRef, {
 			uid,
 			username,
@@ -115,6 +112,185 @@ async function handler(
 			starredProblems: [],
 			showStudentInfo: true,
 			isOnboarded: false,
+			createdAt: now,
+			updatedAt: now,
+		});
+
+		// 2. profiles/{uid}
+		const profileRef = db.collection("profiles").doc(uid);
+		tx.set(profileRef, {
+			uid,
+			username,
+			displayName: displayName ?? username,
+			avatarUrl: "",
+			bio: "",
+			createdAt: now,
+			updatedAt: now,
+		});
+
+		// 3. settings/{uid}
+		const settingsRef = db.collection("settings").doc(uid);
+		tx.set(settingsRef, {
+			uid,
+			theme: "default",
+			language: "javascript",
+			showStudentInfo: true,
+			createdAt: now,
+			updatedAt: now,
+		});
+
+		// 4. statistics/{uid}
+		const statisticsRef = db.collection("statistics").doc(uid);
+		tx.set(statisticsRef, {
+			uid,
+			xp: 0,
+			easyCount: 0,
+			mediumCount: 0,
+			hardCount: 0,
+			solvedProblemsCount: 0,
+			rank: 0,
+			createdAt: now,
+			updatedAt: now,
+		});
+
+		// 5. solvedProblems/{uid}
+		const solvedProblemsRef = db.collection("solvedProblems").doc(uid);
+		tx.set(solvedProblemsRef, {
+			uid,
+			solvedList: [],
+			createdAt: now,
+			updatedAt: now,
+		});
+
+		// 6. contestHistory/{uid}
+		const contestHistoryRef = db.collection("contestHistory").doc(uid);
+		tx.set(contestHistoryRef, {
+			uid,
+			contests: [],
+			rating: 1500,
+			createdAt: now,
+			updatedAt: now,
+		});
+
+		// 7. threads/{uid}
+		const threadsRef = db.collection("threads").doc(uid);
+		tx.set(threadsRef, {
+			uid,
+			threadIds: [],
+			createdAt: now,
+			updatedAt: now,
+		});
+
+		// 8. notifications/{uid}
+		const notificationsRef = db.collection("notifications").doc(uid);
+		tx.set(notificationsRef, {
+			uid,
+			unreadCount: 0,
+			list: [],
+			createdAt: now,
+			updatedAt: now,
+		});
+
+		// 9. notificationSettings/{uid}
+		const notificationSettingsRef = db.collection("notificationSettings").doc(uid);
+		tx.set(notificationSettingsRef, {
+			uid,
+			reminders: true,
+			achievements: true,
+			editorials: true,
+			upsolve: true,
+			social: true,
+			university: true,
+			announcements: true,
+			marketing: true,
+			digest: true,
+			createdAt: now,
+			updatedAt: now,
+		});
+
+		// 10. security/{uid}
+		const securityRef = db.collection("security").doc(uid);
+		tx.set(securityRef, {
+			uid,
+			mfaEnabled: false,
+			recoveryCodes: [],
+			createdAt: now,
+			updatedAt: now,
+		});
+
+		// 11. sessions/{uid}
+		const sessionsRef = db.collection("sessions").doc(uid);
+		tx.set(sessionsRef, {
+			uid,
+			activeSessions: [],
+			createdAt: now,
+			updatedAt: now,
+		});
+
+		// 12. organizationMembership/{uid}
+		const orgMembershipRef = db.collection("organizationMembership").doc(uid);
+		tx.set(orgMembershipRef, {
+			uid,
+			organizations: [],
+			createdAt: now,
+			updatedAt: now,
+		});
+
+		// 13. achievements/{uid}
+		const achievementsRef = db.collection("achievements").doc(uid);
+		tx.set(achievementsRef, {
+			uid,
+			unlocked: [],
+			points: 0,
+			createdAt: now,
+			updatedAt: now,
+		});
+
+		// 14. bookmarks/{uid}
+		const bookmarksRef = db.collection("bookmarks").doc(uid);
+		tx.set(bookmarksRef, {
+			uid,
+			problemIds: [],
+			threadIds: [],
+			createdAt: now,
+			updatedAt: now,
+		});
+
+		// 15. preferences/{uid}
+		const preferencesRef = db.collection("preferences").doc(uid);
+		tx.set(preferencesRef, {
+			uid,
+			difficultyFilter: "all",
+			statusFilter: "all",
+			createdAt: now,
+			updatedAt: now,
+		});
+
+		// 16. theme/{uid}
+		const themeRef = db.collection("theme").doc(uid);
+		tx.set(themeRef, {
+			uid,
+			currentTheme: "default",
+			createdAt: now,
+			updatedAt: now,
+		});
+
+		// 17. language/{uid}
+		const languageRef = db.collection("language").doc(uid);
+		tx.set(languageRef, {
+			uid,
+			preferredLanguage: "javascript",
+			editorKeymap: "sublime",
+			createdAt: now,
+			updatedAt: now,
+		});
+
+		// 18. privacy/{uid}
+		const privacyRef = db.collection("privacy").doc(uid);
+		tx.set(privacyRef, {
+			uid,
+			profileVisibility: "public",
+			studentInfoVisibility: "public",
 			createdAt: now,
 			updatedAt: now,
 		});

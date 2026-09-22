@@ -31,7 +31,12 @@ env:
       - BUILD
       - RUNTIME
   - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
-    value: beastcode-7555e.firebasestorage.app
+    value: beastcode-media-348293518232
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: FIREBASE_STORAGE_BUCKET
+    value: beastcode-media-348293518232
     availability:
       - BUILD
       - RUNTIME
@@ -66,9 +71,17 @@ env:
   - variable: SMTP_FROM
     value: '"BeastCode" <bomemebo6996@gmail.com>'
 
-  # ── Site URL (used in password reset email links) ───────────────────────────
+  # ── Site URL (used in password reset, auth, and notification links) ───────
   - variable: NEXT_PUBLIC_SITE_URL
     value: "https://www.bomboclatbeastcode.codes"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_APP_URL
+    value: "https://www.bomboclatbeastcode.codes"
+    availability:
+      - BUILD
+      - RUNTIME
 
   # ── Firebase Admin SDK (Service Account) ────────────────────────────────────
   # These power getUserByEmail, updateUser, and revokeRefreshTokens.

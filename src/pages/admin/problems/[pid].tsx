@@ -10,7 +10,9 @@ import { useAuthState } from "react-firebase-hooks/auth";
 import Link from "next/link";
 import { FaChevronLeft, FaPlus, FaTrash, FaEdit, FaCheck, FaTimes, FaCloudUploadAlt, FaExclamationTriangle, FaSpinner } from "react-icons/fa";
 import MarkdownEditor from "@/components/Admin/MarkdownEditor";
+import { slugify } from "@/utils/slugify";
 import TagSelect from "@/components/Admin/TagSelect";
+import BeastCodeSelect from "@/components/UI/BeastCodeSelect";
 
 interface Example {
 	id: number;
@@ -61,6 +63,7 @@ const EditProblem: React.FC = () => {
 
 	// Test Cases fields
 	const [examples, setExamples] = useState<Example[]>([]);
+	const [initialExamplesCount, setInitialExamplesCount] = useState<number | null>(null);
 	const [autofillSample, setAutofillSample] = useState(true);
 	
 	// Test Case Editing state
@@ -154,7 +157,9 @@ const EditProblem: React.FC = () => {
 					setCustomCpuCount(data.customCpuCount || 1);
 					setCustomDiskLimitMb(data.customDiskLimitMb || 50);
 					setCustomProcessLimit(data.customProcessLimit || 15);
-					setExamples(data.examples || []);
+					const loadedExamples = Array.isArray(data.examples) ? data.examples : [];
+					setExamples(loadedExamples);
+					setInitialExamplesCount(loadedExamples.length);
 					setCustomCheckerType(data.customChecker?.type || "exact");
 					setCustomCheckerEpsilon(data.customChecker?.epsilon || 1e-6);
 					setCustomCheckerLang(data.customChecker?.scriptLanguage || "python");
@@ -422,7 +427,7 @@ const EditProblem: React.FC = () => {
 		triggerStatusRibbon("info", "Saving changes...", 0);
 
 		try {
-			const problemData = {
+			const problemData: Record<string, any> = {
 				id: pid as string,
 				slug: pid as string,
 				updatedAt: Date.now(),
@@ -448,7 +453,6 @@ const EditProblem: React.FC = () => {
 				customCpuCount: Number(customCpuCount) || 1,
 				customDiskLimitMb: Number(customDiskLimitMb) || 50,
 				customProcessLimit: Number(customProcessLimit) || 15,
-				examples: examples,
 				customChecker: {
 					type: customCheckerType,
 					epsilon: Number(customCheckerEpsilon) || 1e-6,
@@ -460,6 +464,22 @@ const EditProblem: React.FC = () => {
 					videoUrl: editorialVideoUrl.trim() || null,
 				}
 			};
+
+			// ONLY overwrite examples if the admin is actively editing the testcases tab.
+			// This prevents accidental wiping of testcases when editing Details/Settings/etc.
+			if (activeTab === "testcases") {
+				if (initialExamplesCount !== null && initialExamplesCount > 0 && examples.length === 0) {
+					const confirmed = window.confirm(
+						`Warning: You are about to delete all ${initialExamplesCount} test cases for this challenge. Are you sure you want to proceed?`
+					);
+					if (!confirmed) {
+						setSubmitting(false);
+						triggerStatusRibbon("info", "Save cancelled.");
+						return;
+					}
+				}
+				problemData.examples = examples;
+			}
 
 			await setDoc(doc(firestore, "problems", pid as string), problemData, { merge: true });
 			triggerStatusRibbon("success", "Problem updated successfully!");
@@ -585,18 +605,17 @@ const EditProblem: React.FC = () => {
 											Language
 										</label>
 										<div className='col-span-6'>
-											<select
-												id='language'
-												value={language}
-												onChange={(e) => setLanguage(e.target.value)}
-												className='border outline-none rounded p-2 text-sm w-full focus:border-brand-orange transition shadow-sm'
-												style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
-											>
-												<option value='English'>English</option>
-												<option value='Vietnamese'>Vietnamese</option>
-												<option value='Spanish'>Spanish</option>
-												<option value='Japanese'>Japanese</option>
-											</select>
+									<BeastCodeSelect
+										options={[
+											{ value: "English", label: "English" },
+											{ value: "Vietnamese", label: "Vietnamese" },
+											{ value: "Spanish", label: "Spanish" },
+											{ value: "Japanese", label: "Japanese" }
+										]}
+										value={language}
+										onChange={(val) => setLanguage(val)}
+										size="sm"
+									/>
 										</div>
 									</div>
 
@@ -606,17 +625,16 @@ const EditProblem: React.FC = () => {
 											Challenge Difficulty
 										</label>
 										<div className='col-span-6'>
-											<select
-												id='difficulty'
-												value={difficulty}
-												onChange={(e) => setDifficulty(e.target.value)}
-												className='border outline-none rounded p-2 text-sm w-full focus:border-brand-orange transition shadow-sm'
-												style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
-											>
-												<option value='Easy'>Easy</option>
-												<option value='Medium'>Medium</option>
-												<option value='Hard'>Hard</option>
-											</select>
+									<BeastCodeSelect
+										options={[
+											{ value: "Easy", label: "Easy" },
+											{ value: "Medium", label: "Medium" },
+											{ value: "Hard", label: "Hard" }
+										]}
+										value={difficulty}
+										onChange={(val) => setDifficulty(val)}
+										size="sm"
+									/>
 										</div>
 									</div>
 
@@ -845,6 +863,19 @@ const EditProblem: React.FC = () => {
 												className='hidden'
 											/>
 										</p>
+									</div>
+
+									{/* Total Test Cases Status Summary */}
+									<div className='flex items-center gap-3 py-1 text-xs'>
+										<span className='px-2.5 py-1 rounded font-medium border' style={{ background: "var(--bg-dark-layer-1)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}>
+											Total Test Cases: <strong className='font-bold' style={{ color: "var(--brand-orange)" }}>{examples.length}</strong>
+										</span>
+										<span className='px-2.5 py-1 rounded font-medium border' style={{ background: "var(--bg-dark-layer-1)", borderColor: "var(--border-default)", color: "var(--text-secondary)" }}>
+											Sample: <strong>{examples.filter((ex) => !!ex.isSample).length}</strong>
+										</span>
+										<span className='px-2.5 py-1 rounded font-medium border' style={{ background: "var(--bg-dark-layer-1)", borderColor: "var(--border-default)", color: "var(--text-secondary)" }}>
+											Hidden: <strong>{examples.filter((ex) => !ex.isSample).length}</strong>
+										</span>
 									</div>
 
 									{/* Alert when empty */}
@@ -1233,19 +1264,18 @@ const EditProblem: React.FC = () => {
 												<label htmlFor='executionProfile' className='text-xs font-bold block mb-2' style={{ color: "var(--text-secondary)" }}>
 													Execution Profile
 												</label>
-												<select
-													id='executionProfile'
+												<BeastCodeSelect
+													options={[
+														{ value: "fast", label: "Fast (Short algorithmic problems)" },
+														{ value: "normal", label: "Normal (Standard competitive programming)" },
+														{ value: "long", label: "Long (Heavy computations)" },
+														{ value: "machine_learning", label: "Machine Learning (Model training / AI challenges)" },
+														{ value: "custom", label: "Custom (Expose individual limits)" }
+													]}
 													value={executionProfile}
-													onChange={(e) => setExecutionProfile(e.target.value)}
-													className='border outline-none rounded p-2 text-xs w-full focus:border-brand-orange transition shadow-sm'
-													style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
-												>
-													<option value='fast'>Fast (Short algorithmic problems)</option>
-													<option value='normal'>Normal (Standard competitive programming)</option>
-													<option value='long'>Long (Heavy computations)</option>
-													<option value='machine_learning'>Machine Learning (Model training / AI challenges)</option>
-													<option value='custom'>Custom (Expose individual limits)</option>
-												</select>
+													onChange={(val) => setExecutionProfile(val)}
+													size="sm"
+												/>
 											</div>
 
 											{/* Effective Limits Preview Panel */}
@@ -1435,18 +1465,17 @@ const EditProblem: React.FC = () => {
 												<label htmlFor='checkerType' className='text-xs font-bold block mb-1' style={{ color: "var(--text-secondary)" }}>
 													Checker Logic Type
 												</label>
-												<select
-													id='checkerType'
+												<BeastCodeSelect
+													options={[
+														{ value: "exact", label: "Exact Token Matching" },
+														{ value: "whitespace", label: "Ignore Extra Whitespaces & Case Insensitive" },
+														{ value: "float_tolerance", label: "Floating Point Tolerance" },
+														{ value: "special_judge", label: "Special Judge (Code execution validator)" }
+													]}
 													value={customCheckerType}
-													onChange={(e) => setCustomCheckerType(e.target.value)}
-													className='border outline-none rounded p-2 text-xs w-full focus:border-brand-orange transition shadow-sm'
-													style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
-												>
-													<option value='exact'>Exact Token Matching</option>
-													<option value='whitespace'>Ignore Extra Whitespaces & Case Insensitive</option>
-													<option value='float_tolerance'>Floating Point Tolerance</option>
-													<option value='special_judge'>Special Judge (Code execution validator)</option>
-												</select>
+													onChange={(val) => setCustomCheckerType(val)}
+													size="sm"
+												/>
 											</div>
 
 											{customCheckerType === "float_tolerance" && (
@@ -1475,16 +1504,15 @@ const EditProblem: React.FC = () => {
 													<label htmlFor='checkerLang' className='text-xs font-bold block mb-1' style={{ color: "var(--text-secondary)" }}>
 														Judge script language
 													</label>
-													<select
-														id='checkerLang'
+													<BeastCodeSelect
+														options={[
+															{ value: "python", label: "Python 3" },
+															{ value: "cpp", label: "C++20" }
+														]}
 														value={customCheckerLang}
-														onChange={(e) => setCustomCheckerLang(e.target.value)}
-														className='border outline-none rounded p-2 text-xs w-full focus:border-brand-orange transition shadow-sm'
-														style={{ background: "var(--bg-elevated)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}
-													>
-														<option value='python'>Python 3</option>
-														<option value='cpp'>C++20</option>
-													</select>
+														onChange={(val) => setCustomCheckerLang(val)}
+														size="sm"
+													/>
 												</div>
 											)}
 										</div>

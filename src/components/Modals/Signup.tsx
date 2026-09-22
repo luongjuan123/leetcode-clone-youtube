@@ -2,10 +2,10 @@ import { authModalState } from "@/atoms/authModalAtom";
 import { auth } from "@/firebase/firebase";
 import { useEffect, useState } from "react";
 import { useSetRecoilState } from "recoil";
-import { useCreateUserWithEmailAndPassword, useSignInWithGoogle, useSignInWithGithub } from "react-firebase-hooks/auth";
+import { useSignInWithGoogle, useSignInWithGithub } from "react-firebase-hooks/auth";
 import { useRouter } from "next/router";
 import { FaGoogle, FaGithub, FaEye, FaEyeSlash, FaSpinner } from "react-icons/fa";
-import { sendEmailVerification, updateProfile } from "firebase/auth";
+import { sendEmailVerification, updateProfile, createUserWithEmailAndPassword as fbCreateUserWithEmailAndPassword } from "firebase/auth";
 import { translateFirebaseError } from "@/utils/authErrors";
 import { sanitizeAutofilledEmail } from "@/utils/sanitizeEmail";
 
@@ -23,7 +23,7 @@ const Signup: React.FC<SignupProps> = () => {
 	const [shakeFields, setShakeFields] = useState<{ email?: boolean; displayName?: boolean; password?: boolean }>({});
 
 	const router = useRouter();
-	const [createUserWithEmailAndPassword, user, loading, error] = useCreateUserWithEmailAndPassword(auth);
+	const [manualLoading, setManualLoading] = useState(false);
 	const [signInWithGoogle, googleUser, googleLoading, googleError] = useSignInWithGoogle(auth);
 	const [signInWithGithub, githubUser, githubLoading, githubError] = useSignInWithGithub(auth);
 
@@ -81,10 +81,40 @@ const Signup: React.FC<SignupProps> = () => {
 
 	const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
 		e.preventDefault();
-		if (!validateForm() || loading || googleLoading || githubLoading) return;
+		if (!validateForm() || manualLoading || googleLoading || githubLoading) return;
+
+		setManualLoading(true);
+		setErrors({});
 
 		try {
-			const newUser = await createUserWithEmailAndPassword(inputs.email, inputs.password);
+			let newUser;
+			try {
+				newUser = await fbCreateUserWithEmailAndPassword(auth, inputs.email, inputs.password);
+			} catch (err: any) {
+				if (err.code === "auth/email-already-in-use") {
+					// Check and clean up if old account was unverified and unprovisioned
+					try {
+						const cleanupRes = await fetch("/api/auth/cleanup-unverified", {
+							method: "POST",
+							headers: { "Content-Type": "application/json" },
+							body: JSON.stringify({ email: inputs.email }),
+						});
+						const cleanupData = await cleanupRes.json().catch(() => ({}));
+						if (cleanupData.success && cleanupData.cleaned) {
+							// Retry creation
+							newUser = await fbCreateUserWithEmailAndPassword(auth, inputs.email, inputs.password);
+						} else {
+							throw err;
+						}
+					} catch (cleanupErr) {
+						// Throw original err if cleanup failed
+						throw err;
+					}
+				} else {
+					throw err;
+				}
+			}
+
 			if (!newUser) return;
 
 			// Update display name in Firebase Auth immediately
@@ -94,20 +124,34 @@ const Signup: React.FC<SignupProps> = () => {
 				console.error("Error updating profile display name:", profileErr);
 			}
 
-			// Send verification email — NO Firestore writes happen here.
-			// The /users/{uid} document is created lazily by /api/auth/provision
-			// only AFTER the user proves ownership of their email address.
+			// Send verification email via backend API (with template styling & SMTP check)
 			try {
-				await sendEmailVerification(newUser.user);
-			} catch (emailErr) {
-				console.error("Error sending email verification on signup:", emailErr);
+				const token = await newUser.user.getIdToken(true);
+				const res = await fetch("/api/auth/send-verification", {
+					method: "POST",
+					headers: { Authorization: `Bearer ${token}` },
+				});
+				if (!res.ok) {
+					const body = await res.json().catch(() => ({}));
+					throw new Error(body.message || "Failed to deliver verification email.");
+				}
+			} catch (emailErr: any) {
+				// Rollback: delete the Firebase Auth user since email verification delivery failed
+				try {
+					await newUser.user.delete();
+				} catch (deleteErr) {
+					console.error("Rollback failed: could not delete auth user", deleteErr);
+				}
+				throw emailErr;
 			}
 
 			setAuthModalState((prev) => ({ ...prev, isOpen: false }));
-			router.push("/verify-email");
-		} catch (err: unknown) {
-			// Handled by the error useEffect below
-			void err;
+			router.push("/auth/verify-email");
+		} catch (err: any) {
+			const msg = err.code ? translateFirebaseError(err.code) : (err.message || "An unexpected error occurred.");
+			setErrors((prev) => ({ ...prev, general: msg }));
+		} finally {
+			setManualLoading(false);
 		}
 	};
 
@@ -128,22 +172,23 @@ const Signup: React.FC<SignupProps> = () => {
 				console.error("OAuth provision error:", provErr);
 			}
 			setAuthModalState((prev) => ({ ...prev, isOpen: false }));
-			router.push("/");
+			const prev = router.query.prev as string;
+			router.push(prev || "/");
 		};
 
 		provisionOAuthUser();
-	}, [user, googleUser, githubUser, router, setAuthModalState]);
+	}, [googleUser, githubUser, router, setAuthModalState]);
 
 	useEffect(() => {
-		const firebaseErr = error || googleError || githubError;
+		const firebaseErr = googleError || githubError;
 		if (firebaseErr) {
 			const code = (firebaseErr as any).code || "auth/unknown";
 			const msg = translateFirebaseError(code);
 			setErrors((prev) => ({ ...prev, general: msg }));
 		}
-	}, [error, googleError, githubError]);
+	}, [googleError, githubError]);
 
-	const isActionLoading = loading || googleLoading || githubLoading;
+	const isActionLoading = manualLoading || googleLoading || githubLoading;
 
 	return (
 		<form className={`space-y-4 px-4 pb-4 transition-all duration-200 ${isActionLoading ? "opacity-50 pointer-events-none" : ""}`} onSubmit={handleRegister}>

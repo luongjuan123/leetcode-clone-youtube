@@ -2,7 +2,9 @@ import { withApiErrorHandler } from "@/utils/apiErrorHandler";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getAdminAuth, getAdminFirestore } from "@/firebase/firebaseAdmin";
 import { EmailService } from "@/utils/emailService";
-import { EmailLayout, EmailHeader, EmailFooter, PrimaryButton, COLORS } from "@/utils/emailComponents";
+import { COLORS } from "@/utils/emailComponents";
+import { getEmailHtml } from "@/utils/emailTemplate";
+import { buildAbsoluteUrl } from "@/utils/siteConfig";
 import crypto from "crypto";
 
 type ResponseData = {
@@ -15,9 +17,9 @@ function hashToken(token: string): string {
 	return crypto.createHash("sha256").update(token).digest("hex");
 }
 
-/** Build the production reset URL */
+/** Build the canonical reset URL */
 function buildResetLink(token: string): string {
-	return `https://www.bomboclatbeastcode.codes/reset-password?token=${token}`;
+	return buildAbsoluteUrl(`/reset-password?token=${encodeURIComponent(token)}`);
 }
 
 /** Helper to mask email for logs */
@@ -62,37 +64,17 @@ function checkRateLimit(ip: string, email: string): { blocked: boolean; reason?:
 
 // ─── HTML email template ──────────────────────────────────────────────────────
 function buildResetEmail(resetLink: string): string {
-	const bodyContent = `
-		${EmailHeader({ headerTitle: "PASSWORD RECOVERY", accentColor: COLORS.accent })}
-		<tr>
-			<td style="padding: 40px 35px 35px 35px; background-color: ${COLORS.card}; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-				<h1 style="margin: 0 0 20px 0; font-size: 24px; font-weight: 800; line-height: 1.3; color: ${COLORS.primaryText}; letter-spacing: -0.5px;">
-					Reset Your Password
-				</h1>
-				
-				<p style="margin: 0 0 20px 0; font-size: 15px; line-height: 1.6; color: ${COLORS.secondaryText}; font-weight: 500;">
-					Hello,
-				</p>
-				
-				<p style="margin: 0 0 30px 0; font-size: 14px; line-height: 1.6; color: ${COLORS.mutedText};">
-					We received a request to reset your BeastCode password. If this was you, click the button below to choose a new password.
-				</p>
-
-				${PrimaryButton({ text: "Reset Password", url: resetLink, accentColor: COLORS.accent })}
-
-				<p style="margin: 20px 0 0 0; font-size: 12px; color: ${COLORS.mutedText}; line-height: 1.5;">
-					This link expires in 15 minutes.<br />
-					If you did not request a password reset, simply ignore this email.
-				</p>
-			</td>
-		</tr>
-		${EmailFooter({})}
-	`;
-
-	return EmailLayout({
-		title: "Reset Your Password – BeastCode",
-		previewText: "We received a request to reset your BeastCode password.",
-		bodyContent
+	return getEmailHtml({
+		headerTitle: "PASSWORD RECOVERY",
+		accentColor: COLORS.primary,
+		title: "Reset Your Password",
+		leadText: "Hello,",
+		description: "We received a request to reset your BeastCode password. If this was you, click the button below to choose a new password. If you did not request a password reset, simply ignore this email.",
+		ctaText: "Reset Password",
+		ctaUrl: resetLink,
+		details: [
+			{ label: "Expires In", value: "15 minutes" }
+		]
 	});
 }
 
@@ -193,72 +175,26 @@ async function handler(req: NextApiRequest, res: NextApiResponse<ResponseData>) 
 			return res.status(200).json(SAFE_RESPONSE);
 		}
 
-		// ── Verify SMTP connection ────────────────────────────────────────────
-		const { transporter, mailFrom } = await EmailService.getTransporter();
-		if (transporter) {
-			try {
-				const verifyPromise = transporter.verify();
-				const timeoutPromise = new Promise<never>((_, reject) =>
-					setTimeout(() => reject(new Error("SMTP verification timeout")), 3000)
-				);
-				await Promise.race([verifyPromise, timeoutPromise]);
-				smtpStatus = "VERIFIED";
-			} catch (smtpVerifyErr: any) {
-				smtpStatus = "VERIFY_FAILED";
-				console.error(`[Forgot Password] [ReqID: ${requestId}] [Time: ${new Date(now).toISOString()}] Email: ${maskEmail(emailLower)} | DB Status: ${dbStatus} | Token Status: ${tokenStatus} | SMTP Status: ${smtpStatus} | Verification Error:`, smtpVerifyErr);
-				// Log to Firestore if online
-				db.collection("securityLogs").add({
-					action: "SMTP_OFFLINE",
-					timestamp: now,
-					ip,
-					userAgent,
-					country,
-					city,
-					email: emailLower,
-					userId,
-					details: { error: smtpVerifyErr.message }
-				}).catch(() => {});
-
-				// Fallback to queueing the email in Firestore 'mail' collection
-				try {
-					await db.collection("mail").add({
-						to: emailLower,
-						message: {
-							subject: "Reset Your Password – BeastCode",
-							html: buildResetEmail(buildResetLink(token))
-						},
-						queuedAt: Date.now()
-					});
-					smtpStatus = "BACKUP_MAIL_WRITTEN";
-				} catch (fallbackErr: any) {
-					console.error(`[Forgot Password] [ReqID: ${requestId}] Failed to write fallback mail document:`, fallbackErr.message);
-				}
-
-				// Print final consolidated internal log
-				console.log(`[Forgot Password] [ReqID: ${requestId}] [Time: ${new Date(now).toISOString()}] Email: ${maskEmail(emailLower)} | DB Status: ${dbStatus} | Token Status: ${tokenStatus} | SMTP Status: ${smtpStatus}`);
-				return res.status(200).json(SAFE_RESPONSE);
-			}
-		} else {
-			smtpStatus = "NO_TRANSPORTER";
-			console.warn(`[Forgot Password] [ReqID: ${requestId}] No SMTP transporter configured. Writing backup mail document.`);
-		}
-
 		// ── Send email ────────────────────────────────────────────────────────
-		const emailSent = await EmailService.sendDirectEmail(
+		console.log(`[EMAIL DEBUG] Password reset trigger start for user UID: ${userId}, Email: ${maskEmail(emailLower)}`);
+		console.log(`[EMAIL DEBUG] Password reset link generated using canonical host`);
+
+		const deliveryResult = await EmailService.sendDirectEmailResult(
 			emailLower,
 			"Reset Your Password – BeastCode",
 			buildResetEmail(buildResetLink(token))
 		);
 
-		if (emailSent) {
-			smtpStatus = smtpStatus === "NO_TRANSPORTER" ? "BACKUP_MAIL_WRITTEN" : "DELIVERED";
+		if (deliveryResult.success) {
+			smtpStatus = "DELIVERED";
+			console.log(`[EMAIL DEBUG] Password reset email delivered successfully. Message ID: ${deliveryResult.messageId}`);
 		} else {
 			smtpStatus = "DELIVERY_FAILED";
-			console.error(`[Forgot Password] [ReqID: ${requestId}] SMTP failed to deliver email to: ${maskEmail(emailLower)}`);
+			console.error(`[EMAIL DEBUG] Password reset email delivery FAILED for ${maskEmail(emailLower)}: ${deliveryResult.error}`);
 		}
 
 		// ── Audit log ─────────────────────────────────────────────────────────
-		db.collection("securityLogs").add({ action: "PASSWORD_RESET_REQUESTED", timestamp: now, ip, userAgent, country, city, email: emailLower, userId }).catch(() => {});
+		db.collection("securityLogs").add({ action: "PASSWORD_RESET_REQUESTED", timestamp: now, ip, userAgent, country, city, email: emailLower, userId, details: { smtpStatus, messageId: deliveryResult.messageId } }).catch(() => {});
 
 		// Print final consolidated internal log
 		console.log(`[Forgot Password] [ReqID: ${requestId}] [Time: ${new Date(now).toISOString()}] Email: ${maskEmail(emailLower)} | DB Status: ${dbStatus} | Token Status: ${tokenStatus} | SMTP Status: ${smtpStatus}`);

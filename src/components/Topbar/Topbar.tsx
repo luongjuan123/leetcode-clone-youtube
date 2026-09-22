@@ -11,7 +11,7 @@ import {
 	FaChevronLeft, FaChevronRight, FaUser, FaCog,
 	FaShieldAlt, FaBell, FaSearch, FaTrophy,
 	FaCode, FaStream, FaBars, FaTimes,
-	FaCoffee, FaCalendarAlt,
+	FaCoffee, FaCalendarAlt, FaUsers, FaComments,
 } from "react-icons/fa";
 import { BsList } from "react-icons/bs";
 import Timer from "../Timer/Timer";
@@ -21,24 +21,26 @@ import { Problem } from "@/utils/types/problem";
 import { useAdmin } from "@/hooks/useAdmin";
 import { doc, onSnapshot, collection, query, where, writeBatch, updateDoc } from "firebase/firestore";
 import { useNotifications } from "@/context/RealtimeNotificationProvider";
+import { useConversations } from "@/hooks/chat/useConversations";
 
 type TopbarProps = {
 	problemPage?: boolean;
 };
 
 const THEMES = [
-	{ id: "default", label: "Dark",   color: "#f59e0b" },
-	{ id: "light",   label: "Light",  color: "#7c3aed" },
-	{ id: "sakura",  label: "Sakura", color: "#ffb7c5" },
-	{ id: "red",     label: "Red",    color: "#ef4444" },
+	{ id: "default", label: "Dark",   color: "#f97316" },
+	{ id: "light",   label: "Light",  color: "#2563eb" },
+	{ id: "sakura",  label: "Sakura", color: "#db7093" },
+	{ id: "red",     label: "Red",    color: "#dc2626" },
 ];
 
 // Primary nav tabs — shown in the center of the bar on non-problem pages
 const NAV_TABS = [
-	{ name: "Problems",  path: "/",          icon: <FaCode  size={14} />, exact: true  },
-	{ name: "Rankings",  path: "/rankings",  icon: <FaTrophy size={14} />, exact: false },
-	{ name: "Contests",  path: "/contests",  icon: <FaCalendarAlt size={14} />, exact: false },
-	{ name: "Threads",   path: "/threads",   icon: <FaStream size={14} />, exact: false },
+	{ name: "Problems",      path: "/",          icon: <FaCode  size={14} />, exact: true  },
+	{ name: "Rankings",      path: "/rankings",  icon: <FaTrophy size={14} />, exact: false },
+	{ name: "Contests",      path: "/contests",  icon: <FaCalendarAlt size={14} />, exact: false },
+	{ name: "Threads",       path: "/threads",   icon: <FaStream size={14} />, exact: false },
+	{ name: "Organizations", path: "/orgs",      icon: <FaUsers size={14} />, exact: false },
 ];
 
 interface RankInfo {
@@ -74,7 +76,7 @@ const getRankAndXP = (score: number) => {
 };
 
 const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
-	const [user]         = useAuthState(auth);
+	const [user, loading] = useAuthState(auth);
 	const setAuthModal   = useSetRecoilState(authModalState);
 	const router         = useRouter();
 	const [isAdmin]      = useAdmin();
@@ -82,7 +84,7 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 	const [mobileOpen,   setMobileOpen]   = useState(false);
 	const dropdownRef    = useRef<HTMLDivElement>(null);
 	const mobileRef      = useRef<HTMLDivElement>(null);
-	const [userData, setUserData]         = useState<{ avatarUrl: string | null; score: number } | null>(null);
+	const [userData, setUserData]         = useState<{ displayName: string | null; avatarUrl: string | null; score: number } | null>(null);
 	const [activeTheme, setActiveTheme]   = useState("default");
 	const [scrolled, setScrolled]         = useState(false);
 	const [dbProblemIds, setDbProblemIds] = useState<string[]>([]);
@@ -90,6 +92,7 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 
 	// Notification dropdown states
 	const { notifications, markAllAsRead, markAsRead } = useNotifications();
+	const { totalUnreadCount: unreadChatCount } = useConversations();
 	const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
 	const notifDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -100,6 +103,7 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 			if (snap.exists()) {
 				const data = snap.data();
 				setUserData({
+					displayName: data.displayName || null,
 					avatarUrl: data.avatarUrl || null,
 					score: data.score || 0,
 				});
@@ -238,8 +242,7 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 		<>
 			{/* ════════════════════════════════ NAV BAR ════════════════════════════════ */}
 			<nav
-				className="sticky top-0 z-50 h-[68px] w-full flex shrink-0 items-center px-6"
-				style={navStyle}
+				className="sticky top-0 z-50 h-[68px] w-full flex shrink-0 items-center px-6 nav-glass shadow-sm"
 				aria-label="Main navigation"
 			>
 				<div className={`flex w-full items-center gap-3 ${!problemPage ? "max-w-[1200px] mx-auto" : ""}`}>
@@ -261,12 +264,6 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 										className={`${tabCls(active)} border ${active ? "glow-active border-brand-orange bg-brand-orange/5" : "border-transparent text-text-secondary hover:text-text-primary hover:bg-dark-fill-3"}`}
 										aria-current={active ? "page" : undefined}
 									>
-										{active && (
-											<span
-												className="absolute inset-x-2 bottom-0 h-[2px] rounded-full glow-sm"
-												style={{ background: "var(--brand-orange)" }}
-											/>
-										)}
 										{tab.icon && (
 											<span className={`flex-shrink-0 ${active ? "text-[var(--brand-orange)]" : ""}`}>
 												{tab.icon}
@@ -327,6 +324,26 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 								title="Search"
 							>
 								<FaSearch size={16} />
+							</Link>
+						)}
+
+						{/* Messages icon */}
+						{user && !problemPage && (
+							<Link
+								href="/messages"
+								className={`${iconBtnCls(router.pathname.startsWith("/messages"))} relative flex items-center justify-center`}
+								aria-label="Messages"
+								title="Messages"
+							>
+								<FaComments size={16} className={unreadChatCount > 0 ? "text-brand-orange" : ""} />
+								{unreadChatCount > 0 && (
+									<span className="absolute top-1.5 right-1.5 flex h-3 w-3">
+										<span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-orange opacity-75"></span>
+										<span className="relative inline-flex rounded-full h-3 w-3 bg-brand-orange text-[8px] font-black text-white items-center justify-center">
+											{unreadChatCount > 9 ? "9+" : unreadChatCount}
+										</span>
+									</span>
+								)}
 							</Link>
 						)}
 
@@ -498,16 +515,18 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 						{/* Divider */}
 						<div className="h-4 w-px mx-1 hidden sm:block" style={{ background: "var(--border-subtle)" }} />
 
-						{/* SIGN IN */}
-						{!user && (
-							<Link
-								href="/auth"
+						{/* SIGN IN / SKELETON */}
+						{loading ? (
+							<div className="w-10 h-10 rounded-xl bg-dark-fill-3 animate-pulse shrink-0" />
+						) : !user ? (
+							<button
+								type="button"
 								onClick={() => setAuthModal((p) => ({ ...p, isOpen: true, type: "login" }))}
 								className="inline-flex items-center px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-150 bc-btn-brand"
 							>
 								Sign In
-							</Link>
-						)}
+							</button>
+						) : null}
 
 						{/* AVATAR + DROPDOWN */}
 						{user && (
@@ -549,7 +568,7 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 									<div className="hidden sm:flex flex-col text-left">
 										<div className="flex items-center gap-2">
 											<span className="text-xs font-bold text-[var(--text-primary)] truncate max-w-[80px]">
-												{user.displayName || "User"}
+												{userData?.displayName || user.displayName || "User"}
 											</span>
 											<span 
 												className="px-1.5 py-0.5 rounded-full text-[8px] font-black tracking-wide border uppercase"
@@ -600,7 +619,7 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 												</div>
 											)}
 											<div className="overflow-hidden">
-												<p className="text-xs font-semibold truncate" style={{ color: "var(--text-primary)" }}>{user.displayName || "User"}</p>
+												<p className="text-xs font-semibold truncate" style={{ color: "var(--text-primary)" }}>{userData?.displayName || user.displayName || "User"}</p>
 												<p className="text-[10px] truncate" style={{ color: "var(--text-muted)" }}>{user.email}</p>
 											</div>
 										</div>
@@ -726,6 +745,19 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 							</Link>
 						)}
 
+						{user && (
+							<Link href="/messages" className="flex items-center justify-between px-3 py-3 rounded-lg text-sm font-semibold transition-all duration-150" style={{ color: router.pathname.startsWith("/messages") ? "var(--brand-orange)" : "var(--text-secondary)" }}>
+								<div className="flex items-center gap-3">
+									<FaComments size={13} /> Messages
+								</div>
+								{unreadChatCount > 0 && (
+									<span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-brand-orange text-white">
+										{unreadChatCount}
+									</span>
+								)}
+							</Link>
+						)}
+
 						<Link href="/settings" className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-semibold transition-all duration-150" style={{ color: router.pathname === "/settings" ? "var(--brand-orange)" : "var(--text-secondary)" }}>
 							<FaCog size={12} /> Settings
 						</Link>
@@ -743,9 +775,17 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 						</Link>
 
 						{!user && (
-							<Link href="/auth" className="mt-2 flex items-center justify-center py-2.5 rounded-lg text-sm font-bold transition-all duration-150" style={{ background: "var(--brand-orange)", color: "var(--bg-base)" }}>
+							<button
+								type="button"
+								onClick={() => {
+									setMobileOpen(false);
+									setAuthModal((p) => ({ ...p, isOpen: true, type: "login" }));
+								}}
+								className="mt-2 flex items-center justify-center py-2.5 rounded-lg text-sm font-bold transition-all duration-150 w-full"
+								style={{ background: "var(--brand-orange)", color: "var(--bg-base)" }}
+							>
 								Sign In
-							</Link>
+							</button>
 						)}
 					</div>
 				</div>

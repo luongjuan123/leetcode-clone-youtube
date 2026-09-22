@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
+import { useRouter } from "next/router";
 import ProblemDescription from "./ProblemDescription/ProblemDescription";
 import SecondaryNav from "../TabsNavigation/SecondaryNav";
-import Playground from "./Playground/Playground";
+import Playground, { ISettings } from "./Playground/Playground";
+import { SupportedLanguage } from "@/utils/pistonRunner";
 import ProblemDiscussions from "./ProblemDiscussions";
 import { Problem } from "@/utils/types/problem";
 import Confetti from "react-confetti";
@@ -18,6 +20,8 @@ import { vscodeDark } from "@uiw/codemirror-theme-vscode";
 import { useSubmission } from "@/context/SubmissionContext";
 import { getSubmissionStateMetadata } from "@/utils/submissionUtils";
 import TestcaseScorecard from "./TestcaseScorecard/TestcaseScorecard";
+import useLocalStorage from "@/hooks/useLocalStorage";
+import BeastCodeSelect from "../UI/BeastCodeSelect";
 
 const SocialIcon: React.FC<{ Icon: any; title: string }> = ({ Icon, title }) => {
 	return (
@@ -57,11 +61,50 @@ type WorkspaceProps = {
 };
 
 const Workspace: React.FC<WorkspaceProps> = ({ problem, contestId }) => {
+	const router = useRouter();
 	const { width, height } = useWindowSize();
 	const [user, loading] = useAuthState(auth);
 	const [success, setSuccess] = useState(false);
 	const [solved, setSolved] = useState(false);
+	const [language, setLanguage] = useState<SupportedLanguage>("javascript");
+	const [userCode, setUserCode] = useState<string>("");
 	const [activeTab, setActiveTab] = useState<"problem" | "submissions" | "leaderboard" | "discussions" | "editorial">("problem");
+
+	// Lifted Playground States
+	const [customInputChecked, setCustomInputChecked] = useState(false);
+	const [customInputText, setCustomInputText] = useState("");
+	const [activeTestCaseId, setActiveTestCaseId] = useState(0);
+	const [consoleTab, setConsoleTab] = useState<"testcases" | "custominput" | "results">("testcases");
+	const [activeExampleId, setActiveExampleId] = useState(0);
+	
+	const [fontSize] = useLocalStorage("lcc-fontSize", "16px");
+	const [settings, setSettings] = useState<ISettings>({
+		fontSize: fontSize,
+		settingsModalIsOpen: false,
+		dropdownIsOpen: false,
+	});
+	const [selectionRange, setSelectionRange] = useState<{ anchor: number; head: number } | null>(null);
+	const [scrollTop, setScrollTop] = useState<number>(0);
+
+	useEffect(() => {
+		const tab = router.query.tab as string;
+		if (tab && ["problem", "submissions", "leaderboard", "discussions", "editorial"].includes(tab)) {
+			setActiveTab(tab as any);
+		} else {
+			setActiveTab("problem");
+		}
+	}, [router.query.tab]);
+
+	const handleTabChange = (tab: string) => {
+		setActiveTab(tab as any);
+		const cleanQuery = { ...router.query };
+		if (tab === "problem") {
+			delete cleanQuery.tab;
+		} else {
+			cleanQuery.tab = tab;
+		}
+		router.replace({ pathname: router.pathname, query: cleanQuery }, undefined, { shallow: true });
+	};
 
 	const hasMounted = useHasMounted();
 	const [leftPercent, setLeftPercent] = useState<number>(45);
@@ -471,8 +514,10 @@ const Workspace: React.FC<WorkspaceProps> = ({ problem, contestId }) => {
 	const handleOpenInEditor = () => {
 		if (!selectedSub) return;
 		if (loading) return;
-		const key = user ? `code-${user.uid}-${problem.id}-${selectedSub.language}` : `code-${problem.id}-${selectedSub.language}`;
-		localStorage.setItem(key, JSON.stringify(selectedSub.code));
+		setLanguage(selectedSub.language as SupportedLanguage);
+		setUserCode(selectedSub.code);
+		const key = user ? `code-meta-${user.uid}-${problem.id}-${selectedSub.language}` : `code-meta-${problem.id}-${selectedSub.language}`;
+		localStorage.setItem(key, JSON.stringify({ code: selectedSub.code, updatedAt: Date.now() }));
 		setActiveTab("problem");
 	};
 
@@ -513,7 +558,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ problem, contestId }) => {
 						)}
 
 						<div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mt-2">
-							<h1 className="text-2xl md:text-3xl font-black tracking-tight text-text-primary" style={{ fontFamily: "'Outfit', sans-serif", color: "var(--text-primary)" }}>
+							<h1 className="text-2xl md:text-3xl font-black tracking-tight text-text-primary" style={{ fontFamily: "'Russo One', sans-serif", color: "var(--text-primary)" }}>
 								{displayProblem.title}
 							</h1>
 							
@@ -586,7 +631,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ problem, contestId }) => {
 								{ id: "editorial", label: "Editorial" },
 							]}
 							activeTab={activeTab}
-							onChange={setActiveTab}
+							onChange={handleTabChange}
 							className="mb-0"
 						/>
 					</div>
@@ -951,40 +996,42 @@ const Workspace: React.FC<WorkspaceProps> = ({ problem, contestId }) => {
 													style={{ borderColor: "var(--border-subtle)" }}
 												/>
 
-												<select
+												<BeastCodeSelect
+													size="sm"
+													options={[
+														{ value: "all", label: "All Languages" },
+														{ value: "javascript", label: "JavaScript" },
+														{ value: "python", label: "Python 3" },
+														{ value: "cpp", label: "C++20" },
+														{ value: "java", label: "Java" }
+													]}
 													value={langFilter}
-													onChange={(e) => {
-														setLangFilter(e.target.value);
+													onChange={(val) => {
+														setLangFilter(val);
 														setCurrentPage(1);
 													}}
-													className="px-3 py-1.5 text-xs rounded-lg border outline-none bg-dark-fill-3 text-text-secondary focus:border-border-accent cursor-pointer"
-													style={{ borderColor: "var(--border-subtle)" }}
-												>
-													<option value="all">All Languages</option>
-													<option value="javascript">JavaScript</option>
-													<option value="python">Python 3</option>
-													<option value="cpp">C++20</option>
-													<option value="java">Java</option>
-												</select>
+													className="w-40"
+												/>
 
-												<select
+												<BeastCodeSelect
+													size="sm"
+													options={[
+														{ value: "all", label: "All Outcomes" },
+														{ value: "passed", label: "Passed / Accepted" },
+														{ value: "failed", label: "Failed" },
+														{ value: "wrong answer", label: "Wrong Answer" },
+														{ value: "compilation error", label: "Compilation Error" },
+														{ value: "runtime error", label: "Runtime Error" },
+														{ value: "time limit exceeded", label: "Time Limit Exceeded" },
+														{ value: "memory limit exceeded", label: "Memory Limit Exceeded" }
+													]}
 													value={outcomeFilter}
-													onChange={(e) => {
-														setOutcomeFilter(e.target.value);
+													onChange={(val) => {
+														setOutcomeFilter(val);
 														setCurrentPage(1);
 													}}
-													className="px-3 py-1.5 text-xs rounded-lg border outline-none bg-dark-fill-3 text-text-secondary focus:border-border-accent cursor-pointer"
-													style={{ borderColor: "var(--border-subtle)" }}
-												>
-													<option value="all">All Outcomes</option>
-													<option value="passed">Passed / Accepted</option>
-													<option value="failed">Failed</option>
-													<option value="wrong answer">Wrong Answer</option>
-													<option value="compilation error">Compilation Error</option>
-													<option value="runtime error">Runtime Error</option>
-													<option value="time limit exceeded">Time Limit Exceeded</option>
-													<option value="memory limit exceeded">Memory Limit Exceeded</option>
-												</select>
+													className="w-44"
+												/>
 											</div>
 										</div>
 
@@ -1040,9 +1087,11 @@ const Workspace: React.FC<WorkspaceProps> = ({ problem, contestId }) => {
 																		<td className="px-6 py-4 text-right pr-8">
 																			<button
 																				onClick={() => {
-																					setSelectedSub(sub);
-																					const firstFailIdx = sub.testResults ? sub.testResults.findIndex((r: any) => !r.passed) : 0;
-																					setSelectedSubTestCaseIndex(firstFailIdx >= 0 ? firstFailIdx : 0);
+																					if (contestId) {
+																						router.push(`/contests/${contestId}/problems/${problem.id}/submissions/${sub.id}`);
+																					} else {
+																						router.push(`/problems/${problem.id}/submissions/${sub.id}`);
+																					}
 																				}}
 																				className="bg-dark-fill-3 hover:bg-dark-fill-2 border border-border-subtle text-text-secondary text-xs font-bold px-4.5 py-1.5 rounded-lg transition duration-150 shadow-sm"
 																				style={{ borderColor: "var(--border-subtle)" }}
@@ -1203,16 +1252,38 @@ const Workspace: React.FC<WorkspaceProps> = ({ problem, contestId }) => {
 				</div>
 
 				{/* Block B & Block C: The Full-Width Code Canvas & Execution Console */}
-				<div className="w-full">
-					<Playground
-						key={user ? `${user.uid}-${problem.id}` : `guest-${problem.id}`}
-						problem={problem}
-						setSuccess={setSuccess}
-						setSolved={setSolved}
-						lightTheme={activeTheme === "light"}
-						contestId={contestId}
-					/>
-				</div>
+				{activeTab === "problem" && (
+					<div className="w-full">
+						<Playground
+							key={user ? `${user.uid}-${problem.id}` : `guest-${problem.id}`}
+							problem={problem}
+							setSuccess={setSuccess}
+							setSolved={setSolved}
+							lightTheme={activeTheme === "light"}
+							contestId={contestId}
+							language={language}
+							setLanguage={setLanguage}
+							userCode={userCode}
+							setUserCode={setUserCode}
+							customInputChecked={customInputChecked}
+							setCustomInputChecked={setCustomInputChecked}
+							customInputText={customInputText}
+							setCustomInputText={setCustomInputText}
+							activeTestCaseId={activeTestCaseId}
+							setActiveTestCaseId={setActiveTestCaseId}
+							consoleTab={consoleTab}
+							setConsoleTab={setConsoleTab}
+							activeExampleId={activeExampleId}
+							setActiveExampleId={setActiveExampleId}
+							settings={settings}
+							setSettings={setSettings}
+							selectionRange={selectionRange}
+							setSelectionRange={setSelectionRange}
+							scrollTop={scrollTop}
+							setScrollTop={setScrollTop}
+						/>
+					</div>
+				)}
 			</div>
 
 			{/* Confetti celebration for success */}

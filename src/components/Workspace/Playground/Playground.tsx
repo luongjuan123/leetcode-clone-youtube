@@ -19,6 +19,7 @@ import { useSubmission } from "@/context/SubmissionContext";
 import TestcaseScorecard from "../TestcaseScorecard/TestcaseScorecard";
 
 import { getFriendlyErrorMessage } from "@/utils/errorFilter";
+import { EditorView } from "@codemirror/view";
 
 type PlaygroundProps = {
 	problem: Problem;
@@ -27,6 +28,28 @@ type PlaygroundProps = {
 	lightTheme?: boolean;
 	contestId?: string;
 	onSubmissionCreated?: (submission: any) => void;
+	language: SupportedLanguage;
+	setLanguage: React.Dispatch<React.SetStateAction<SupportedLanguage>>;
+	userCode: string;
+	setUserCode: React.Dispatch<React.SetStateAction<string>>;
+
+	// Lifted states
+	customInputChecked: boolean;
+	setCustomInputChecked: React.Dispatch<React.SetStateAction<boolean>>;
+	customInputText: string;
+	setCustomInputText: React.Dispatch<React.SetStateAction<string>>;
+	activeTestCaseId: number;
+	setActiveTestCaseId: React.Dispatch<React.SetStateAction<number>>;
+	consoleTab: "testcases" | "custominput" | "results";
+	setConsoleTab: React.Dispatch<React.SetStateAction<"testcases" | "custominput" | "results">>;
+	activeExampleId: number;
+	setActiveExampleId: React.Dispatch<React.SetStateAction<number>>;
+	settings: ISettings;
+	setSettings: React.Dispatch<React.SetStateAction<ISettings>>;
+	selectionRange: { anchor: number; head: number } | null;
+	setSelectionRange: React.Dispatch<React.SetStateAction<{ anchor: number; head: number } | null>>;
+	scrollTop: number;
+	setScrollTop: React.Dispatch<React.SetStateAction<number>>;
 };
 
 export interface ISettings {
@@ -42,27 +65,30 @@ const Playground: React.FC<PlaygroundProps> = ({
 	lightTheme = false,
 	contestId,
 	onSubmissionCreated,
+	language,
+	setLanguage,
+	userCode,
+	setUserCode,
+	customInputChecked,
+	setCustomInputChecked,
+	customInputText,
+	setCustomInputText,
+	activeTestCaseId,
+	setActiveTestCaseId,
+	consoleTab,
+	setConsoleTab,
+	activeExampleId,
+	setActiveExampleId,
+	settings,
+	setSettings,
+	selectionRange,
+	setSelectionRange,
+	scrollTop,
+	setScrollTop,
 }) => {
-	const [language, setLanguage] = useState<SupportedLanguage>("javascript");
-	const [userCode, setUserCode] = useState<string>(problem.starterCode);
-	const [fontSize, setFontSize] = useLocalStorage("lcc-fontSize", "16px");
-
-	const [settings, setSettings] = useState<ISettings>({
-		fontSize: fontSize,
-		settingsModalIsOpen: false,
-		dropdownIsOpen: false,
-	});
-
-	const [customInputChecked, setCustomInputChecked] = useState(false);
-	const [customInputText, setCustomInputText] = useState("");
-	const [activeTestCaseId, setActiveTestCaseId] = useState(0);
-	const [consoleTab, setConsoleTab] = useState<"testcases" | "custominput" | "results">("testcases");
-	const [activeExampleId, setActiveExampleId] = useState(0);
-
 	const [user, loading] = useAuthState(auth);
-	const {
-		query: { pid },
-	} = useRouter();
+	const router = useRouter();
+	const pid = router.query.pid;
 
 	const {
 		isSubmitting,
@@ -96,7 +122,14 @@ const Playground: React.FC<PlaygroundProps> = ({
 
 		if (isSubmit) {
 			try {
-				await submitCode(userCode, language, problem, contestId);
+				const submissionId = await submitCode(userCode, language, problem, contestId);
+				if (submissionId) {
+					if (contestId) {
+						router.push(`/contests/${contestId}/problems/${problem.id}/submissions/${submissionId}`);
+					} else {
+						router.push(`/problems/${problem.id}/submissions/${submissionId}`);
+					}
+				}
 			} catch (error: any) {
 				console.error("Submission error:", error);
 				alert(getFriendlyErrorMessage(error, "Unable to submit your solution. Please try again."));
@@ -168,7 +201,46 @@ const Playground: React.FC<PlaygroundProps> = ({
 
 	// 1. Initial Load & Recovery Flow
 	useEffect(() => {
-		if (loading || !pid) return;
+		const openSubId = router.query.openSubmissionId as string;
+		if (!openSubId || !user || !pid) return;
+
+		let active = true;
+		const fetchAndLoadSubmission = async () => {
+			try {
+				const collectionName = contestId ? "contest_submissions" : "submissions";
+				const subDocRef = doc(firestore, collectionName, openSubId);
+				const snap = await getDoc(subDocRef);
+				if (snap.exists() && active) {
+					const data = snap.data();
+					if (data && data.code) {
+						setUserCode(data.code);
+						if (data.language) {
+							setLanguage(data.language as SupportedLanguage);
+						}
+						// Save to local storage draft metadata so it persists
+						const localMetaKey = `code-meta-${user.uid}-${pid}-${data.language}`;
+						localStorage.setItem(localMetaKey, JSON.stringify({ code: data.code, updatedAt: Date.now() }));
+						
+						// Clear the query parameter from URL using router.replace
+						const cleanQuery = { ...router.query };
+						delete cleanQuery.openSubmissionId;
+						router.replace({ pathname: router.pathname, query: cleanQuery }, undefined, { shallow: true });
+					}
+				}
+			} catch (err) {
+				console.error("Error recovering submission in editor:", err);
+			}
+		};
+
+		fetchAndLoadSubmission();
+		return () => {
+			active = false;
+		};
+	}, [router.query.openSubmissionId, user, pid, contestId]);
+
+	// 2. Draft Recovery Flow
+	useEffect(() => {
+		if (loading || !pid || router.query.openSubmissionId) return;
 
 		let active = true;
 
@@ -326,19 +398,36 @@ const Playground: React.FC<PlaygroundProps> = ({
 	};
 
 	const getExtensions = () => {
-		switch (language) {
-			case "javascript":
-				return [javascript()];
-			case "python":
-				return [python()];
-			case "cpp":
-			case "c":
-				return [cpp()];
-			case "java":
-				return [java()];
-			default:
-				return [javascript()];
-		}
+		const baseExtensions = (() => {
+			switch (language) {
+				case "javascript":
+					return [javascript()];
+				case "python":
+					return [python()];
+				case "cpp":
+				case "c":
+					return [cpp()];
+				case "java":
+					return [java()];
+				default:
+					return [javascript()];
+			}
+		})();
+
+		return [
+			...baseExtensions,
+			EditorView.updateListener.of((update) => {
+				if (update.selectionSet) {
+					const main = update.state.selection.main;
+					setSelectionRange({ anchor: main.anchor, head: main.head });
+				}
+			}),
+			EditorView.domEventHandlers({
+				scroll(event, view) {
+					setScrollTop(view.scrollDOM.scrollTop);
+				}
+			})
+		];
 	};
 
 	return (
@@ -363,6 +452,18 @@ const Playground: React.FC<PlaygroundProps> = ({
 						onChange={onChange}
 						extensions={getExtensions()}
 						style={{ fontSize: settings.fontSize }}
+						onCreateEditor={(view) => {
+							if (selectionRange) {
+								try {
+									view.dispatch({ selection: selectionRange });
+								} catch (e) {}
+							}
+							if (scrollTop) {
+								try {
+									view.scrollDOM.scrollTop = scrollTop;
+								} catch (e) {}
+							}
+						}}
 					/>
 				</div>
 
@@ -417,12 +518,13 @@ const Playground: React.FC<PlaygroundProps> = ({
 					<div className="my-2">
 						{consoleTab === "testcases" && (() => {
 							const sampleExamples = (problem.examples || []).filter((ex: any) => ex.isSample);
-							// Clamp activeExampleId to range of sampleExamples
-							const activeIdx = Math.min(activeExampleId, Math.max(0, sampleExamples.length - 1));
+							const displayExamples = sampleExamples.length > 0 ? sampleExamples : (problem.examples || []);
+							// Clamp activeExampleId to range of displayExamples
+							const activeIdx = Math.min(activeExampleId, Math.max(0, displayExamples.length - 1));
 							return (
 								<div className="space-y-4">
 									<div className="flex flex-wrap gap-2">
-										{sampleExamples.map((example, idx) => (
+										{displayExamples.map((example, idx) => (
 											<button
 												key={example.id || idx}
 												type="button"
@@ -440,7 +542,7 @@ const Playground: React.FC<PlaygroundProps> = ({
 										))}
 									</div>
 
-									{sampleExamples[activeIdx] && (
+									{displayExamples[activeIdx] && (
 										<div className="space-y-3 animate-fade-in">
 											<div>
 												<p className="text-[11px] font-bold mb-1 text-gray-400 uppercase tracking-wider">Input:</p>
@@ -452,7 +554,7 @@ const Playground: React.FC<PlaygroundProps> = ({
 														borderColor: "var(--border-default)"
 													}}
 												>
-													{sampleExamples[activeIdx].inputText}
+													{displayExamples[activeIdx].inputText}
 												</pre>
 											</div>
 											<div>
@@ -465,17 +567,17 @@ const Playground: React.FC<PlaygroundProps> = ({
 														borderColor: "var(--border-default)"
 													}}
 												>
-													{sampleExamples[activeIdx].outputText}
+													{displayExamples[activeIdx].outputText}
 												</pre>
 											</div>
-											{sampleExamples[activeIdx].explanation && (
+											{displayExamples[activeIdx].explanation && (
 												<div>
 													<p className="text-[11px] font-bold mb-1 text-gray-400 uppercase tracking-wider">Explanation:</p>
 													<div 
 														className="text-xs bg-white/[0.02] border p-3 rounded-lg leading-relaxed text-gray-300"
 														style={{ borderColor: "var(--border-default)" }}
 													>
-														{sampleExamples[activeIdx].explanation}
+														{displayExamples[activeIdx].explanation}
 													</div>
 												</div>
 											)}
