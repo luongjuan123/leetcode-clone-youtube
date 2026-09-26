@@ -1,12 +1,13 @@
 import { authModalState } from "@/atoms/authModalAtom";
 import { auth } from "@/firebase/firebase";
 import { useRouter } from "next/router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useSignInWithEmailAndPassword, useSignInWithGoogle, useSignInWithGithub } from "react-firebase-hooks/auth";
 import { useSetRecoilState } from "recoil";
 import { FaGoogle, FaGithub, FaEye, FaEyeSlash, FaSpinner } from "react-icons/fa";
 import { translateFirebaseError } from "@/utils/authErrors";
 import { sanitizeAutofilledEmail } from "@/utils/sanitizeEmail";
+import { getSafeRedirectUrl } from "@/utils/sanitizeUrl";
 
 type LoginProps = {};
 
@@ -21,6 +22,7 @@ const Login: React.FC<LoginProps> = () => {
 	const [signInWithGoogle, googleUser, googleLoading, googleError] = useSignInWithGoogle(auth);
 	const [signInWithGithub, githubUser, githubLoading, githubError] = useSignInWithGithub(auth);
 	const router = useRouter();
+	const redirectedRef = useRef(false);
 
 	const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
 		let val = e.target.value;
@@ -74,24 +76,21 @@ const Login: React.FC<LoginProps> = () => {
 		setErrors((prev) => ({ ...prev, general: undefined }));
 
 		try {
-			const res = await signInWithEmailAndPassword(inputs.email.trim(), inputs.password);
-			if (res && res.user) {
-				setAuthModalState((prev) => ({ ...prev, isOpen: false }));
-				if (router.query.prev) {
-					router.push(router.query.prev as string);
-				}
-			}
+			await signInWithEmailAndPassword(inputs.email.trim(), inputs.password);
+			// Post-auth transition is handled once by the useEffect below
 		} catch (err: any) {
-			// Handled by useEffect matching firebase hooks state
+			// Handled by useEffect matching firebase hooks error state
 		}
 	};
 
 	useEffect(() => {
 		const authenticatedUser = user?.user || googleUser?.user || githubUser?.user;
-		if (authenticatedUser) {
+		if (authenticatedUser && !redirectedRef.current) {
+			redirectedRef.current = true;
 			setAuthModalState((prev) => ({ ...prev, isOpen: false }));
-			if (router.query.prev) {
-				router.push(router.query.prev as string);
+			const destination = getSafeRedirectUrl(router.query.prev);
+			if (destination !== "/" && router.pathname !== destination) {
+				router.push(destination);
 			}
 		}
 	}, [user, googleUser, githubUser, router, setAuthModalState]);

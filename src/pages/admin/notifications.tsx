@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from "react";
+import { useRouter } from "next/router";
 import Topbar from "@/components/Topbar/Topbar";
 import { auth, firestore } from "@/firebase/firebase";
 import { useAuthState } from "react-firebase-hooks/auth";
 import { doc, getDoc } from "firebase/firestore";
 import useHasMounted from "@/hooks/useHasMounted";
+import { useAdmin } from "@/hooks/useAdmin";
 import BeastCodeSelect from "@/components/UI/BeastCodeSelect";
 import {
 	FaBell,
@@ -52,10 +54,10 @@ interface Analytics {
 }
 
 export default function AdminNotificationsPage() {
+	const router = useRouter();
 	const hasMounted = useHasMounted();
-	const [user, loadingUser] = useAuthState(auth);
-	const [isAdmin, setIsAdmin] = useState(false);
-	const [checkingAdmin, setCheckingAdmin] = useState(true);
+	const [user] = useAuthState(auth);
+	const [isAdmin, checkingAdmin] = useAdmin();
 
 	const [activeTab, setActiveTab] = useState<"overview" | "history" | "preview" | "test">("overview");
 
@@ -131,34 +133,12 @@ export default function AdminNotificationsPage() {
 		{ value: "VIRTUAL_MODE", label: "Special: Virtual Contest Mode" }
 	];
 
-	// 1. Verify User Role
+	// 1. Auth Guard Redirect
 	useEffect(() => {
-		if (loadingUser) return;
-		if (!user) {
-			setIsAdmin(false);
-			setCheckingAdmin(false);
-			return;
+		if (!checkingAdmin && !isAdmin) {
+			router.replace("/");
 		}
-
-		const checkRole = async () => {
-			try {
-				const docRef = doc(firestore, "users", user.uid);
-				const docSnap = await getDoc(docRef);
-				if (docSnap.exists() && docSnap.data().role === "admin") {
-					setIsAdmin(true);
-				} else {
-					setIsAdmin(false);
-				}
-			} catch (err) {
-				console.error("Failed to check admin status:", err);
-				setIsAdmin(false);
-			} finally {
-				setCheckingAdmin(false);
-			}
-		};
-
-		checkRole();
-	}, [user, loadingUser]);
+	}, [isAdmin, checkingAdmin, router]);
 
 	// 2. Load Queue Logs & History
 	const loadLogs = async () => {
@@ -195,11 +175,16 @@ export default function AdminNotificationsPage() {
 
 	// 3. Load HTML Template Preview
 	const loadPreview = async () => {
+		if (!user) return;
 		setLoadingPreview(true);
 		try {
+			const token = await user.getIdToken();
 			const res = await fetch("/api/notifications/preview-template", {
 				method: "POST",
-				headers: { "Content-Type": "application/json" },
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${token}`
+				},
 				body: JSON.stringify({ eventType: previewEvent })
 			});
 			const data = await res.json();
@@ -295,7 +280,7 @@ export default function AdminNotificationsPage() {
 
 	if (!hasMounted) return null;
 
-	if (loadingUser || checkingAdmin) {
+	if (checkingAdmin) {
 		return (
 			<div className="bg-dark-layer-2 min-h-screen flex items-center justify-center">
 				<div className="flex flex-col items-center gap-4">

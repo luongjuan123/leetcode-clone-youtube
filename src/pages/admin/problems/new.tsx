@@ -32,6 +32,12 @@ const NewProblem: React.FC = () => {
 		}
 	};
 
+	useEffect(() => {
+		if (!loadingAdmin && !isAdmin) {
+			router.replace("/");
+		}
+	}, [isAdmin, loadingAdmin, router]);
+
 	// Details fields
 	const [id, setId] = useState("");
 	const [title, setTitle] = useState("");

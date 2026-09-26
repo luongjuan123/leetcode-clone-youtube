@@ -20,21 +20,16 @@ async function handler(
 
 	try {
 		// 1. Authorize Request
+		const authHeader = req.headers.authorization;
+		if (!authHeader || !authHeader.startsWith("Bearer ")) {
+			return res.status(401).json({ success: false, message: "Unauthorized: Missing token" });
+		}
+		const token = authHeader.split("Bearer ")[1];
 		let decodedToken: any = null;
 		try {
-			const authHeader = req.headers.authorization;
-			if (!authHeader || !authHeader.startsWith("Bearer ")) {
-				return res.status(401).json({ success: false, message: "Unauthorized: Missing token" });
-			}
-			const token = authHeader.split("Bearer ")[1];
-			decodedToken = await getAdminAuth().verifyIdToken(token);
+			decodedToken = await getAdminAuth().verifyIdToken(token, true);
 		} catch (tokenErr: any) {
-			console.warn("[Auth Warning] Authentication failed or skipped due to local credentials:", tokenErr.message);
-			if (process.env.NODE_ENV === "development") {
-				decodedToken = { email: "juan@test.com", uid: "mock_user" };
-			} else {
-				return res.status(401).json({ success: false, message: `Unauthorized: ${tokenErr.message}` });
-			}
+			return res.status(401).json({ success: false, message: `Unauthorized: ${tokenErr.message}` });
 		}
 
 		const uid = decodedToken.uid;

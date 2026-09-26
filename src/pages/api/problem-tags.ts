@@ -1,6 +1,7 @@
 import { withApiErrorHandler } from "@/utils/apiErrorHandler";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getAdminFirestore, getAdminAuth } from "@/firebase/firebaseAdmin";
+import { verifyPlatformAdmin } from "@/utils/withAdminGuard";
 import { ProblemTag } from "@/utils/types/tag";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -24,24 +25,30 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 		}
 	}
 
-	// For mutations, check admin role
-	const { idToken } = req.body as { idToken?: string };
-	if (!idToken) {
-		return res.status(401).json({ success: false, error: "Authentication required" });
+	// For mutations, check platform admin role
+	let token = "";
+	const authHeader = req.headers.authorization;
+	if (authHeader && authHeader.startsWith("Bearer ")) {
+		token = authHeader.substring(7).trim();
+	} else if (req.body && req.body.idToken) {
+		token = typeof req.body.idToken === "string" ? req.body.idToken.trim() : "";
+	}
+
+	if (!token) {
+		return res.status(401).json({ success: false, error: "Unauthorized: Missing authentication token" });
 	}
 
 	try {
 		const adminAuth = getAdminAuth();
-		const decoded = await adminAuth.verifyIdToken(idToken);
-		const callerUid = decoded.uid;
+		const decoded = await adminAuth.verifyIdToken(token, true);
+		const { isPlatformAdmin } = await verifyPlatformAdmin(decoded.uid, decoded);
 
-		const callerDoc = await db.collection("users").doc(callerUid).get();
-		if (!callerDoc.exists || callerDoc.data()?.isAdmin !== true) {
-			return res.status(403).json({ success: false, error: "Caller is not an admin" });
+		if (!isPlatformAdmin) {
+			return res.status(403).json({ success: false, error: "Forbidden: Administrative access required" });
 		}
 	} catch (error: any) {
-		console.error("Admin verification error:", error);
-		return res.status(401).json({ success: false, error: "Invalid admin token" });
+		console.error("Admin verification error:", error?.message || error);
+		return res.status(401).json({ success: false, error: "Unauthorized: Invalid or expired session token" });
 	}
 
 	if (req.method === "POST") {

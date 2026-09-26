@@ -3,6 +3,16 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { getAdminAuth, getAdminFirestore } from "@/firebase/firebaseAdmin";
 import { NotificationDispatcher } from "@/utils/notificationDispatcher";
 import { BeastNotificationEvent } from "@/utils/notificationTypes";
+import { verifyPlatformAdmin } from "@/utils/withAdminGuard";
+
+const USER_ALLOWED_EVENTS = new Set([
+	"THREAD_REPLY",
+	"THREAD_MENTION",
+	"THREAD_LIKE",
+	"THREAD_QUOTE",
+	"CHAT_DIRECT_MESSAGE",
+	"CHAT_MENTION",
+]);
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
 	if (req.method !== "POST") {
@@ -11,22 +21,20 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
 	try {
 		// 1. Authenticate Request
-		let decodedToken: any = null;
+		const authHeader = req.headers.authorization;
+		if (!authHeader || !authHeader.startsWith("Bearer ")) {
+			return res.status(401).json({ success: false, message: "Unauthorized: Missing or invalid token" });
+		}
+		const token = authHeader.split("Bearer ")[1]?.trim();
+		if (!token) {
+			return res.status(401).json({ success: false, message: "Unauthorized: Empty token" });
+		}
+
+		let decodedToken: any;
 		try {
-			const authHeader = req.headers.authorization;
-			if (!authHeader || !authHeader.startsWith("Bearer ")) {
-				return res.status(401).json({ success: false, message: "Unauthorized: Missing token" });
-			}
-			const token = authHeader.split("Bearer ")[1];
-			decodedToken = await getAdminAuth().verifyIdToken(token);
+			decodedToken = await getAdminAuth().verifyIdToken(token, true);
 		} catch (tokenErr: any) {
-			console.warn("[Auth Warning] Authentication failed or skipped due to local credentials:", tokenErr.message);
-			if (process.env.NODE_ENV === "development") {
-				// Fallback to mock authenticated user for local development
-				decodedToken = { uid: "mock_user", email: "juan@test.com" };
-			} else {
-				return res.status(401).json({ success: false, message: `Unauthorized: ${tokenErr.message}` });
-			}
+			return res.status(401).json({ success: false, message: "Unauthorized: Token verification failed" });
 		}
 
 		const senderUid = decodedToken.uid;
@@ -35,6 +43,14 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 		const { eventType, recipientUid, placeholders = {}, ctaUrl, customContent, metadata = {} } = req.body;
 		if (!eventType || !recipientUid) {
 			return res.status(400).json({ success: false, message: "Missing required parameters: eventType, recipientUid" });
+		}
+
+		// 3. Enforce event authorization
+		if (!USER_ALLOWED_EVENTS.has(eventType)) {
+			const { isPlatformAdmin } = await verifyPlatformAdmin(senderUid, decodedToken);
+			if (!isPlatformAdmin) {
+				return res.status(403).json({ success: false, message: "Forbidden: Administrative access required to dispatch this notification event" });
+			}
 		}
 
 		const db = getAdminFirestore();

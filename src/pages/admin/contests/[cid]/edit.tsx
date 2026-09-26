@@ -87,6 +87,12 @@ const EditContest: React.FC = () => {
 		}
 	};
 
+	useEffect(() => {
+		if (!loadingAdmin && !isAdmin) {
+			router.replace("/");
+		}
+	}, [isAdmin, loadingAdmin, router]);
+
 	// --- CONTEST DATA STATE ---
 	const [title, setTitle] = useState("");
 	const [description, setDescription] = useState("");

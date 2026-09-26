@@ -1,40 +1,16 @@
 import { withApiErrorHandler } from "@/utils/apiErrorHandler";
-import type { NextApiRequest, NextApiResponse } from "next";
-import { getAdminAuth, getAdminFirestore } from "@/firebase/firebaseAdmin";
+import type { NextApiResponse } from "next";
+import { getAdminFirestore } from "@/firebase/firebaseAdmin";
+import { withAdminGuard } from "@/utils/withAdminGuard";
+import { AuthenticatedRequest } from "@/utils/authMiddleware";
 
-async function handler(req: NextApiRequest, res: NextApiResponse) {
+async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
 	if (req.method !== "GET" && req.method !== "POST") {
 		return res.status(405).json({ success: false, message: "Method Not Allowed" });
 	}
 
 	try {
-		// 1. Authenticate Request
-		let decodedToken: any = null;
-		try {
-			const authHeader = req.headers.authorization;
-			if (!authHeader || !authHeader.startsWith("Bearer ")) {
-				return res.status(401).json({ success: false, message: "Unauthorized: Missing token" });
-			}
-			const token = authHeader.split("Bearer ")[1];
-			decodedToken = await getAdminAuth().verifyIdToken(token);
-		} catch (tokenErr: any) {
-			console.warn("[Auth Warning] Authentication failed or skipped due to local credentials:", tokenErr.message);
-			if (process.env.NODE_ENV === "development") {
-				decodedToken = { email: "admin@test.com", uid: "mock_admin" };
-			} else {
-				return res.status(401).json({ success: false, message: `Unauthorized: ${tokenErr.message}` });
-			}
-		}
-
 		const db = getAdminFirestore();
-
-		// Verify admin role
-		if (decodedToken.uid !== "mock_admin") {
-			const userDoc = await db.collection("users").doc(decodedToken.uid).get();
-			if (!userDoc.exists || userDoc.data()?.role !== "admin") {
-				return res.status(403).json({ success: false, message: "Forbidden: Admin access required" });
-			}
-		}
 
 		// 2. Query data
 		// A. Fetch recent 50 queue items
@@ -96,4 +72,4 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 	}
 }
 
-export default withApiErrorHandler(handler);
+export default withApiErrorHandler(withAdminGuard(handler));

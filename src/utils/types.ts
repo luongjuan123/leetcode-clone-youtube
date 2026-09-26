@@ -54,6 +54,7 @@ export interface SandboxLoggingPayload {
 export interface ProvisionResponse {
 	success: boolean;
 	message: string;
+	alreadyProvisioned?: boolean;
 }
 
 export interface UserProfileDocument {

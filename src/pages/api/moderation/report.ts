@@ -37,24 +37,11 @@ function saveUploadedFile(base64Data: string, originalName: string): string {
 async function createAdminNotification(title: string, body: string, ctaUrl: string, metadata: any = {}) {
 	const db = getAdminFirestore();
 	
-	// Query admins
-	const adminsSnap = await db.collection("users").where("role", "==", "admin").get();
-	const adminsSnap2 = await db.collection("users").where("isAdmin", "==", true).get();
+	// Query platform admins
+	const adminsSnap = await db.collection("platformAdmins").where("active", "==", true).get();
 	
 	const adminUids = new Set<string>();
 	adminsSnap.docs.forEach(d => adminUids.add(d.id));
-	adminsSnap2.docs.forEach(d => adminUids.add(d.id));
-	
-	// Default fallback admin emails
-	const defaultAdminEmails = ["admin@leetcode.com", "juan@test.com", "admin@test.com", "dungpubgame@gmail.com", "24110215@st.vju.ac.vn"];
-	for (const email of defaultAdminEmails) {
-		try {
-			const userSnap = await db.collection("users").where("email", "==", email).limit(1).get();
-			if (!userSnap.empty) {
-				adminUids.add(userSnap.docs[0].id);
-			}
-		} catch (e) {}
-	}
 	
 	if (adminUids.size === 0) return;
 	

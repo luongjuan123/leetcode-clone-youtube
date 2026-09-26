@@ -37,6 +37,7 @@ import { useRouter } from "next/router";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { useThreadTags } from "@/hooks/useThreadTags";
 import { clientSendNotification } from "@/utils/clientNotificationService";
+import { useAdmin } from "@/hooks/useAdmin";
 
 
 interface AttachmentFile {
@@ -101,6 +102,7 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 	const commentFeedback = useRecoilValue(threadCommentFeedbackAtom);
 	const router = useRouter();
 	const { getTag } = useThreadTags();
+	const [isAdmin] = useAdmin();
 
 	// Fetch real-time/latest profile of the author to show the newest uploaded avatar/displayName
 	const { profile: authorProfile } = useUserProfile(thread.uid);
@@ -542,7 +544,7 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 										>
 											<FaBookmark size={11} /> {isBookmarked ? "Unbookmark" : "Bookmark"}
 										</button>
-										{(user?.uid === thread.uid || user?.email === "admin@leetcode.com") && (
+										{(user?.uid === thread.uid || isAdmin) && (
 											<button
 												onClick={(e) => {
 													e.stopPropagation();

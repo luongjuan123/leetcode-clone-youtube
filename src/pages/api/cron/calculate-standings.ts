@@ -1,19 +1,39 @@
 import { NextApiRequest, NextApiResponse } from "next";
-import { getAdminFirestore } from "@/firebase/firebaseAdmin";
+import { getAdminFirestore, getAdminAuth } from "@/firebase/firebaseAdmin";
 import { getRedisClient } from "@/utils/redis";
 import { calculateStandingsRaw } from "@/utils/leaderboardCalc";
 import { withApiErrorHandler } from "@/utils/apiErrorHandler";
+import { verifyPlatformAdmin } from "@/utils/withAdminGuard";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
 	if (req.method !== "GET" && req.method !== "POST") {
 		return res.status(405).json({ success: false, error: "Method not allowed" });
 	}
 
-	// 1. Authorize Cron trigger using the central cron secret key
-	const cronSecret = process.env.CRON_SECRET || "beastcode-cron-secret-key-12345";
+	// 1. Authorize: via valid CRON_SECRET or Platform Admin Bearer token
+	let isAuthorized = false;
+	const cronSecret = process.env.CRON_SECRET;
 	const reqSecret = req.query.secret || req.headers["x-cron-secret"];
-	if (reqSecret !== cronSecret) {
-		return res.status(401).json({ success: false, error: "Unauthorized: Invalid cron secret" });
+	if (cronSecret && reqSecret === cronSecret) {
+		isAuthorized = true;
+	} else {
+		const authHeader = req.headers.authorization;
+		if (authHeader && authHeader.startsWith("Bearer ")) {
+			const token = authHeader.split("Bearer ")[1];
+			try {
+				const decoded = await getAdminAuth().verifyIdToken(token, true);
+				const adminCheck = await verifyPlatformAdmin(decoded.uid, decoded);
+				if (adminCheck.isPlatformAdmin) {
+					isAuthorized = true;
+				}
+			} catch {
+				// unauthorized
+			}
+		}
+	}
+
+	if (!isAuthorized) {
+		return res.status(401).json({ success: false, error: "Unauthorized: Invalid or missing authorization" });
 	}
 
 	const redis = getRedisClient();

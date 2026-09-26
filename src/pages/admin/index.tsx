@@ -106,7 +106,7 @@ const AdminDashboard: React.FC = () => {
 
 	// ─── Auth Guard ────────────────────────────────────────────────────────────────
 	useEffect(() => {
-		if (!loadingAdmin && !isAdmin) router.push("/");
+		if (!loadingAdmin && !isAdmin) router.replace("/");
 	}, [isAdmin, loadingAdmin, router]);
 
 	// ─── Data Fetching & Real-time onSnapshot Subscriptions ────────────────────────

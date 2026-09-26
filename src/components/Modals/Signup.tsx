@@ -1,6 +1,6 @@
 import { authModalState } from "@/atoms/authModalAtom";
 import { auth } from "@/firebase/firebase";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useSetRecoilState } from "recoil";
 import { useSignInWithGoogle, useSignInWithGithub } from "react-firebase-hooks/auth";
 import { useRouter } from "next/router";
@@ -8,6 +8,7 @@ import { FaGoogle, FaGithub, FaEye, FaEyeSlash, FaSpinner } from "react-icons/fa
 import { sendEmailVerification, updateProfile, createUserWithEmailAndPassword as fbCreateUserWithEmailAndPassword } from "firebase/auth";
 import { translateFirebaseError } from "@/utils/authErrors";
 import { sanitizeAutofilledEmail } from "@/utils/sanitizeEmail";
+import { getSafeRedirectUrl } from "@/utils/sanitizeUrl";
 
 type SignupProps = {};
 
@@ -23,6 +24,7 @@ const Signup: React.FC<SignupProps> = () => {
 	const [shakeFields, setShakeFields] = useState<{ email?: boolean; displayName?: boolean; password?: boolean }>({});
 
 	const router = useRouter();
+	const oauthHandledRef = useRef(false);
 	const [manualLoading, setManualLoading] = useState(false);
 	const [signInWithGoogle, googleUser, googleLoading, googleError] = useSignInWithGoogle(auth);
 	const [signInWithGithub, githubUser, githubLoading, githubError] = useSignInWithGithub(auth);
@@ -158,7 +160,8 @@ const Signup: React.FC<SignupProps> = () => {
 	useEffect(() => {
 		// Handle OAuth sign-in completion (Google / GitHub)
 		const currUser = googleUser?.user || githubUser?.user;
-		if (!currUser) return;
+		if (!currUser || oauthHandledRef.current) return;
+		oauthHandledRef.current = true;
 
 		// For OAuth providers the email is always pre-verified — call provision directly.
 		const provisionOAuthUser = async () => {
@@ -172,8 +175,10 @@ const Signup: React.FC<SignupProps> = () => {
 				console.error("OAuth provision error:", provErr);
 			}
 			setAuthModalState((prev) => ({ ...prev, isOpen: false }));
-			const prev = router.query.prev as string;
-			router.push(prev || "/");
+			const destination = getSafeRedirectUrl(router.query.prev);
+			if (destination !== "/" && router.pathname !== destination) {
+				router.push(destination);
+			}
 		};
 
 		provisionOAuthUser();

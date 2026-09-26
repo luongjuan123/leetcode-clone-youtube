@@ -1,18 +1,17 @@
 import { withApiErrorHandler } from "@/utils/apiErrorHandler";
-import type { NextApiRequest, NextApiResponse } from "next";
+import type { NextApiResponse } from "next";
 import { getEmailHtml } from "@/utils/emailTemplate";
 import { NotificationDispatcher, BeastNotificationEvent } from "@/utils/notificationDispatcher";
 import { getEventConfig } from "@/utils/notificationTemplates";
 import { buildAbsoluteUrl } from "@/utils/siteConfig";
+import { withAdminGuard } from "@/utils/withAdminGuard";
+import { AuthenticatedRequest } from "@/utils/authMiddleware";
 
-async function handler(req: NextApiRequest, res: NextApiResponse) {
+async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
 	if (req.method !== "POST" && req.method !== "GET") {
 		return res.status(405).json({ success: false, message: "Method Not Allowed" });
 	}
 
-	if (process.env.NODE_ENV === "production" && req.query.allowProdPreview !== "true") {
-		return res.status(403).json({ success: false, message: "Email preview is disabled in production environments." });
-	}
 
 	const eventType = (req.query.eventType || req.body.eventType || "AUTH_WELCOME") as BeastNotificationEvent;
 	const name = (req.query.name || req.body.name || "Alex Coder") as string;
@@ -79,4 +78,4 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 	}
 }
 
-export default withApiErrorHandler(handler);
+export default withApiErrorHandler(withAdminGuard(handler));

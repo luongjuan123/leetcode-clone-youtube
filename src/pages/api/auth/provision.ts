@@ -71,13 +71,20 @@ async function handler(
 	const email = decodedToken.email ?? "";
 	const displayName = decodedToken.name ?? null;
 
-	// ── Rate limit by UID ───────────────────────────────────────────────────────
+	const db = getAdminFirestore();
+	const userRef = db.collection("users").doc(uid);
+
+	// Fast-path: check if account is already provisioned.
+	// Returning early avoids burning rate limit quota and prevents unnecessary write transactions.
+	const existingSnap = await userRef.get();
+	if (existingSnap.exists) {
+		return res.status(200).json({ success: true, message: "Account already provisioned.", alreadyProvisioned: true });
+	}
+
+	// ── Rate limit by UID (only applied for genuine new provisioning attempts) ──
 	if (isRateLimited(uid)) {
 		return res.status(429).json({ success: false, message: "Too many provisioning requests. Please wait." });
 	}
-
-	const db = getAdminFirestore();
-	const userRef = db.collection("users").doc(uid);
 
 	// ── Atomic idempotent write ─────────────────────────────────────────────────
 	// Use a Firestore transaction to ensure we never double-write.
@@ -297,7 +304,7 @@ async function handler(
 	});
 
 	if (alreadyProvisioned) {
-		return res.status(200).json({ success: true, message: "Account already provisioned." });
+		return res.status(200).json({ success: true, message: "Account already provisioned.", alreadyProvisioned: true });
 	}
 
 	// ── Audit log (non-blocking) ────────────────────────────────────────────────
@@ -311,7 +318,7 @@ async function handler(
 			.trim(),
 	}).catch(() => {});
 
-	return res.status(201).json({ success: true, message: "Account provisioned successfully." });
+	return res.status(201).json({ success: true, message: "Account provisioned successfully.", alreadyProvisioned: false });
 }
 
 export default withApiErrorHandler(handler);

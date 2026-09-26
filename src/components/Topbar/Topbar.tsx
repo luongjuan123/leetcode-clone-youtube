@@ -79,7 +79,7 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 	const [user, loading] = useAuthState(auth);
 	const setAuthModal   = useSetRecoilState(authModalState);
 	const router         = useRouter();
-	const [isAdmin]      = useAdmin();
+	const [isAdmin, loadingAdmin] = useAdmin();
 	const [dropdownOpen, setDropdownOpen] = useState(false);
 	const [mobileOpen,   setMobileOpen]   = useState(false);
 	const dropdownRef    = useRef<HTMLDivElement>(null);
@@ -502,7 +502,7 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 						</Link>
 
 						{/* Admin badge */}
-						{isAdmin && (
+						{!loadingAdmin && isAdmin && (
 							<Link
 								href="/admin"
 								className="hidden sm:flex items-center gap-2 text-xs font-semibold px-3.5 py-2 rounded-xl transition-all duration-150 text-text-secondary bg-dark-fill-3 border border-border-subtle hover:text-brand-orange hover:border-border-accent"
@@ -629,7 +629,7 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage }) => {
 											{[
 												{ href: "/profile",  label: "My Profile", icon: <FaUser size={10} /> },
 												{ href: "/settings", label: "Settings",   icon: <FaCog  size={10} /> },
-												...(isAdmin ? [{ href: "/admin", label: "Admin Panel", icon: <FaShieldAlt size={10} /> }] : []),
+												...(!loadingAdmin && isAdmin ? [{ href: "/admin", label: "Admin Panel", icon: <FaShieldAlt size={10} /> }] : []),
 											].map((item) => (
 												<Link
 													key={item.href}

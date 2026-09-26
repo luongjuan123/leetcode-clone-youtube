@@ -1,11 +1,14 @@
-import type { NextApiRequest, NextApiResponse } from "next";
+import type { NextApiResponse } from "next";
 import { EmailService } from "@/utils/emailService";
 import { getEmailHtml } from "@/utils/emailTemplate";
 import { COLORS } from "@/utils/emailComponents";
+import { withAdminGuard } from "@/utils/withAdminGuard";
+import { withApiErrorHandler } from "@/utils/apiErrorHandler";
+import { AuthenticatedRequest } from "@/utils/authMiddleware";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-	if (req.method !== "POST" && req.method !== "GET") {
-		return res.status(405).json({ success: false, message: "Method not allowed. Use GET or POST." });
+async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
+	if (req.method !== "POST") {
+		return res.status(405).json({ success: false, message: "Method not allowed. Use POST." });
 	}
 
 	const targetEmail = (req.query.email as string) || (req.body?.email as string) || "dungpubgame@gmail.com";
@@ -75,3 +78,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 		});
 	}
 }
+
+export default withApiErrorHandler(withAdminGuard(handler));

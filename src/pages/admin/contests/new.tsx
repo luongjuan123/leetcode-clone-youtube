@@ -25,6 +25,12 @@ const NewContest: React.FC = () => {
 		}
 	};
 
+	useEffect(() => {
+		if (!loadingAdmin && !isAdmin) {
+			router.replace("/");
+		}
+	}, [isAdmin, loadingAdmin, router]);
+
 	// Form fields
 	const [title, setTitle] = useState("");
 	const [id, setId] = useState(""); // Slug

@@ -79,8 +79,18 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
 				const [metadata] = await file.getMetadata();
 				res.setHeader("Content-Type", metadata.contentType || "application/octet-stream");
 				res.setHeader("Cache-Control", "private, max-age=86400, immutable");
-				const readStream = file.createReadStream();
-				readStream.pipe(res);
+				await new Promise<void>((resolve) => {
+					const readStream = file.createReadStream();
+					readStream.pipe(res);
+					res.on("finish", () => resolve());
+					readStream.on("error", (streamErr) => {
+						console.warn("[GCS Stream Warning]:", streamErr.message);
+						if (!res.headersSent) {
+							res.status(500).json({ success: false, error: "Streaming error" });
+						}
+						resolve();
+					});
+				});
 				return;
 			}
 		} catch (gcsErr: any) {
@@ -108,8 +118,12 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
 
 		res.setHeader("Content-Type", mimeType);
 		res.setHeader("Cache-Control", "private, max-age=86400, immutable");
-		const fileStream = fs.createReadStream(diskPath);
-		fileStream.pipe(res);
+		await new Promise<void>((resolve) => {
+			const fileStream = fs.createReadStream(diskPath);
+			fileStream.pipe(res);
+			res.on("finish", () => resolve());
+			fileStream.on("error", () => resolve());
+		});
 		return;
 	}
 

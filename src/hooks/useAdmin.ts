@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useAuthState } from "react-firebase-hooks/auth";
 import { auth, firestore } from "@/firebase/firebase";
 import { doc, getDoc } from "firebase/firestore";
@@ -7,46 +7,77 @@ export function useAdmin() {
 	const [user, loadingAuth] = useAuthState(auth);
 	const [isAdmin, setIsAdmin] = useState(false);
 	const [loading, setLoading] = useState(true);
+	const activeUidRef = useRef<string | null>(null);
 
 	useEffect(() => {
-		const checkAdmin = async () => {
-			if (!user) {
-				setIsAdmin(false);
-				setLoading(false);
-				return;
-			}
-			// check if email is admin email
-			const adminEmails = ["admin@leetcode.com", "juan@test.com", "admin@test.com", "dungpubgame@gmail.com", "24110215@st.vju.ac.vn"];
-			if (adminEmails.includes(user.email || "")) {
-				setIsAdmin(true);
-				setLoading(false);
-				return;
-			}
+		let isCancelled = false;
+		const currentUid = user?.uid || null;
+		activeUidRef.current = currentUid;
 
-			// check firestore
+		// Synchronously reset state whenever user changes or logs out
+		setIsAdmin(false);
+
+		if (loadingAuth) {
+			setLoading(true);
+			return;
+		}
+
+		if (!user || !currentUid) {
+			setLoading(false);
+			return;
+		}
+
+		setLoading(true);
+
+		const verifyAdminStatus = async () => {
 			try {
-				const userRef = doc(firestore, "users", user.uid);
-				const userDoc = await getDoc(userRef);
-				if (userDoc.exists()) {
-					const data = userDoc.data();
-					if (data.isAdmin || data.role === "admin") {
+				// 1. Check verified custom claims on Firebase ID token
+				const tokenResult = await user.getIdTokenResult(false);
+				if (isCancelled || activeUidRef.current !== currentUid) return;
+
+				if (
+					tokenResult.claims.admin === true ||
+					tokenResult.claims.role === "super_admin" ||
+					tokenResult.claims.role === "admin"
+				) {
+					setIsAdmin(true);
+					setLoading(false);
+					return;
+				}
+
+				// 2. Check authoritative /platformAdmins/{uid} collection in Firestore
+				const adminDocRef = doc(firestore, "platformAdmins", currentUid);
+				const adminDocSnap = await getDoc(adminDocRef);
+				if (isCancelled || activeUidRef.current !== currentUid) return;
+
+				if (adminDocSnap.exists()) {
+					const data = adminDocSnap.data();
+					if (data.active === true) {
 						setIsAdmin(true);
-					} else {
-						setIsAdmin(false);
+						setLoading(false);
+						return;
 					}
-				} else {
+				}
+
+				// User is not an admin
+				setIsAdmin(false);
+			} catch (err) {
+				console.error("[useAdmin] Error verifying platform admin status:", err);
+				if (!isCancelled && activeUidRef.current === currentUid) {
 					setIsAdmin(false);
 				}
-			} catch (e) {
-				console.error("Error checking admin status", e);
-				setIsAdmin(false);
+			} finally {
+				if (!isCancelled && activeUidRef.current === currentUid) {
+					setLoading(false);
+				}
 			}
-			setLoading(false);
 		};
 
-		if (!loadingAuth) {
-			checkAdmin();
-		}
+		verifyAdminStatus();
+
+		return () => {
+			isCancelled = true;
+		};
 	}, [user, loadingAuth]);
 
 	return [isAdmin, loading || loadingAuth] as const;

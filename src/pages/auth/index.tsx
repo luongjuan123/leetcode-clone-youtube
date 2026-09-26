@@ -4,6 +4,7 @@ import { auth } from "@/firebase/firebase";
 import { useSetRecoilState } from "recoil";
 import { useEffect } from "react";
 import { useRouter } from "next/router";
+import { getSafeRedirectUrl } from "@/utils/sanitizeUrl";
 
 type AuthPageProps = {};
 
@@ -15,12 +16,13 @@ const AuthPage: React.FC<AuthPageProps> = () => {
 	useEffect(() => {
 		if (loading || !router.isReady) return;
 
+		const destination = getSafeRedirectUrl(router.query.prev);
+
 		if (user) {
 			if (!user.emailVerified) {
 				router.replace("/auth/verify-email");
 			} else {
-				const prev = router.query.prev as string;
-				router.replace(prev || "/");
+				router.replace(destination);
 			}
 		} else {
 			const typeParam = router.query.type as string;
@@ -29,8 +31,7 @@ const AuthPage: React.FC<AuthPageProps> = () => {
 				: "login";
 
 			setAuthModalState({ isOpen: true, type: targetType });
-			const prev = router.query.prev as string;
-			router.replace(prev || "/");
+			router.replace(destination);
 		}
 	}, [user, loading, router.isReady, router.query.type, router.query.prev, router, setAuthModalState]);
 

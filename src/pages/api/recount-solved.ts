@@ -1,33 +1,19 @@
 import { withApiErrorHandler } from "@/utils/apiErrorHandler";
-import type { NextApiRequest, NextApiResponse } from "next";
-import { getAdminFirestore, getAdminAuth } from "@/firebase/firebaseAdmin";
+import type { NextApiResponse } from "next";
+import { getAdminFirestore } from "@/firebase/firebaseAdmin";
 import { calculateExperience } from "@/utils/experienceConfig";
 import { getCountryCode } from "@/utils/countryData";
 import { slugify } from "@/utils/slugify";
+import { withAdminGuard } from "@/utils/withAdminGuard";
+import { AuthenticatedRequest } from "@/utils/authMiddleware";
 
-async function handler(req: NextApiRequest, res: NextApiResponse) {
+async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
 	if (req.method !== "POST") {
 		return res.status(405).json({ error: "Method not allowed" });
 	}
 
-	const { idToken } = req.body as { idToken?: string };
-	if (!idToken) {
-		return res.status(401).json({ error: "Missing idToken" });
-	}
-
 	try {
-		// 1. Verify the caller's identity and admin status
-		const adminAuth = getAdminAuth();
-		const decoded = await adminAuth.verifyIdToken(idToken);
-		const callerUid = decoded.uid;
-
 		const db = getAdminFirestore();
-
-		// Check the caller is an admin in Firestore
-		const callerDoc = await db.collection("users").doc(callerUid).get();
-		if (!callerDoc.exists || callerDoc.data()?.isAdmin !== true) {
-			return res.status(403).json({ error: "Caller is not an admin" });
-		}
 
 		// --- DATABASE SELF-HEAL MIGRATION ---
 		const problemsCollection = db.collection("problems");
@@ -306,4 +292,4 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 	}
 }
 
-export default withApiErrorHandler(handler);
+export default withApiErrorHandler(withAdminGuard(handler));

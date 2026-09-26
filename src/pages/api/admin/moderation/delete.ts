@@ -7,8 +7,6 @@ import { moderationConfig } from "@/utils/moderationConfig";
 import { ModerationEmailService } from "@/utils/moderationEmailService";
 import { randomUUID } from "crypto";
 
-const superAdminEmails = ["admin@leetcode.com", "juan@test.com", "admin@test.com", "dungpubgame@gmail.com", "24110215@st.vju.ac.vn"];
-
 async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
 	if (req.method !== "POST") {
 		return res.status(405).json({ success: false, error: "Method not allowed" });
@@ -24,7 +22,7 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
 		return res.status(401).json({ success: false, error: "Unauthorized" });
 	}
 
-	const isSuperAdmin = superAdminEmails.includes(adminUser.email || "") || adminUser.role === "super_admin";
+	const isSuperAdmin = adminUser.role === "super_admin";
 
 	if (adminUser.uid === targetUid) {
 		return res.status(400).json({ success: false, error: "You cannot delete your own admin account." });

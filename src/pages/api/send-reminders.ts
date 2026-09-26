@@ -1,9 +1,10 @@
 import { withApiErrorHandler } from "@/utils/apiErrorHandler";
 import type { NextApiRequest, NextApiResponse } from "next";
-import { getAdminFirestore } from "@/firebase/firebaseAdmin";
+import { getAdminFirestore, getAdminAuth } from "@/firebase/firebaseAdmin";
 import { NotificationDispatcher } from "@/utils/notificationDispatcher";
 import { NotificationRecipientService } from "@/utils/notificationRecipientService";
 import { buildAbsoluteUrl } from "@/utils/siteConfig";
+import { verifyPlatformAdmin } from "@/utils/withAdminGuard";
 
 type ResponseData = {
 	success: boolean;
@@ -20,50 +21,49 @@ async function handler(
 	}
 
 	try {
-		// 1. Authorize Cron/Trigger (using simple secret token)
-		const cronSecret = process.env.CRON_SECRET || "beastcode-cron-secret-key-12345";
+		// 1. Authorize: via valid CRON_SECRET or Platform Admin Bearer token
+		let isAuthorized = false;
+		const cronSecret = process.env.CRON_SECRET;
 		const reqSecret = req.query.secret || req.headers["x-cron-secret"];
-		if (reqSecret !== cronSecret) {
-			return res.status(401).json({ success: false, message: "Unauthorized: Invalid cron secret" });
+		if (cronSecret && reqSecret === cronSecret) {
+			isAuthorized = true;
+		} else {
+			const authHeader = req.headers.authorization;
+			if (authHeader && authHeader.startsWith("Bearer ")) {
+				const token = authHeader.split("Bearer ")[1];
+				try {
+					const decoded = await getAdminAuth().verifyIdToken(token, true);
+					const adminCheck = await verifyPlatformAdmin(decoded.uid, decoded);
+					if (adminCheck.isPlatformAdmin) {
+						isAuthorized = true;
+					}
+				} catch {
+					// unauthorized
+				}
+			}
+		}
+
+		if (!isAuthorized) {
+			return res.status(401).json({ success: false, message: "Unauthorized: Invalid or missing authorization" });
 		}
 
 		const now = Date.now();
-		let targetContests: any[] = [];
-		let isMocked = false;
+		const db = getAdminFirestore();
+		const contestsSnap = await db.collection("contests")
+			.where("startTime", ">", now)
+			.get();
 
-		// 2. Fetch upcoming contests
-		try {
-			const db = getAdminFirestore();
-			const contestsSnap = await db.collection("contests")
-				.where("startTime", ">", now)
-				.get();
+		const pendingContests = contestsSnap.docs.map(doc => ({
+			id: doc.id,
+			...doc.data()
+		})) as any[];
 
-			const pendingContests = contestsSnap.docs.map(doc => ({
-				id: doc.id,
-				...doc.data()
-			})) as any[];
-
-			targetContests = pendingContests.filter(c => {
-				const timeDiff = c.startTime - now;
-				// Starts in the next 15 minutes
-				const isStartingSoon = timeDiff <= 15 * 60 * 1000 && timeDiff > 0;
-				return isStartingSoon && !c.reminderSent;
-			});
-		} catch (adminErr: any) {
-			console.warn("[Firebase Admin Credential Warn] Falling back to mock reminders:", adminErr.message);
-			isMocked = true;
-			targetContests = [
-				{
-					id: "mock-contest-id",
-					title: "BeastCode Tournament Grand Prix (Simulated)",
-					startTime: now + 12 * 60 * 1000,
-					endTime: now + 132 * 60 * 1000,
-					duration: 120,
-					visibility: "public",
-					reminderSent: false
-				}
-			];
-		}
+		const targetContests = pendingContests.filter(c => {
+			const timeDiff = c.startTime - now;
+			// Starts in the next 15 minutes
+			const isStartingSoon = timeDiff <= 15 * 60 * 1000 && timeDiff > 0;
+			return isStartingSoon && !c.reminderSent;
+		});
 
 		if (targetContests.length === 0) {
 			return res.status(200).json({
@@ -89,10 +89,8 @@ async function handler(
 			}
 
 			if (targetedRecipients.length === 0) {
-				if (!isMocked) {
-					const db = getAdminFirestore();
-					await db.collection("contests").doc(contest.id).update({ reminderSent: true });
-				}
+				const db = getAdminFirestore();
+				await db.collection("contests").doc(contest.id).update({ reminderSent: true });
 				processedContests.push(contest.title);
 				continue;
 			}
@@ -119,10 +117,8 @@ async function handler(
 				}
 			}
 
-			if (!isMocked) {
-				const db = getAdminFirestore();
-				await db.collection("contests").doc(contest.id).update({ reminderSent: true });
-			}
+			const db = getAdminFirestore();
+			await db.collection("contests").doc(contest.id).update({ reminderSent: true });
 			processedContests.push(contest.title);
 		}
 

@@ -6,8 +6,6 @@ import { AuthenticatedRequest } from "@/utils/authMiddleware";
 import { ModerationEmailService } from "@/utils/moderationEmailService";
 import { randomUUID } from "crypto";
 
-const superAdminEmails = ["admin@leetcode.com", "juan@test.com", "admin@test.com", "dungpubgame@gmail.com", "24110215@st.vju.ac.vn"];
-
 async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
 	if (req.method !== "POST") {
 		return res.status(405).json({ success: false, error: "Method not allowed" });
@@ -24,7 +22,7 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
 	}
 
 	const isPermanent = duration === "Permanent";
-	const isSuperAdmin = superAdminEmails.includes(adminUser.email || "") || adminUser.role === "super_admin";
+	const isSuperAdmin = adminUser.role === "super_admin";
 
 	if (isPermanent && !isSuperAdmin) {
 		return res.status(403).json({

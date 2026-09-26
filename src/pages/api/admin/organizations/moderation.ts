@@ -222,16 +222,7 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
 
 		} else if (action === "permanent_delete") {
 			// Super admin protection check
-			const callerDoc = await db.collection("users").doc(actorUid).get();
-			const callerEmail = callerDoc.data()?.email || "";
-			const superAdminEmails = [
-				"admin@leetcode.com",
-				"juan@test.com",
-				"admin@test.com",
-				"dungpubgame@gmail.com",
-				"24110215@st.vju.ac.vn"
-			];
-			if (!superAdminEmails.includes(callerEmail) && callerDoc.data()?.role !== "super_admin") {
+			if (req.user?.role !== "super_admin") {
 				return res.status(403).json({ success: false, error: "Forbidden: Only Super Admins can permanently delete organizations." });
 			}
 

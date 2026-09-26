@@ -1,10 +1,11 @@
 import { withApiErrorHandler } from "@/utils/apiErrorHandler";
-import type { NextApiRequest, NextApiResponse } from "next";
-import { getAdminAuth, getAdminFirestore } from "@/firebase/firebaseAdmin";
+import type { NextApiResponse } from "next";
 import { NotificationDispatcher } from "@/utils/notificationDispatcher";
 import { NotificationRecipientService } from "@/utils/notificationRecipientService";
 import { EmailService } from "@/utils/emailService";
 import { getSiteUrl } from "@/utils/siteConfig";
+import { withAdminGuard } from "@/utils/withAdminGuard";
+import { AuthenticatedRequest } from "@/utils/authMiddleware";
 
 type ResponseData = {
 	success: boolean;
@@ -13,7 +14,7 @@ type ResponseData = {
 };
 
 async function handler(
-	req: NextApiRequest,
+	req: AuthenticatedRequest,
 	res: NextApiResponse<ResponseData>
 ) {
 	if (req.method !== "POST") {
@@ -21,33 +22,7 @@ async function handler(
 	}
 
 	try {
-		// 1. Authorize Request (Admin check)
-		let decodedToken: any = null;
-		try {
-			const authHeader = req.headers.authorization;
-			if (!authHeader || !authHeader.startsWith("Bearer ")) {
-				return res.status(401).json({ success: false, message: "Unauthorized: Missing token" });
-			}
-			const token = authHeader.split("Bearer ")[1];
-			decodedToken = await getAdminAuth().verifyIdToken(token);
-			
-			const adminEmails = ["admin@leetcode.com", "juan@test.com", "admin@test.com", "dungpubgame@gmail.com", "24110215@st.vju.ac.vn", "bomemebo6996@gmail.com"];
-			const db = getAdminFirestore();
-			const userDoc = await db.collection("users").doc(decodedToken.uid).get();
-			const userData = userDoc.data() || {};
-			const isAdmin = userData.role === "admin" || userData.isAdmin === true || adminEmails.includes(decodedToken.email || "");
-
-			if (!isAdmin) {
-				return res.status(403).json({ success: false, message: "Forbidden: Not an admin" });
-			}
-		} catch (tokenErr: any) {
-			console.warn("[Auth Warning] Admin authentication failed or skipped due to local credentials:", tokenErr.message);
-			if (process.env.NODE_ENV === "development") {
-				decodedToken = { email: "admin@test.com", uid: "mock_admin" };
-			} else {
-				return res.status(401).json({ success: false, message: `Unauthorized: ${tokenErr.message}` });
-			}
-		}
+		// 1. Authorized via withAdminGuard
 
 		// 2. Parse Request Body
 		const {
@@ -127,4 +102,4 @@ async function handler(
 	}
 }
 
-export default withApiErrorHandler(handler);
+export default withApiErrorHandler(withAdminGuard(handler));
