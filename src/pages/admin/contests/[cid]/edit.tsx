@@ -416,8 +416,6 @@ const EditContest: React.FC = () => {
 					console.error("Failed to send virtual mode email:", virtualEmailErr);
 				}
 			}
-
-			await fetchContestData();
 		} catch (err: any) {
 			console.error("Error updating details:", err);
 			triggerStatusRibbon("error", getFriendlyErrorMessage(err, "Failed to update details."));
@@ -455,6 +453,7 @@ const EditContest: React.FC = () => {
 		if (!cid || !selectedDbProblem) return;
 
 		setSubmitting(true);
+		const previousContestProblems = [...contestProblems];
 		try {
 			const probItem = allDbProblems.find(p => p.id === selectedDbProblem);
 			if (!probItem) return;
@@ -471,19 +470,29 @@ const EditContest: React.FC = () => {
 				points: Number(newProbPoints) || 500,
 				difficulty: probItem.difficulty,
 				order: newOrder,
-				customConstraints: newProbConstraints.trim()
+				customConstraints: newProbConstraints.trim(),
+				title: probItem.title || probItem.id
 			};
 
-			await setDoc(cpRef, newProb);
-
-			// Refresh lists
+			setContestProblems(prev => [...prev, newProb]);
 			setSelectedDbProblem("");
 			setNewProbConstraints("");
 			triggerStatusRibbon("success", `Problem ${probItem.title} added successfully!`);
-			await fetchContestData();
+
+			await setDoc(cpRef, {
+				id: targetId,
+				contestId: cid,
+				problemId: selectedDbProblem,
+				label: newProbLabel.toUpperCase(),
+				points: Number(newProbPoints) || 500,
+				difficulty: probItem.difficulty,
+				order: newOrder,
+				customConstraints: newProbConstraints.trim()
+			});
 		} catch (err: any) {
 			console.error("Error adding problem:", err);
 			triggerStatusRibbon("error", getFriendlyErrorMessage(err, "Error adding problem."));
+			setContestProblems(previousContestProblems);
 		} finally {
 			setSubmitting(false);
 		}
@@ -492,33 +501,39 @@ const EditContest: React.FC = () => {
 	// Delete problem from contest
 	const handleDeleteProblem = async (problemId: string) => {
 		if (!cid) return;
+		const previousContestProblems = [...contestProblems];
+		const remaining = previousContestProblems
+			.filter((p) => p.problemId !== problemId)
+			.map((p, index) => ({ ...p, order: index + 1 }));
+		setContestProblems(remaining);
+		triggerStatusRibbon("success", "Problem removed from contest");
+
 		try {
 			const targetId = `${cid}_${problemId}`;
 			await deleteDoc(doc(firestore, "contest_problems", targetId));
 
 			// Recalculate orders of remaining problems
-			const remaining = contestProblems.filter((p) => p.problemId !== problemId);
 			const batch = writeBatch(firestore);
-			remaining.forEach((p, index) => {
+			remaining.forEach((p) => {
 				const cpRef = doc(firestore, "contest_problems", p.id);
-				batch.update(cpRef, { order: index + 1 });
+				batch.update(cpRef, { order: p.order });
 			});
 			await batch.commit();
-
-			triggerStatusRibbon("success", "Problem removed from contest");
-			await fetchContestData();
 		} catch (err: any) {
 			console.error("Error removing problem:", err);
 			triggerStatusRibbon("error", getFriendlyErrorMessage(err, "Failed to remove problem."));
+			setContestProblems(previousContestProblems);
 		}
 	};
 
 	const handleAddProblemsModal = async (ids: string[]) => {
 		if (!cid) return;
-		setSubmitting(true);
+		const previousContestProblems = [...contestProblems];
 		try {
 			const batch = writeBatch(firestore);
 			let currentCount = contestProblems.length;
+			const newItems: ContestProblem[] = [];
+
 			for (const id of ids) {
 				if (contestProblems.some((p) => p.problemId === id)) continue;
 				const probItem = allDbProblems.find((p) => p.id === id);
@@ -531,32 +546,46 @@ const EditContest: React.FC = () => {
 						: 500;
 				const targetId = `${cid}_${id}`;
 				const cpRef = doc(firestore, "contest_problems", targetId);
-				batch.set(cpRef, {
+				const problemData = {
 					id: targetId,
-					contestId: cid,
+					contestId: cid as string,
 					problemId: id,
 					label,
 					points,
 					difficulty: probItem?.difficulty || "Medium",
 					order: currentCount + 1,
 					customConstraints: "",
+				};
+				batch.set(cpRef, problemData);
+				newItems.push({
+					...problemData,
+					title: probItem?.title || id
 				});
 				currentCount++;
 			}
+
+			if (newItems.length > 0) {
+				setContestProblems(prev => [...prev, ...newItems]);
+			}
+			triggerStatusRibbon("success", `${ids.length} problem(s) added successfully.`);
+
 			await batch.commit();
-			triggerStatusRibbon("success", `${ids.length} problems added successfully.`);
-			await fetchContestData();
 		} catch (err: any) {
 			console.error("Error adding problems:", err);
 			triggerStatusRibbon("error", getFriendlyErrorMessage(err, "Failed to add problems."));
-		} finally {
-			setSubmitting(false);
+			setContestProblems(previousContestProblems);
 		}
 	};
 
 	const handleRemoveProblemsModal = async (ids: string[]) => {
 		if (!cid) return;
-		setSubmitting(true);
+		const previousContestProblems = [...contestProblems];
+		const remaining = previousContestProblems
+			.filter((p) => !ids.includes(p.problemId))
+			.map((p, index) => ({ ...p, order: index + 1 }));
+		setContestProblems(remaining);
+		triggerStatusRibbon("success", "Problems removed successfully.");
+
 		try {
 			const batch = writeBatch(firestore);
 			for (const id of ids) {
@@ -564,25 +593,31 @@ const EditContest: React.FC = () => {
 				batch.delete(doc(firestore, "contest_problems", targetId));
 			}
 
-			const remaining = contestProblems.filter((p) => !ids.includes(p.problemId));
-			remaining.forEach((p, index) => {
+			remaining.forEach((p) => {
 				const cpRef = doc(firestore, "contest_problems", p.id);
-				batch.update(cpRef, { order: index + 1 });
+				batch.update(cpRef, { order: p.order });
 			});
 
 			await batch.commit();
-			triggerStatusRibbon("success", "Problems removed successfully.");
-			await fetchContestData();
 		} catch (err: any) {
 			console.error("Error removing problems:", err);
 			triggerStatusRibbon("error", getFriendlyErrorMessage(err, "Failed to remove problems."));
-		} finally {
-			setSubmitting(false);
+			setContestProblems(previousContestProblems);
 		}
 	};
 
 	const handleReorderProblemsModal = async (orderedIds: string[]) => {
 		if (!cid) return;
+		const previousContestProblems = [...contestProblems];
+		const reordered: ContestProblem[] = [];
+		orderedIds.forEach((id, index) => {
+			const existing = previousContestProblems.find(p => p.problemId === id);
+			if (existing) {
+				reordered.push({ ...existing, order: index + 1 });
+			}
+		});
+		setContestProblems(reordered);
+
 		try {
 			const batch = writeBatch(firestore);
 			orderedIds.forEach((id, index) => {
@@ -591,9 +626,9 @@ const EditContest: React.FC = () => {
 				batch.update(cpRef, { order: index + 1 });
 			});
 			await batch.commit();
-			await fetchContestData();
 		} catch (err: any) {
 			console.error("Error updating order:", err);
+			setContestProblems(previousContestProblems);
 		}
 	};
 
@@ -602,19 +637,24 @@ const EditContest: React.FC = () => {
 		if (direction === "up" && index === 0) return;
 		if (direction === "down" && index === contestProblems.length - 1) return;
 
-		try {
-			const swapIndex = direction === "up" ? index - 1 : index + 1;
-			const current = contestProblems[index];
-			const target = contestProblems[swapIndex];
+		const previousContestProblems = [...contestProblems];
+		const swapIndex = direction === "up" ? index - 1 : index + 1;
+		const current = previousContestProblems[index];
+		const target = previousContestProblems[swapIndex];
 
+		const updated = [...previousContestProblems];
+		updated[index] = { ...target, order: current.order };
+		updated[swapIndex] = { ...current, order: target.order };
+		setContestProblems(updated);
+
+		try {
 			const batch = writeBatch(firestore);
 			batch.update(doc(firestore, "contest_problems", current.id), { order: target.order });
 			batch.update(doc(firestore, "contest_problems", target.id), { order: current.order });
 			await batch.commit();
-
-			await fetchContestData();
 		} catch (err: any) {
 			console.error("Error reordering:", err);
+			setContestProblems(previousContestProblems);
 		}
 	};
 
@@ -625,17 +665,30 @@ const EditContest: React.FC = () => {
 
 		try {
 			const annRef = collection(firestore, "contest_announcements");
-			await addDoc(annRef, {
+			const now = Date.now();
+			const titleText = announceTitle.trim();
+			const contentText = announceContent.trim();
+			const docRef = await addDoc(annRef, {
 				contestId: cid,
-				title: announceTitle.trim(),
-				content: announceContent.trim(),
-				timestamp: Date.now()
+				title: titleText,
+				content: contentText,
+				timestamp: now
 			});
+
+			setAnnouncements(prev => [
+				{
+					id: docRef.id,
+					contestId: cid as string,
+					title: titleText,
+					content: contentText,
+					timestamp: now
+				},
+				...prev
+			]);
 
 			setAnnounceTitle("");
 			setAnnounceContent("");
 			triggerStatusRibbon("success", "Announcement posted!");
-			await fetchContestData();
 		} catch (err: any) {
 			console.error("Error posting announcement:", err);
 			triggerStatusRibbon("error", "Failed to post announcement.");
@@ -647,21 +700,34 @@ const EditContest: React.FC = () => {
 		e.preventDefault();
 		if (!cid || !answeringId || !clarAnswerText.trim()) return;
 
+		const prevClarifications = [...clarifications];
+		const now = Date.now();
+		const answerText = clarAnswerText.trim();
+		const isPublic = clarIsPublic;
+		const targetId = answeringId;
+
+		setClarifications(prev => prev.map(c => c.id === targetId ? {
+			...c,
+			answer: answerText,
+			isPublic,
+			answeredAt: now
+		} : c));
+
 		try {
-			const clarRef = doc(firestore, "contest_clarifications", answeringId);
+			const clarRef = doc(firestore, "contest_clarifications", targetId);
 			await updateDoc(clarRef, {
-				answer: clarAnswerText.trim(),
-				isPublic: clarIsPublic,
-				answeredAt: Date.now()
+				answer: answerText,
+				isPublic,
+				answeredAt: now
 			});
 
 			setAnsweringId(null);
 			setClarAnswerText("");
 			triggerStatusRibbon("success", "Clarification answered!");
-			await fetchContestData();
 		} catch (err: any) {
 			console.error("Error answering clarification:", err);
 			triggerStatusRibbon("error", "Failed to submit answer.");
+			setClarifications(prevClarifications);
 		}
 	};
 

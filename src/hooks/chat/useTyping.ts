@@ -8,6 +8,16 @@ export function useTyping(conversationId: string | null) {
 	const [user] = useAuthState(auth);
 	const [typingUsers, setTypingUsers] = useState<TypingState[]>([]);
 	const lastSentTypingRef = useRef<number>(0);
+	const inactivityTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+	const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+	// Clean up timers on unmount or conversation change
+	useEffect(() => {
+		return () => {
+			if (inactivityTimeoutRef.current) clearTimeout(inactivityTimeoutRef.current);
+			if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+		};
+	}, [conversationId]);
 
 	// Real-time listener for typing users
 	useEffect(() => {
@@ -55,13 +65,35 @@ export function useTyping(conversationId: string | null) {
 		return () => clearInterval(interval);
 	}, [typingUsers.length]);
 
-	// Send throttled typing heartbeat (max once every 3000ms)
-	const sendTypingHeartbeat = useCallback(async () => {
-		if (!conversationId || !user) return;
-		const now = Date.now();
-		if (now - lastSentTypingRef.current < 3000) return;
+	// Clear typing indicator immediately (e.g. on message submit, blur, or inactivity)
+	const clearTyping = useCallback(async () => {
+		if (inactivityTimeoutRef.current) {
+			clearTimeout(inactivityTimeoutRef.current);
+			inactivityTimeoutRef.current = null;
+		}
+		if (debounceTimerRef.current) {
+			clearTimeout(debounceTimerRef.current);
+			debounceTimerRef.current = null;
+		}
 
-		lastSentTypingRef.current = now;
+		if (!conversationId || !user || lastSentTypingRef.current === 0) return;
+		lastSentTypingRef.current = 0;
+
+		try {
+			const idToken = await user.getIdToken();
+			await fetch(`/api/chat/conversations/${conversationId}/typing`, {
+				method: "DELETE",
+				headers: { Authorization: `Bearer ${idToken}` },
+			});
+		} catch (err: any) {
+			console.warn("[clearTyping error]:", err.message);
+		}
+	}, [conversationId, user]);
+
+	// Execute actual network write
+	const executeHeartbeat = useCallback(async () => {
+		if (!conversationId || !user) return;
+		lastSentTypingRef.current = Date.now();
 		try {
 			const idToken = await user.getIdToken();
 			await fetch(`/api/chat/conversations/${conversationId}/typing`, {
@@ -73,20 +105,33 @@ export function useTyping(conversationId: string | null) {
 		}
 	}, [conversationId, user]);
 
-	// Clear typing indicator immediately (e.g. on message submit or blur)
-	const clearTyping = useCallback(async () => {
+	// Send debounced typing heartbeat (coalesces keystrokes and throttles to max 1 write per 3000ms)
+	const sendTypingHeartbeat = useCallback(() => {
 		if (!conversationId || !user) return;
-		lastSentTypingRef.current = 0;
-		try {
-			const idToken = await user.getIdToken();
-			await fetch(`/api/chat/conversations/${conversationId}/typing`, {
-				method: "DELETE",
-				headers: { Authorization: `Bearer ${idToken}` },
-			});
-		} catch (err: any) {
-			console.warn("[clearTyping error]:", err.message);
+
+		// 1. Reset automatic inactivity timer: auto-clear after 2500ms of silence
+		if (inactivityTimeoutRef.current) clearTimeout(inactivityTimeoutRef.current);
+		inactivityTimeoutRef.current = setTimeout(() => {
+			clearTyping();
+		}, 2500);
+
+		// 2. Debounce/Throttle network writes to avoid excessive Firestore traffic
+		const now = Date.now();
+		const elapsed = now - lastSentTypingRef.current;
+
+		if (lastSentTypingRef.current === 0 || elapsed >= 3000) {
+			// First stroke or throttle elapsed: execute immediately
+			if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+			executeHeartbeat();
+		} else if (!debounceTimerRef.current) {
+			// Queue debounced trailing heartbeat to fire once throttle window opens
+			const remainingWait = Math.max(800, 3000 - elapsed);
+			debounceTimerRef.current = setTimeout(() => {
+				debounceTimerRef.current = null;
+				executeHeartbeat();
+			}, remainingWait);
 		}
-	}, [conversationId, user]);
+	}, [conversationId, user, executeHeartbeat, clearTyping]);
 
 	return {
 		typingUsers,

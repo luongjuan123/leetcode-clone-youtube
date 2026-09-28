@@ -72,4 +72,38 @@ export async function runUnitTests(ctx: TestRunContext) {
 			console.error(`  ✗ ${testId} - Failed:`, err.message);
 		}
 	}
+
+	// 3. CHAT-MEDIA-UNIT: Media parser and magic bytes validation
+	{
+		const testId = "CHAT-MEDIA-004";
+		const start = Date.now();
+		try {
+			const { validateAndParseChatMedia } = await import("../../../src/utils/chatMediaService");
+
+			// PNG test
+			const pngBuffer = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+			const pngResult = validateAndParseChatMedia(`data:image/png;base64,${pngBuffer.toString("base64")}`, "test.png");
+			assert.strictEqual(pngResult.category, "images");
+			assert.strictEqual(pngResult.mime, "image/png");
+
+			// PDF test
+			const pdfBuffer = Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2d]);
+			const pdfResult = validateAndParseChatMedia(`data:application/pdf;base64,${pdfBuffer.toString("base64")}`, "doc.pdf");
+			assert.strictEqual(pdfResult.category, "documents");
+			assert.strictEqual(pdfResult.mime, "application/pdf");
+
+			// Empty file test
+			assert.throws(() => {
+				validateAndParseChatMedia("data:text/plain;base64,", "empty.txt");
+			}, /empty/i);
+
+			const duration = Date.now() - start;
+			ctx.recordAttempt(testId, "PASS", duration, undefined, "Media validation unit tests verified");
+			console.log(`  ✓ ${testId} - Media validation and parsing verified`);
+		} catch (err: any) {
+			const duration = Date.now() - start;
+			ctx.recordAttempt(testId, "FAIL", duration, err.message, err.stack);
+			console.error(`  ✗ ${testId} - Failed:`, err.message);
+		}
+	}
 }

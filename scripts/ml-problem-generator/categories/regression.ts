@@ -13,7 +13,7 @@ export const regressionProblems: MLProblemDefinition[] = [
 		story: `<p>Bomboclat Company is one of the largest logistics providers in the region, operating thousands of trucks that transport goods between warehouses, factories, and retail stores every day. Fuel is one of the company's largest operating expenses, and even small fluctuations in fuel prices can have a significant impact on its overall costs.</p>
 <p>Traditionally, Bomboclat relied on market analysts to estimate future fuel prices based on historical trends and various economic factors. However, with the increasing amount of available data, the company has decided to adopt a data-driven approach to improve the accuracy of its forecasts. The data science team at Bomboclat has collected historical records containing several market indicators along with the corresponding fuel prices. They believe that fuel prices can be approximated by a linear relationship between these indicators and the target price.</p>
 <p>Your task is to implement a Linear Regression model that learns from the historical data and predicts fuel prices for future market conditions. By producing accurate predictions, Bomboclat can better plan fuel purchases, optimize transportation costs, and improve the efficiency of its logistics operations.</p>`,
-		task: "Train a multiple linear regression model on m training examples with n features. Print the model parameters (theta0, theta1, ..., thetan) and the predicted fuel prices for t test scenarios, all formatted with exactly 4 decimal places.",
+		task: "Train a multiple linear regression model on m training examples with n features using the exact Ordinary Least Squares (OLS) closed-form solution via Normal Equations: theta = (X^T X)^(-1) X^T y (with an intercept column x_0 = 1 prepended). Print the model parameters (theta0, theta1, ..., thetan) and the predicted fuel prices for t test scenarios, all formatted with exactly 4 decimal places.",
 		inputFormat: `<p>The first line contains three integers <code>m</code>, <code>n</code>, and <code>t</code>: the number of training examples, features, and test scenarios.</p>
 <p>The next <code>n</code> lines each contain <code>m</code> real numbers representing the values of feature <code>j</code> across the <code>m</code> training examples.</p>
 <p>The next line contains <code>m</code> real numbers: the target fuel prices <code>y</code>.</p>
@@ -27,7 +27,9 @@ export const regressionProblems: MLProblemDefinition[] = [
 			"1 <= n <= 5",
 			"1 <= t <= 20",
 			"All feature and target values are real numbers",
-			"The training matrix admits a unique least-squares solution"
+			"The training matrix admits a unique least-squares solution",
+			"Use the exact OLS Normal Equation closed-form solution: theta = (X^T X)^(-1) X^T y",
+			"Intercept theta0 corresponds to prepending a column of 1s to the feature matrix"
 		]),
 		points: 150,
 		customCheckerType: "whitespace",
@@ -220,14 +222,15 @@ export const regressionProblems: MLProblemDefinition[] = [
 		tags: ["machine-learning", "regularization", "ridge-regression", "linear-algebra"],
 		description: "Fit a Ridge Regression (L2 regularization) model with penalty lambda to prevent multicollinearity.",
 		story: `<p>Aegis Capital models metropolitan real estate prices. Because house features (e.g., square footage, number of rooms, lot size) are heavily correlated, ordinary least squares suffers from extreme variance. The team introduces L2 Tikhonov regularization with penalty parameter &lambda;.</p>`,
-		task: "Given 1D feature x, target y, and penalty lambda, compute the regularized slope w and intercept b that minimize the Ridge loss: sum (y_i - (w*x_i + b))^2 + lambda * w^2.",
+		task: "Given 1D feature x, target y, and penalty lambda, compute the regularized slope w and unpenalized intercept b using the exact analytical Ridge formulas: w = sum((x_i - x_bar)*(y_i - y_bar)) / (sum((x_i - x_bar)^2) + lambda), and b = y_bar - w * x_bar.",
 		inputFormat: `<p>The first line contains integer <code>N</code> and real number <code>lambda</code> (&ge; 0).</p>
 <p>The second line contains <code>N</code> space-separated real numbers: feature <code>x</code>.</p>
 <p>The third line contains <code>N</code> space-separated real numbers: target <code>y</code>.</p>`,
 		outputFormat: `<p>Print <code>w b</code> with 4 decimal places.</p>`,
 		constraints: formatConstraints([
 			"2 <= N <= 100",
-			"0 <= lambda <= 1000"
+			"0 <= lambda <= 1000",
+			"Use the exact analytical formula with unpenalized intercept b = y_bar - w * x_bar"
 		]),
 		points: 140,
 		customCheckerType: "whitespace",

@@ -53,6 +53,8 @@ export interface ChatAttachment {
 	width?: number;
 	height?: number;
 	duration?: number; // In seconds for voice
+	uploadProgress?: number; // 0-100% upload progress
+	isUploading?: boolean; // Client-side uploading state
 }
 
 export interface MessageReplyReference {
@@ -93,6 +95,7 @@ export interface ChatMessage {
 	mentions?: string[];
 	// Client-side delivery state
 	deliveryStatus?: "sending" | "sent" | "failed" | "read";
+	isUploadingMedia?: boolean;
 }
 
 export interface UserConversationMeta {

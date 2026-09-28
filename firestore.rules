@@ -220,18 +220,24 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Contest Participants collection (Prevent self-unterminating)
+    // Contest Participants collection (Prevent self-unterminating or banned users)
     match /contest_participants/{id} {
       allow read: if true;
-      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid &&
+        (!exists(/databases/$(database)/documents/userModeration/$(request.auth.uid)) ||
+         get(/databases/$(database)/documents/userModeration/$(request.auth.uid)).data.status != "BANNED");
       allow update: if request.auth != null && (
-        (resource.data.uid == request.auth.uid && resource.data.status != "terminated" && request.resource.data.uid == request.auth.uid) || 
+        (resource.data.uid == request.auth.uid && 
+         resource.data.status != "terminated" && 
+         request.resource.data.uid == request.auth.uid &&
+         (!exists(/databases/$(database)/documents/userModeration/$(request.auth.uid)) ||
+          get(/databases/$(database)/documents/userModeration/$(request.auth.uid)).data.status != "BANNED")) || 
         isAdmin()
       );
       allow delete: if isAdmin();
     }
 
-    // Contest Submissions collection (Lock read to solver during active contests)
+    // Contest Submissions collection (Lock read to solver during active contests; block terminated or banned participants)
     match /contest_submissions/{id} {
       allow read: if request.auth != null && (
         resource == null || 
@@ -242,6 +248,8 @@ service cloud.firestore {
       );
       allow create: if request.auth != null && 
         request.resource.data.uid == request.auth.uid &&
+        (!exists(/databases/$(database)/documents/userModeration/$(request.auth.uid)) ||
+         get(/databases/$(database)/documents/userModeration/$(request.auth.uid)).data.status != "BANNED") &&
         (!exists(/databases/$(database)/documents/contest_participants/$(request.resource.data.contestId + "_" + request.auth.uid)) ||
          get(/databases/$(database)/documents/contest_participants/$(request.resource.data.contestId + "_" + request.auth.uid)).data.status != "terminated");
       allow update, delete: if isAdmin();

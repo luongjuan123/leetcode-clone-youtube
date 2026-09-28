@@ -31,6 +31,37 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 	try {
 		const db = getAdminFirestore();
 
+		// Check moderation status: banned users cannot submit
+		const modDoc = await db.collection("userModeration").doc(uid).get();
+		if (modDoc.exists) {
+			const modData = modDoc.data() || {};
+			if (modData.status === "BANNED") {
+				return res.status(403).json({ success: false, error: "Your account is currently suspended from submitting code." });
+			}
+		}
+
+		// If this is a contest submission, validate participant standing
+		if (contestId) {
+			const partDoc = await db.collection("contest_participants").doc(`${contestId}_${uid}`).get();
+			if (!partDoc.exists) {
+				return res.status(403).json({ success: false, error: "You are not registered for this contest." });
+			}
+			const partData = partDoc.data() || {};
+			if (partData.status === "terminated") {
+				return res.status(403).json({ success: false, error: "Your participation in this contest has been terminated due to proctoring violations." });
+			}
+			if (partData.status !== "active") {
+				return res.status(403).json({ success: false, error: "You must enter and join the contest before submitting solutions." });
+			}
+		}
+
+		let finalVerdict = "Pending";
+		let finalStatus = "pending";
+		let finalScore = 0;
+		let finalRuntime = 0;
+		let finalMemory = 0;
+		let finalResults: any[] = [];
+
 		// 1. Create or use pre-created submission document with status
 		const submissionCollection = contestId ? "contest_submissions" : "submissions";
 		let docRef: any;
@@ -276,6 +307,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 					memory: executionResult.memory || 0,
 					isTerminal: true
 				});
+
+				finalStatus = status;
+				finalScore = score;
+				finalVerdict = verdictStr;
+				finalResults = results;
+				finalRuntime = executionResult.runtime || 0;
+				finalMemory = executionResult.memory || 0;
 			});
 
 			if (contestId) {
@@ -292,6 +330,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 			}
 		} catch (backgroundErr) {
 			console.error("Error running submission execution:", backgroundErr);
+			finalStatus = "failed";
+			finalVerdict = "Internal Error";
 			await docRef.update({
 				status: "failed",
 				verdict: "Internal Error",
@@ -300,7 +340,17 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 		}
 
 		// 3. Return the response to the client
-		res.status(200).json({ success: true, submissionId: docRef.id });
+		res.status(200).json({
+			success: true,
+			submissionId: docRef.id,
+			verdict: finalVerdict,
+			status: finalStatus,
+			score: finalScore,
+			runtime: finalRuntime,
+			memory: finalMemory,
+			testResults: finalResults,
+			timestamp: Date.now()
+		});
 
 	} catch (err: any) {
 		console.error("Submission trigger error:", err);

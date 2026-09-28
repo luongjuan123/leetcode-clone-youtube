@@ -716,7 +716,24 @@ export default function OrgWorkspacePage() {
 				triggerFeedback("success", "Invitation sent successfully!");
 				setInviteSearchInput("");
 				setSelectedInviteUser(null);
-				fetchTabContent();
+				if (data.invitation) {
+					setInvitationsList((prev) => [data.invitation, ...prev]);
+				} else {
+					setInvitationsList((prev) => [
+						{
+							id: Math.random().toString(36).substring(2, 9),
+							organizationId: org.id,
+							userId: selectedInviteUser?.uid || null,
+							email: !selectedInviteUser ? inviteSearchInput.trim() : null,
+							roleId: inviteRole,
+							status: "Pending",
+							createdAt: Date.now(),
+							expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+							createdBy: user.uid,
+						} as any,
+						...prev,
+					]);
+				}
 			} else {
 				triggerFeedback("error", data.error || "Failed to invite member.");
 			}
@@ -741,7 +758,7 @@ export default function OrgWorkspacePage() {
 			const data = await res.json();
 			if (data.success) {
 				triggerFeedback("success", "Invitation cancelled.");
-				fetchTabContent();
+				setInvitationsList((prev) => prev.filter((inv) => inv.id !== inviteId));
 			} else {
 				triggerFeedback("error", data.error || "Failed to cancel invitation.");
 			}
@@ -768,7 +785,6 @@ export default function OrgWorkspacePage() {
 			const data = await res.json();
 			if (data.success) {
 				triggerFeedback("success", "Invitation resent successfully.");
-				fetchTabContent();
 			} else {
 				triggerFeedback("error", data.error || "Failed to resend invitation.");
 			}
@@ -795,7 +811,9 @@ export default function OrgWorkspacePage() {
 			const data = await res.json();
 			if (data.success) {
 				triggerFeedback("success", "Invitation force-expired.");
-				fetchTabContent();
+				setInvitationsList((prev) =>
+					prev.map((inv) => (inv.id === inviteId ? { ...inv, status: "Expired" } : inv))
+				);
 			} else {
 				triggerFeedback("error", data.error || "Failed to expire invitation.");
 			}
@@ -829,7 +847,21 @@ export default function OrgWorkspacePage() {
 			if (data.success) {
 				triggerFeedback("success", "Invite link created successfully!");
 				setLinkPassword("");
-				fetchTabContent();
+				if (data.inviteLink) {
+					setInviteLinksList((prev) => [data.inviteLink, ...prev]);
+				} else {
+					setInviteLinksList((prev) => [
+						{
+							token: data.token || Math.random().toString(36).substring(2, 10),
+							roleId: linkRole,
+							maxUses: linkMaxUses,
+							usedCount: 0,
+							expiresAt: Date.now() + linkExpiresDays * 24 * 60 * 60 * 1000,
+							createdAt: Date.now(),
+						} as any,
+						...prev,
+					]);
+				}
 			} else {
 				triggerFeedback("error", data.error || "Failed to generate link.");
 			}
@@ -854,7 +886,7 @@ export default function OrgWorkspacePage() {
 			const data = await res.json();
 			if (data.success) {
 				triggerFeedback("success", "Invite link revoked.");
-				fetchTabContent();
+				setInviteLinksList((prev) => prev.filter((l) => l.token !== token));
 			} else {
 				triggerFeedback("error", data.error || "Failed to revoke link.");
 			}
@@ -1170,7 +1202,7 @@ export default function OrgWorkspacePage() {
 			const data = await res.json();
 			if (data.success) {
 				triggerFeedback("success", "Member removed from workspace.");
-				fetchTabContent();
+				setMembers((prev) => prev.filter((m) => m.uid !== targetUid));
 				if (targetUid === user.uid) {
 					router.push("/orgs");
 				}
@@ -1197,7 +1229,9 @@ export default function OrgWorkspacePage() {
 			const data = await res.json();
 			if (data.success) {
 				triggerFeedback("success", "Role assigned successfully.");
-				fetchTabContent();
+				setMembers((prev) =>
+					prev.map((m) => (m.uid === targetUid ? { ...m, roleId: newRole } : m))
+				);
 			} else {
 				triggerFeedback("error", data.error || "Failed to update role.");
 			}
@@ -1223,8 +1257,20 @@ export default function OrgWorkspacePage() {
 			const data = await res.json();
 			if (data.success) {
 				triggerFeedback("success", "Contest mapped successfully!");
+				if (data.contest) {
+					setContests((prev) => [data.contest, ...prev]);
+				} else {
+					setContests((prev) => [
+						{
+							id: linkContestId,
+							title: linkContestId,
+							status: "ready",
+							createdAt: Date.now(),
+						} as any,
+						...prev,
+					]);
+				}
 				setLinkContestId("");
-				fetchTabContent();
 			} else {
 				triggerFeedback("error", data.error || "Failed to link contest.");
 			}
@@ -1249,7 +1295,7 @@ export default function OrgWorkspacePage() {
 			const data = await res.json();
 			if (data.success) {
 				triggerFeedback("success", "Contest unmapped.");
-				fetchTabContent();
+				setContests((prev) => prev.filter((c) => c.id !== contestId));
 			} else {
 				triggerFeedback("error", data.error || "Failed to unlink contest.");
 			}
@@ -1275,8 +1321,19 @@ export default function OrgWorkspacePage() {
 			const data = await res.json();
 			if (data.success) {
 				triggerFeedback("success", "Problem mapped successfully!");
+				if (data.problem) {
+					setProblems((prev) => [data.problem, ...prev]);
+				} else {
+					setProblems((prev) => [
+						{
+							id: linkProblemId,
+							title: linkProblemId,
+							difficulty: "Medium",
+						} as any,
+						...prev,
+					]);
+				}
 				setLinkProblemId("");
-				fetchTabContent();
 			} else {
 				triggerFeedback("error", data.error || "Failed to link problem.");
 			}
@@ -1301,7 +1358,7 @@ export default function OrgWorkspacePage() {
 			const data = await res.json();
 			if (data.success) {
 				triggerFeedback("success", "Problem unmapped.");
-				fetchTabContent();
+				setProblems((prev) => prev.filter((p) => p.id !== problemId));
 			} else {
 				triggerFeedback("error", data.error || "Failed to unlink problem.");
 			}
@@ -1331,9 +1388,17 @@ export default function OrgWorkspacePage() {
 			const data = await res.json();
 			if (data.success) {
 				triggerFeedback("success", "Announcement notice posted!");
+				const newAnn = data.announcement || {
+					id: data.id || Math.random().toString(36).substring(2, 9),
+					title: newAnnTitle,
+					content: newAnnContent,
+					visibility: newAnnVisibility,
+					createdAt: Date.now(),
+					authorUid: user.uid,
+				};
+				setAnnouncements((prev) => [newAnn as any, ...prev]);
 				setNewAnnTitle("");
 				setNewAnnContent("");
-				fetchTabContent();
 			} else {
 				triggerFeedback("error", data.error || "Failed to post announcement.");
 			}
@@ -1358,7 +1423,7 @@ export default function OrgWorkspacePage() {
 			const data = await res.json();
 			if (data.success) {
 				triggerFeedback("success", "Announcement removed.");
-				fetchTabContent();
+				setAnnouncements((prev) => prev.filter((a) => a.id !== annId));
 			} else {
 				triggerFeedback("error", data.error || "Failed to delete announcement.");
 			}
@@ -1390,10 +1455,19 @@ export default function OrgWorkspacePage() {
 			const data = await res.json();
 			if (data.success) {
 				triggerFeedback("success", "Resource shared successfully!");
+				const newFile = data.file || {
+					id: data.id || Math.random().toString(36).substring(2, 9),
+					filename: newFileName,
+					mimeType: "text/markdown",
+					storagePath: newFileUrl,
+					size: parseInt(newFileSize, 10) || 1200,
+					visibility: newFileVisibility,
+					createdAt: Date.now(),
+				};
+				setFiles((prev) => [newFile as any, ...prev]);
 				setNewFileName("");
 				setNewFileUrl("");
 				setNewFileSize("0");
-				fetchTabContent();
 			} else {
 				triggerFeedback("error", data.error || "Failed to share resource.");
 			}
@@ -1418,7 +1492,7 @@ export default function OrgWorkspacePage() {
 			const data = await res.json();
 			if (data.success) {
 				triggerFeedback("success", "Resource deleted.");
-				fetchTabContent();
+				setFiles((prev) => prev.filter((f) => f.id !== fileId));
 			} else {
 				triggerFeedback("error", data.error || "Failed to delete resource.");
 			}
@@ -1442,7 +1516,7 @@ export default function OrgWorkspacePage() {
 			const data = await res.json();
 			if (data.success) {
 				triggerFeedback("success", `Application reviewed successfully.`);
-				fetchTabContent();
+				setJoinRequests((prev) => prev.filter((r) => r.id !== requestId));
 			} else {
 				triggerFeedback("error", data.error || "Failed to process request.");
 			}
@@ -1472,9 +1546,11 @@ export default function OrgWorkspacePage() {
 			const data = await res.json();
 			if (data.success) {
 				triggerFeedback("success", "Draft private problem created successfully!");
+				if (data.problem) {
+					setPrivateProblems((prev) => [data.problem, ...prev]);
+				}
 				setNewPrivateProblemTitle("");
 				setNewPrivateProblemDesc("");
-				fetchTabContent();
 			} else {
 				triggerFeedback("error", data.error || "Failed to create private problem.");
 			}
@@ -1506,9 +1582,13 @@ export default function OrgWorkspacePage() {
 			if (data.success) {
 				triggerFeedback("success", `Problem rolled back to version ${versionNum}!`);
 				setRollbackSummary("");
-				fetchTabContent();
-				if (selectedPrivateProblem?.id === problemId) {
-					setSelectedPrivateProblem(data.problem);
+				if (data.problem) {
+					setPrivateProblems((prev) =>
+						prev.map((p) => (p.id === problemId ? data.problem : p))
+					);
+					if (selectedPrivateProblem?.id === problemId) {
+						setSelectedPrivateProblem(data.problem);
+					}
 				}
 			} else {
 				triggerFeedback("error", data.error || "Failed to rollback version.");
@@ -1543,7 +1623,14 @@ export default function OrgWorkspacePage() {
 				triggerFeedback("success", "Testcase configuration updated successfully!");
 				setInputTestExample("");
 				setOutputTestExample("");
-				fetchTabContent();
+				if (data.problem) {
+					setPrivateProblems((prev) =>
+						prev.map((p) => (p.id === problemId ? data.problem : p))
+					);
+					if (selectedPrivateProblem?.id === problemId) {
+						setSelectedPrivateProblem(data.problem);
+					}
+				}
 			} else {
 				triggerFeedback("error", data.error || "Failed to save testcase configs.");
 			}
@@ -1574,7 +1661,14 @@ export default function OrgWorkspacePage() {
 			const data = await res.json();
 			if (data.success) {
 				triggerFeedback("success", `${numTestsToGenerate} testcases generated successfully!`);
-				fetchTabContent();
+				if (data.problem) {
+					setPrivateProblems((prev) =>
+						prev.map((p) => (p.id === problemId ? data.problem : p))
+					);
+					if (selectedPrivateProblem?.id === problemId) {
+						setSelectedPrivateProblem(data.problem);
+					}
+				}
 			} else {
 				triggerFeedback("error", data.error || "Failed to generate tests.");
 			}
@@ -1602,8 +1696,21 @@ export default function OrgWorkspacePage() {
 			const data = await res.json();
 			if (data.success) {
 				triggerFeedback("success", "Competitor team created successfully!");
+				if (data.team) {
+					setTeams((prev) => [data.team, ...prev]);
+				} else {
+					setTeams((prev) => [
+						{
+							id: data.id || Math.random().toString(36).substring(2, 9),
+							name: newTeamName,
+							members: [user.uid],
+							captainUid: user.uid,
+							createdAt: Date.now(),
+						} as any,
+						...prev,
+					]);
+				}
 				setNewTeamName("");
-				fetchTabContent();
 			} else {
 				triggerFeedback("error", data.error || "Failed to create team.");
 			}
@@ -1650,9 +1757,11 @@ export default function OrgWorkspacePage() {
 			const data = await res.json();
 			if (data.success) {
 				triggerFeedback("success", "Syllabus roadmap published successfully!");
+				if (data.roadmap) {
+					setRoadmaps((prev) => [data.roadmap, ...prev]);
+				}
 				setNewRoadmapTitle("");
 				setNewRoadmapDesc("");
-				fetchTabContent();
 			} else {
 				triggerFeedback("error", data.error || "Failed to build roadmap.");
 			}
@@ -1686,11 +1795,13 @@ export default function OrgWorkspacePage() {
 			const data = await res.json();
 			if (data.success) {
 				triggerFeedback("success", "Homework assignment distributed!");
+				if (data.assignment) {
+					setAssignments((prev) => [data.assignment, ...prev]);
+				}
 				setNewAssignmentTitle("");
 				setNewAssignmentDesc("");
 				setNewAssignmentProblems("");
 				setNewAssignmentAssigneeIds("");
-				fetchTabContent();
 			} else {
 				triggerFeedback("error", data.error || "Failed to distribute assignment.");
 			}
@@ -4068,7 +4179,12 @@ export default function OrgWorkspacePage() {
 																const data = await res.json();
 																if (data.success) {
 																	triggerFeedback("success", "Problem specification saved successfully!");
-																	fetchTabContent();
+																	if (data.problem) {
+																		setPrivateProblems((prev) =>
+																			prev.map((p) => (p.id === selectedPrivateProblem.id ? data.problem : p))
+																		);
+																		setSelectedPrivateProblem(data.problem);
+																	}
 																} else {
 																	triggerFeedback("error", data.error || "Failed to save spec.");
 																}
@@ -4338,7 +4454,11 @@ export default function OrgWorkspacePage() {
 																			if (data.success) {
 																				triggerFeedback("success", "Captain status transferred!");
 																				setSelectedTeam(data.team);
-																				fetchTabContent();
+																				if (data.team) {
+																					setTeams((prev) =>
+																						prev.map((t) => (t.id === selectedTeam.id ? data.team : t))
+																					);
+																				}
 																			} else {
 																				triggerFeedback("error", data.error || "Failed to transfer captain.");
 																			}
@@ -4367,7 +4487,11 @@ export default function OrgWorkspacePage() {
 																			if (data.success) {
 																				triggerFeedback("success", "Member kicked!");
 																				setSelectedTeam(data.team);
-																				fetchTabContent();
+																				if (data.team) {
+																					setTeams((prev) =>
+																						prev.map((t) => (t.id === selectedTeam.id ? data.team : t))
+																					);
+																				}
 																			} else {
 																				triggerFeedback("error", data.error || "Failed to kick member.");
 																			}
@@ -4414,8 +4538,12 @@ export default function OrgWorkspacePage() {
 														if (data.success) {
 															triggerFeedback("success", "Member added to team!");
 															setSelectedTeam(data.team);
+															if (data.team) {
+																setTeams((prev) =>
+																	prev.map((t) => (t.id === selectedTeam.id ? data.team : t))
+																);
+															}
 															el.value = "";
-															fetchTabContent();
 														} else {
 															triggerFeedback("error", data.error || "Failed to add member.");
 														}

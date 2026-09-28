@@ -244,7 +244,8 @@ export const SubmissionProvider: React.FC<{ problemId: string; contestId?: strin
 			});
 
 			if (!res.ok) {
-				throw new Error("HTTP error triggering submission");
+				const errorData = await res.json().catch(() => ({}));
+				throw new Error(errorData.error || `HTTP error ${res.status} triggering submission`);
 			}
 
 			const data = await res.json();
@@ -257,13 +258,14 @@ export const SubmissionProvider: React.FC<{ problemId: string; contestId?: strin
 			console.error("Submit API invocation error:", err);
 			await updateDoc(subDocRef, {
 				status: "failed",
-				verdict: "Internal Error",
+				verdict: err.message?.includes("terminated") ? "Terminated" : (err.message?.includes("banned") ? "Banned" : "Internal Error"),
+				error: err.message,
 				timestamp: Date.now(),
-			});
+			}).catch(() => {});
 			setSubmittingStage("completed");
 			setIsSubmitting(false);
 			unsubscribeSub();
-			return null;
+			throw err;
 		}
 	};
 

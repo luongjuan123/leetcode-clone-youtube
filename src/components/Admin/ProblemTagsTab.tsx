@@ -109,7 +109,16 @@ export const ProblemTagsTab: React.FC<ProblemTagsTabProps> = ({ triggerStatusMes
 			if (data.success) {
 				triggerStatusMessage("success", `Tag ${isNew ? "created" : "updated"} successfully!`);
 				handleCloseModal();
-				fetchTags();
+				const savedTag: ProblemTag = data.tag || {
+					...editingTag,
+					id: editingTag.id || (editingTag.name ? editingTag.name.toLowerCase().replace(/\s+/g, "-") : Math.random().toString(36).substring(2, 7)),
+					createdAt: editingTag.createdAt || Date.now()
+				};
+				setTags((prev) =>
+					isNew
+						? [...prev, savedTag]
+						: prev.map((t) => (t.id === savedTag.id ? savedTag : t))
+				);
 			} else {
 				setModalError(data.error || "Failed to save tag");
 			}
@@ -139,7 +148,7 @@ export const ProblemTagsTab: React.FC<ProblemTagsTabProps> = ({ triggerStatusMes
 			const data = await res.json();
 			if (data.success) {
 				triggerStatusMessage("success", "Tag deleted successfully");
-				fetchTags();
+				setTags((prev) => prev.filter((t) => t.id !== id));
 			} else {
 				triggerStatusMessage("error", data.error || "Failed to delete tag");
 			}
@@ -153,6 +162,7 @@ export const ProblemTagsTab: React.FC<ProblemTagsTabProps> = ({ triggerStatusMes
 		const newIndex = direction === "up" ? index - 1 : index + 1;
 		if (newIndex < 0 || newIndex >= tags.length) return;
 
+		const previousTags = [...tags];
 		const reordered = [...tags];
 		const temp = reordered[index];
 		reordered[index] = reordered[newIndex];
@@ -176,12 +186,12 @@ export const ProblemTagsTab: React.FC<ProblemTagsTabProps> = ({ triggerStatusMes
 			const data = await res.json();
 			if (!data.success) {
 				triggerStatusMessage("error", data.error || "Failed to save reordered tags");
-				fetchTags();
+				setTags(previousTags);
 			}
 		} catch (error) {
 			console.error("Reorder tag error:", error);
 			triggerStatusMessage("error", "Failed to save tag order");
-			fetchTags();
+			setTags(previousTags);
 		}
 	};
 
@@ -200,7 +210,7 @@ export const ProblemTagsTab: React.FC<ProblemTagsTabProps> = ({ triggerStatusMes
 			const data = await res.json();
 			if (data.success) {
 				triggerStatusMessage("success", `Tag ${updatedTag.isHidden ? "hidden" : "made visible"}`);
-				fetchTags();
+				setTags((prev) => prev.map((t) => (t.id === tag.id ? updatedTag : t)));
 			} else {
 				triggerStatusMessage("error", data.error || "Failed to update tag visibility");
 			}

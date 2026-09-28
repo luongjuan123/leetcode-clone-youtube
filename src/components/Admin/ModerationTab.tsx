@@ -38,6 +38,7 @@ interface UserListItem {
 	score: number;
 	createdAt: number;
 	username: string;
+	warningCount?: number;
 }
 
 interface AuditLogItem {
@@ -297,10 +298,22 @@ export const ModerationTab: React.FC<ModerationTabProps> = ({ triggerStatusMessa
 			if (!res.ok) throw new Error(data.error || "Failed to suspend user");
 
 			triggerStatusMessage("success", `Suspended ${modalUser.displayName || modalUser.email} successfully.`);
+			const suspendedUid = modalUser.uid;
+			setUsers((prev) =>
+				prev.map((u) =>
+					u.uid === suspendedUid
+						? {
+								...u,
+								status: "BANNED",
+								bannedReason: suspendReason,
+								bannedDuration: suspendDuration,
+						  }
+						: u
+				)
+			);
 			setShowSuspendModal(false);
 			setModalUser(null);
 			setSuspendNotes("");
-			fetchUsers();
 		} catch (error: any) {
 			triggerStatusMessage("error", error.message);
 		} finally {
@@ -331,10 +344,22 @@ export const ModerationTab: React.FC<ModerationTabProps> = ({ triggerStatusMessa
 			if (!res.ok) throw new Error(data.error || "Failed to lift suspension");
 
 			triggerStatusMessage("success", `Unsuspended ${modalUser.displayName || modalUser.email} successfully.`);
+			const unsuspendedUid = modalUser.uid;
+			setUsers((prev) =>
+				prev.map((u) =>
+					u.uid === unsuspendedUid
+						? {
+								...u,
+								status: "ACTIVE",
+								bannedReason: undefined,
+								bannedDuration: undefined,
+						  }
+						: u
+				)
+			);
 			setShowUnsuspendModal(false);
 			setModalUser(null);
 			setUnsuspendNotes("");
-			fetchUsers();
 		} catch (error: any) {
 			triggerStatusMessage("error", error.message);
 		} finally {
@@ -366,10 +391,20 @@ export const ModerationTab: React.FC<ModerationTabProps> = ({ triggerStatusMessa
 			if (!res.ok) throw new Error(data.error || "Failed to warn user");
 
 			triggerStatusMessage("success", `Warning issued. Active count: ${data.totalCount || 1}`);
+			const warnedUid = modalUser.uid;
+			setUsers((prev) =>
+				prev.map((u) =>
+					u.uid === warnedUid
+						? {
+								...u,
+								warningCount: data.totalCount || (u.warningCount || 0) + 1,
+						  }
+						: u
+				)
+			);
 			setShowWarnModal(false);
 			setModalUser(null);
 			setWarnDesc("");
-			fetchUsers();
 		} catch (error: any) {
 			triggerStatusMessage("error", error.message);
 		} finally {
@@ -401,12 +436,25 @@ export const ModerationTab: React.FC<ModerationTabProps> = ({ triggerStatusMessa
 			if (!res.ok) throw new Error(data.error || "Failed to schedule/delete user");
 
 			triggerStatusMessage("success", forceImmediate ? `Permanently deleted user account.` : `Account scheduled for deletion.`);
+			const deletedUid = modalUser.uid;
+			setUsers((prev) =>
+				forceImmediate
+					? prev.filter((u) => u.uid !== deletedUid)
+					: prev.map((u) =>
+							u.uid === deletedUid
+								? {
+										...u,
+										status: "PENDING_DELETION" as const,
+										deleteAfter: Date.now() + 30 * 24 * 60 * 60 * 1000,
+								  }
+								: u
+					  )
+			);
 			setShowDeleteModal(false);
 			setModalUser(null);
 			setDeleteConfirmText("");
 			setDeleteNotes("");
 			setForceImmediate(false);
-			fetchUsers();
 		} catch (error: any) {
 			triggerStatusMessage("error", error.message);
 		} finally {
@@ -436,9 +484,20 @@ export const ModerationTab: React.FC<ModerationTabProps> = ({ triggerStatusMessa
 			if (!res.ok) throw new Error(data.error || "Failed to cancel scheduled deletion");
 
 			triggerStatusMessage("success", `Scheduled deletion cancelled. Account reinstated to ACTIVE.`);
+			const restoredUid = modalUser.uid;
+			setUsers((prev) =>
+				prev.map((u) =>
+					u.uid === restoredUid
+						? {
+								...u,
+								status: "ACTIVE" as const,
+								deleteAfter: undefined,
+						  }
+						: u
+				)
+			);
 			setShowCancelDeleteModal(false);
 			setModalUser(null);
-			fetchUsers();
 		} catch (error: any) {
 			triggerStatusMessage("error", error.message);
 		} finally {
@@ -481,7 +540,6 @@ export const ModerationTab: React.FC<ModerationTabProps> = ({ triggerStatusMessa
 			});
 
 			triggerStatusMessage("success", `Logged out user everywhere.`);
-			fetchUsers();
 		} catch (error: any) {
 			triggerStatusMessage("error", "Failed to force logout user.");
 		}
@@ -518,10 +576,25 @@ export const ModerationTab: React.FC<ModerationTabProps> = ({ triggerStatusMessa
 			if (!res.ok) throw new Error(data.error || "Action failed");
 
 			triggerStatusMessage("success", `Action ${action} completed successfully.`);
+			const targetReportId = selectedReport.id;
+			setReports((prev) =>
+				prev.map((r) => {
+					if (r.id !== targetReportId) return r;
+					let newStatus: any = r.status;
+					if (action === "assign" || action === "escalate") newStatus = "REVIEWING";
+					else if (action === "merge") newStatus = "MERGED";
+					else if (action === "dismiss") newStatus = "DISMISSED";
+					return {
+						...r,
+						status: newStatus,
+						assignedModerator: action === "assign" ? (auth.currentUser?.email || "You") : r.assignedModerator,
+						notes: reportActionNotes || r.notes,
+					};
+				})
+			);
 			setSelectedReport(null);
 			setReportActionNotes("");
 			setMergeTargetReportId("");
-			fetchReports();
 		} catch (err: any) {
 			triggerStatusMessage("error", err.message);
 		}
@@ -549,9 +622,25 @@ export const ModerationTab: React.FC<ModerationTabProps> = ({ triggerStatusMessa
 			if (!res.ok) throw new Error(data.error || "Failed to process appeal action");
 
 			triggerStatusMessage("success", `Appeal status updated to: ${action}`);
+			const targetAppealId = selectedAppeal.id;
+			setAppeals((prev) =>
+				prev.map((a) => {
+					if (a.id !== targetAppealId) return a;
+					const newStatus =
+						action === "approve"
+							? "APPROVED"
+							: action === "reject"
+							? "REJECTED"
+							: "UNDER_REVIEW";
+					return {
+						...a,
+						status: newStatus as any,
+						adminNotes: appealActionNotes || a.adminNotes,
+					};
+				})
+			);
 			setSelectedAppeal(null);
 			setAppealActionNotes("");
-			fetchAppeals();
 		} catch (err: any) {
 			triggerStatusMessage("error", err.message);
 		}

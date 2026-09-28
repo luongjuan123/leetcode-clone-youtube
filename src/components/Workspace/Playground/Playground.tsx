@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import PreferenceNav from "./PreferenceNav/PreferenceNav";
 import CodeMirror from "@uiw/react-codemirror";
 import { vscodeDark } from "@uiw/codemirror-theme-vscode";
@@ -17,6 +17,7 @@ import { SupportedLanguage, starterCodes, runPistonCode } from "@/utils/pistonRu
 import { FiCheck, FiX } from "react-icons/fi";
 import { useSubmission } from "@/context/SubmissionContext";
 import TestcaseScorecard from "../TestcaseScorecard/TestcaseScorecard";
+import { getSubmissionStateMetadata } from "@/utils/submissionUtils";
 
 import { getFriendlyErrorMessage } from "@/utils/errorFilter";
 import { EditorView } from "@codemirror/view";
@@ -40,8 +41,8 @@ type PlaygroundProps = {
 	setCustomInputText: React.Dispatch<React.SetStateAction<string>>;
 	activeTestCaseId: number;
 	setActiveTestCaseId: React.Dispatch<React.SetStateAction<number>>;
-	consoleTab: "testcases" | "custominput" | "results";
-	setConsoleTab: React.Dispatch<React.SetStateAction<"testcases" | "custominput" | "results">>;
+	consoleTab: "testcases" | "custominput" | "results" | "submission";
+	setConsoleTab: React.Dispatch<React.SetStateAction<"testcases" | "custominput" | "results" | "submission">>;
 	activeExampleId: number;
 	setActiveExampleId: React.Dispatch<React.SetStateAction<number>>;
 	settings: ISettings;
@@ -91,13 +92,36 @@ const Playground: React.FC<PlaygroundProps> = ({
 	const pid = router.query.pid;
 
 	const {
+		selectedSub,
+		setSelectedSub,
+		selectedSubTestCaseIndex,
+		setSelectedSubTestCaseIndex,
 		isSubmitting,
+		submittingStage,
+		submittingProgress,
+		submittingVerdict,
 		submitCode,
 		runStatus,
 		runResults,
 		runError,
 		runCode
 	} = useSubmission();
+
+	const celebratedSubIdRef = useRef<string | null>(null);
+
+	// Trigger confetti and mark solved when an Accepted submission is completed or selected
+	useEffect(() => {
+		if (
+			selectedSub &&
+			(selectedSub.status === "passed" || selectedSub.verdict?.toLowerCase() === "accepted") &&
+			celebratedSubIdRef.current !== selectedSub.id
+		) {
+			celebratedSubIdRef.current = selectedSub.id;
+			setSuccess(true);
+			setTimeout(() => setSuccess(false), 5000);
+			setSolved(true);
+		}
+	}, [selectedSub, setSuccess, setSolved]);
 
 	const testResults = runResults || [];
 	const passedCount = testResults.filter((r: any) => r.passed).length;
@@ -122,12 +146,11 @@ const Playground: React.FC<PlaygroundProps> = ({
 
 		if (isSubmit) {
 			try {
+				setConsoleTab("submission");
 				const submissionId = await submitCode(userCode, language, problem, contestId);
 				if (submissionId) {
-					if (contestId) {
-						router.push(`/contests/${contestId}/problems/${problem.id}/submissions/${submissionId}`);
-					} else {
-						router.push(`/problems/${problem.id}/submissions/${submissionId}`);
+					if (onSubmissionCreated) {
+						onSubmissionCreated(submissionId);
 					}
 				}
 			} catch (error: any) {
@@ -513,6 +536,27 @@ const Playground: React.FC<PlaygroundProps> = ({
 								}`} />
 							)}
 						</button>
+						<button
+							type="button"
+							onClick={() => setConsoleTab("submission")}
+							className="text-xs font-semibold px-3 py-1.5 rounded-md transition duration-200"
+							style={{
+								fontFamily: "'Inter', sans-serif",
+								background: consoleTab === "submission" ? "var(--bg-dark-layer-1)" : "transparent",
+								color: consoleTab === "submission" ? "var(--text-primary)" : "var(--text-secondary)",
+								border: consoleTab === "submission" ? "1px solid var(--border-default)" : "1px solid transparent"
+							}}
+						>
+							Submission {isSubmitting || ["submitting", "queued", "compiling", "running", "evaluating"].includes(selectedSub?.status || submittingStage) ? (
+								<span className="inline-block w-1.5 h-1.5 rounded-full ml-1 bg-brand-orange animate-pulse" />
+							) : selectedSub ? (
+								<span className={`inline-block w-1.5 h-1.5 rounded-full ml-1 ${
+									selectedSub.status === "passed" || selectedSub.verdict?.toLowerCase() === "accepted"
+										? "bg-emerald-400"
+										: "bg-rose-400"
+								}`} />
+							) : null}
+						</button>
 					</div>
 
 					<div className="my-2">
@@ -746,6 +790,212 @@ const Playground: React.FC<PlaygroundProps> = ({
 										<div className="text-xs font-semibold text-text-muted" style={{ color: "var(--text-muted)" }}>{runMessage}</div>
 									</div>
 								)}
+							</div>
+						)}
+
+						{consoleTab === "submission" && (
+							<div>
+								{(!selectedSub && !isSubmitting && submittingStage === "idle") ? (
+									<div className="text-gray-500 text-xs py-8 italic text-center">
+										No active submission. Click &quot;Submit&quot; to test your solution against all test cases.
+									</div>
+								) : (isSubmitting || ["submitting", "queued", "compiling", "running", "evaluating"].includes(selectedSub?.status || submittingStage)) ? (
+									<div className="rounded-2xl p-6 border shadow-sm max-w-lg mx-auto my-3 bg-dark-fill-3/15 border-gray-800">
+										<div className="flex items-center justify-between mb-4">
+											<h3 className="text-xs font-semibold flex items-center gap-2.5 text-gray-200">
+												<div className="animate-spin rounded-full h-4 w-4 border-2 border-t-transparent border-brand-orange" />
+												Judging Submission...
+											</h3>
+											<span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full bg-brand-orange/10 text-brand-orange font-bold border border-brand-orange/20">
+												{submittingStage || selectedSub?.stage || selectedSub?.status || "queued"}
+											</span>
+										</div>
+
+										<div className="space-y-4 py-2">
+											<div className="w-full bg-dark-fill-3 rounded-full h-2 overflow-hidden border border-border-subtle" style={{ borderColor: "var(--border-subtle)" }}>
+												<div
+													className="h-full bg-brand-orange rounded-full transition-all duration-300 shadow-glow-warning"
+													style={{
+														width: submittingProgress && submittingProgress.total > 0
+															? `${Math.max(10, Math.min(100, Math.round((submittingProgress.current / submittingProgress.total) * 100)))}%`
+															: submittingStage === "submitting" ? "15%"
+															: submittingStage === "queued" ? "30%"
+															: submittingStage === "compiling" ? "50%"
+															: submittingStage === "running" ? "75%"
+															: submittingStage === "evaluating" ? "90%" : "30%"
+													}}
+												/>
+											</div>
+
+											<div className="flex items-center justify-between text-xs">
+												<span className="text-gray-400">
+													{submittingStage === "submitting" && "Preparing and transmitting solution packet..."}
+													{submittingStage === "queued" && "Queued in BeastCode execution scheduler..."}
+													{submittingStage === "compiling" && "Compiling and optimizing source code..."}
+													{submittingStage === "running" && (
+														submittingProgress
+															? `Running Test Cases [${submittingProgress.current} / ${submittingProgress.total}]`
+															: "Executing test cases against sandbox..."
+													)}
+													{submittingStage === "evaluating" && "Evaluating test case results and metrics..."}
+													{!["submitting", "queued", "compiling", "running", "evaluating"].includes(submittingStage) && "Processing submission..."}
+												</span>
+												{submittingProgress && submittingProgress.total > 0 && (
+													<span className="font-mono text-[11px] font-bold text-brand-orange">
+														{Math.round((submittingProgress.current / submittingProgress.total) * 100)}%
+													</span>
+												)}
+											</div>
+										</div>
+									</div>
+								) : selectedSub ? (
+									<div className="space-y-4 animate-fade-in">
+										{(() => {
+											const subMeta = getSubmissionStateMetadata(selectedSub.verdict || selectedSub.status, selectedSub.status);
+											const isAccepted = selectedSub.status === "passed" || selectedSub.verdict?.toLowerCase() === "accepted";
+											const subResults = selectedSub.testResults || [];
+											const passedTotal = subResults.filter((r: any) => r.passed).length;
+											const totalCount = subResults.length;
+
+											return (
+												<>
+													{/* Verdict Banner */}
+													<div
+														className="p-4 rounded-xl border flex flex-wrap items-center justify-between gap-3"
+														style={{
+															backgroundColor: subMeta.bgColor,
+															borderColor: subMeta.borderColor,
+														}}
+													>
+														<div className="flex items-center gap-3">
+															{subMeta.Icon && (
+																<subMeta.Icon
+																	size={24}
+																	style={{ color: subMeta.color }}
+																/>
+															)}
+															<div>
+																<h3 className="font-black text-base uppercase tracking-tight" style={{ color: subMeta.color }}>
+																	{subMeta.label}
+																</h3>
+																<p className="text-[11px] text-gray-400">
+																	{subMeta.description}
+																</p>
+															</div>
+														</div>
+
+														{/* Metric badges */}
+														<div className="flex items-center gap-3 text-xs font-mono">
+															{selectedSub.runtime !== undefined && (
+																<div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/40 border border-white/5">
+																	<span className="text-gray-400">Runtime:</span>
+																	<span className="font-bold text-white">{selectedSub.runtime} ms</span>
+																</div>
+															)}
+															{selectedSub.memory !== undefined && (
+																<div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/40 border border-white/5">
+																	<span className="text-gray-400">Memory:</span>
+																	<span className="font-bold text-white">{(selectedSub.memory / 1024).toFixed(1)} MB</span>
+																</div>
+															)}
+															{totalCount > 0 && (
+																<div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/40 border border-white/5">
+																	<span className="text-gray-400">Passed:</span>
+																	<span className={`font-bold ${isAccepted ? "text-emerald-400" : "text-amber-400"}`}>
+																		{passedTotal}/{totalCount}
+																	</span>
+																</div>
+															)}
+														</div>
+													</div>
+
+													{/* Compiler Diagnostic Output if compilation error */}
+													{selectedSub.verdict === "Compilation Error" || (selectedSub.status === "failed" && subResults.length === 0) ? (
+														<div className="space-y-3 pt-2">
+															<p className="text-xs font-bold text-rose-500 uppercase tracking-wider">Compiler Diagnostic Output:</p>
+															<pre className="p-4 rounded-xl text-xs font-mono overflow-auto max-h-[220px] bg-black/60 border border-gray-800 text-rose-400 whitespace-pre-wrap leading-relaxed">
+																{selectedSub.error || selectedSub.message || "Compilation failed with unknown diagnostics."}
+															</pre>
+														</div>
+													) : subResults.length > 0 ? (
+														<div className="space-y-4 pt-1">
+															<TestcaseScorecard
+																testResults={subResults}
+																activeIndex={selectedSubTestCaseIndex}
+																setActiveIndex={setSelectedSubTestCaseIndex}
+																runtime={selectedSub.runtime}
+																memory={selectedSub.memory}
+																score={selectedSub.score}
+															/>
+
+															{subResults[selectedSubTestCaseIndex] && (() => {
+																const currentCase = subResults[selectedSubTestCaseIndex];
+																const isSample = !!problem.examples?.[selectedSubTestCaseIndex]?.isSample;
+																const isContestActive = !!contestId;
+
+																if (!isSample && isContestActive) {
+																	return (
+																		<div className="bg-dark-fill-3/30 border border-border-subtle rounded-xl p-4 text-center" style={{ borderColor: "var(--border-subtle)" }}>
+																			<p className="text-gray-400 italic text-xs leading-relaxed">
+																				🔒 Input and expected output details are hidden for test cases to prevent hardcoding during the contest.
+																			</p>
+																			{currentCase.runtime !== undefined && (
+																				<p className="text-[10px] text-gray-500 mt-1">
+																					Execution profile: {currentCase.runtime} ms • {(currentCase.memory ? currentCase.memory / 1024 : 0).toFixed(2)} MB
+																				</p>
+																			)}
+																		</div>
+																	);
+																}
+
+																return (
+																	<div className="space-y-3 pt-2">
+																		<div>
+																			<p className="text-[11px] font-bold mb-1 text-gray-400 uppercase tracking-wider">Input:</p>
+																			<pre className="border border-gray-850 bg-black/35 px-4 py-2.5 rounded-lg text-xs whitespace-pre-wrap text-gray-200 font-mono">
+																				{currentCase.input || <span className="italic text-gray-550">Empty Input</span>}
+																			</pre>
+																		</div>
+
+																		<div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+																			<div>
+																				<p className="text-[11px] font-bold mb-1 text-gray-400 uppercase tracking-wider">Your Output:</p>
+																				<pre className={`border px-4 py-2.5 rounded-lg text-xs whitespace-pre-wrap font-mono ${
+																					currentCase.passed
+																						? "bg-green-500/10 border-green-500/20 text-green-450"
+																						: "bg-red-900/20 border-red-500/20 text-rose-450"
+																				}`}>
+																					{currentCase.actual || <span className="italic opacity-50">Empty Output</span>}
+																				</pre>
+																			</div>
+																			{currentCase.expected && (
+																				<div>
+																					<p className="text-[11px] font-bold mb-1 text-gray-400 uppercase tracking-wider">Expected Output:</p>
+																					<pre className="border border-green-500/20 bg-green-500/10 px-4 py-2.5 rounded-lg text-xs whitespace-pre-wrap text-green-450 font-mono">
+																						{currentCase.expected}
+																					</pre>
+																				</div>
+																			)}
+																		</div>
+
+																		{currentCase.error && (
+																			<div>
+																				<p className="text-[11px] font-bold mb-1 text-gray-400 uppercase tracking-wider">Error Details:</p>
+																				<pre className="border p-3 rounded-xl text-xs overflow-auto max-h-[140px] whitespace-pre-wrap bg-rose-950/20 border-rose-800/35 text-rose-450 font-mono">
+																					{currentCase.error}
+																				</pre>
+																			</div>
+																		)}
+																	</div>
+																);
+															})()}
+														</div>
+													) : null}
+												</>
+											);
+										})()}
+									</div>
+								) : null}
 							</div>
 						)}
 					</div>

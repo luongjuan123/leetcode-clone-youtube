@@ -11,7 +11,7 @@ export const clusteringProblems: MLProblemDefinition[] = [
 		tags: ["machine-learning", "kmeans", "clustering", "unsupervised-learning"],
 		description: "Perform one full Lloyd's iteration: assign points to nearest centroid and recompute centroid coordinates.",
 		story: `<p>Deep-space radio arrays in the Orion constellation group <code>N</code> celestial emitters into <code>K</code> clusters. In standard Lloyd's k-Means, points are assigned to the closest centroid under Euclidean distance, and each centroid is repositioned to the center of mass of its assigned points.</p>`,
-		task: "Given N points of dimension D and K initial centroids, assign each point to the closest centroid (break ties by lower centroid index) and output the recomputed K centroids.",
+		task: "Perform exactly 1 full Lloyd's update step: assign each point to the closest centroid (break ties by lower centroid index) and output the recomputed K centroids. Do not iterate to convergence.",
 		inputFormat: `<p>The first line contains integers <code>N</code>, <code>D</code>, and <code>K</code>.</p>
 <p>The next <code>N</code> lines each contain <code>D</code> real numbers (data points).</p>
 <p>The next <code>K</code> lines each contain <code>D</code> real numbers (initial centroids).</p>`,
@@ -19,7 +19,9 @@ export const clusteringProblems: MLProblemDefinition[] = [
 		constraints: formatConstraints([
 			"1 <= K <= N <= 100",
 			"1 <= D <= 5",
-			"Every cluster has at least one assigned point"
+			"Every cluster has at least one assigned point",
+			"Perform exactly 1 iteration (1 assignment step followed by 1 centroid update step)",
+			"Break distance ties by assigning to the lower centroid index"
 		]),
 		points: 150,
 		customCheckerType: "whitespace",
@@ -635,7 +637,7 @@ export const clusteringProblems: MLProblemDefinition[] = [
 		tags: ["machine-learning", "outliers", "anomaly-detection", "knn"],
 		description: "Flag points as outliers if their distance to the k-th nearest neighbor exceeds threshold T.",
 		story: `<p>Power grid security algorithms detect anomalous telemetry substations using <b>k-NN distance anomaly detection</b>. An isolated sensor has a large distance to its k-th nearest neighbor. If this k-NN distance &gt; <code>threshold</code>, the sensor is flagged as an OUTLIER, otherwise NORMAL.</p>`,
-		task: "For each of the N points, find the Euclidean distance to its k-th nearest neighbor and flag as OUTLIER or NORMAL.",
+		task: "For each of the N points, find the Euclidean distance to its k-th nearest distinct neighbor (excluding the query point itself) and flag as OUTLIER if distance > threshold, else NORMAL.",
 		inputFormat: `<p>The first line contains integers <code>N</code>, <code>D</code>, <code>K</code>, and real number <code>threshold</code>.</p>
 <p>The next <code>N</code> lines each contain <code>D</code> real numbers.</p>`,
 		outputFormat: `<p>Print <code>N</code> lines: <code>dist STATUS</code> where dist has 4 decimal places.</p>`,
@@ -643,7 +645,8 @@ export const clusteringProblems: MLProblemDefinition[] = [
 			"2 <= N <= 50",
 			"1 <= K < N",
 			"1 <= D <= 4",
-			"threshold > 0"
+			"threshold > 0",
+			"The k-th nearest neighbor is measured among the other N - 1 distinct points (excluding itself)"
 		]),
 		points: 130,
 		customCheckerType: "whitespace",

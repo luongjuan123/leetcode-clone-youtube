@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState, useMemo } from "react";
+import { Virtuoso, VirtuosoHandle } from "react-virtuoso";
 import { FaChevronDown } from "react-icons/fa";
 import { ChatMessage, ChatAttachment } from "@/types/chat";
 import { MessageGroup } from "./MessageGroup";
@@ -42,6 +43,8 @@ function formatDateDivider(timestamp: number): string {
 	});
 }
 
+const INITIAL_FIRST_ITEM_INDEX = 100000;
+
 export const MessageList: React.FC<MessageListProps> = ({
 	messages,
 	currentUserId,
@@ -60,11 +63,14 @@ export const MessageList: React.FC<MessageListProps> = ({
 	onRetry,
 	onOpenMedia,
 }) => {
-	const containerRef = useRef<HTMLDivElement>(null);
-	const bottomSentinelRef = useRef<HTMLDivElement>(null);
-	const prevScrollHeightRef = useRef<number>(0);
+	const virtuosoRef = useRef<VirtuosoHandle>(null);
+	const [firstItemIndex, setFirstItemIndex] = useState(INITIAL_FIRST_ITEM_INDEX);
 	const [isAtBottom, setIsAtBottom] = useState(true);
 	const [unreadBelowCount, setUnreadBelowCount] = useState(0);
+
+	const prevBlocksLengthRef = useRef<number>(0);
+	const isLoadingOlderRef = useRef(loadingOlder);
+	isLoadingOlderRef.current = loadingOlder;
 
 	// Find first unread incoming message to place unread divider
 	const firstUnreadMessageId = useMemo(() => {
@@ -149,106 +155,114 @@ export const MessageList: React.FC<MessageListProps> = ({
 		return groups;
 	}, [messages, currentUserId, firstUnreadMessageId]);
 
-	// Scroll handler for auto-load older and detecting bottom
-	const handleScroll = () => {
-		const container = containerRef.current;
-		if (!container) return;
-
-		const threshold = 60;
-		const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
-		setIsAtBottom(atBottom);
-
-		if (atBottom) {
-			setUnreadBelowCount(0);
-		}
-
-		// Near top: load older messages
-		if (container.scrollTop < 100 && hasMoreOlder && !loadingOlder) {
-			prevScrollHeightRef.current = container.scrollHeight;
-			onLoadOlder();
-		}
-	};
-
-	// Preserve scroll position when older messages are loaded
+	// Maintain scroll anchoring when older message blocks are prepended
 	useEffect(() => {
-		if (prevScrollHeightRef.current > 0 && containerRef.current) {
-			const newHeight = containerRef.current.scrollHeight;
-			const diff = newHeight - prevScrollHeightRef.current;
-			containerRef.current.scrollTop += diff;
-			prevScrollHeightRef.current = 0;
+		const currentLength = groupedMessageBlocks.length;
+		const prevLength = prevBlocksLengthRef.current;
+		if (prevLength > 0 && currentLength > prevLength && isLoadingOlderRef.current) {
+			const prependedCount = currentLength - prevLength;
+			setFirstItemIndex((prev) => prev - prependedCount);
 		}
-	}, [messages]);
+		prevBlocksLengthRef.current = currentLength;
+	}, [groupedMessageBlocks.length]);
 
-	// Auto-scroll to bottom on initial load or if user is already at bottom
+	// Track new incoming messages when user is not at bottom
 	useEffect(() => {
-		if (isAtBottom) {
-			bottomSentinelRef.current?.scrollIntoView({ behavior: "smooth" });
-		} else {
+		if (!isAtBottom) {
 			setUnreadBelowCount((c) => c + 1);
 		}
-	}, [messages.length]);
+	}, [messages.length, isAtBottom]);
 
 	const scrollToBottom = () => {
-		bottomSentinelRef.current?.scrollIntoView({ behavior: "smooth" });
+		virtuosoRef.current?.scrollToIndex({
+			index: groupedMessageBlocks.length - 1,
+			align: "end",
+			behavior: "smooth",
+		});
 		setUnreadBelowCount(0);
 		setIsAtBottom(true);
 	};
 
 	const jumpToMessage = (msgId: string) => {
-		const el = document.getElementById(`msg_${msgId}`);
-		if (el) {
-			el.scrollIntoView({ behavior: "smooth", block: "center" });
-			el.classList.add("ring-2", "ring-brand-orange", "transition-all");
+		const blockIdx = groupedMessageBlocks.findIndex((b) =>
+			b.messages.some((m) => m.id === msgId || m.clientMessageId === msgId)
+		);
+		if (blockIdx !== -1) {
+			virtuosoRef.current?.scrollToIndex({
+				index: blockIdx,
+				align: "center",
+				behavior: "smooth",
+			});
 			setTimeout(() => {
-				el.classList.remove("ring-2", "ring-brand-orange");
-			}, 2000);
+				const el = document.getElementById(`msg_${msgId}`);
+				if (el) {
+					el.classList.add("ring-2", "ring-brand-orange", "transition-all");
+					setTimeout(() => {
+						el.classList.remove("ring-2", "ring-brand-orange");
+					}, 2000);
+				}
+			}, 300);
 		}
 	};
 
 	return (
 		<div className="relative flex-1 h-full overflow-hidden flex flex-col bg-dark-layer-2">
-			{/* Scrollable Container */}
-			<div
-				ref={containerRef}
-				onScroll={handleScroll}
-				className="flex-1 overflow-y-auto px-2 sm:px-4 py-4 scroll-smooth"
-			>
-				{/* Constrained reading column for large displays */}
-				<div className="max-w-4xl mx-auto w-full flex flex-col gap-2 min-h-full justify-end">
-					{/* Top loading older spinner */}
-					{loadingOlder && (
-						<div className="flex justify-center py-2">
-							<div className="w-5 h-5 border-2 border-brand-orange border-t-transparent rounded-full animate-spin"></div>
-						</div>
-					)}
+			{/* Initial loading state */}
+			{loading && messages.length === 0 && (
+				<div className="flex-1 flex items-center justify-center py-12 text-xs text-text-muted">
+					<div className="flex items-center gap-2">
+						<div className="w-4 h-4 border-2 border-brand-orange border-t-transparent rounded-full animate-spin"></div>
+						<span>Loading messages...</span>
+					</div>
+				</div>
+			)}
 
-					{/* Initial loading state */}
-					{loading && messages.length === 0 && (
-						<div className="flex-1 flex items-center justify-center py-12 text-xs text-text-muted">
-							<div className="flex items-center gap-2">
-								<div className="w-4 h-4 border-2 border-brand-orange border-t-transparent rounded-full animate-spin"></div>
-								<span>Loading messages...</span>
-							</div>
-						</div>
-					)}
+			{/* Empty conversation placeholder */}
+			{!loading && messages.length === 0 && (
+				<div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-text-muted select-none py-16">
+					<div className="text-3xl mb-2">💬</div>
+					<div className="text-sm font-bold text-text-secondary mb-1">
+						No messages here yet
+					</div>
+					<p className="text-xs max-w-xs">
+						Send a message or code snippet below to start this conversation!
+					</p>
+				</div>
+			)}
 
-					{/* Empty conversation placeholder */}
-					{!loading && messages.length === 0 && (
-						<div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-text-muted select-none py-16">
-							<div className="text-3xl mb-2">💬</div>
-							<div className="text-sm font-bold text-text-secondary mb-1">
-								No messages here yet
-							</div>
-							<p className="text-xs max-w-xs">
-								Send a message or code snippet below to start this conversation!
-							</p>
-						</div>
-					)}
-
-					{/* Grouped Message Stream */}
-					{groupedMessageBlocks.map((block) => {
-						if (block.isUnreadDivider) {
-							return (
+			{/* Virtualized Message Stream with React Virtuoso */}
+			{groupedMessageBlocks.length > 0 && (
+				<Virtuoso
+					ref={virtuosoRef}
+					style={{ height: "100%" }}
+					className="flex-1 overflow-y-auto px-2 sm:px-4 py-4"
+					firstItemIndex={firstItemIndex}
+					initialTopMostItemIndex={groupedMessageBlocks.length - 1}
+					data={groupedMessageBlocks}
+					startReached={() => {
+						if (hasMoreOlder && !loadingOlder) {
+							onLoadOlder();
+						}
+					}}
+					followOutput={(isBottom) => (isBottom ? "smooth" : false)}
+					atBottomStateChange={(atBottom) => {
+						setIsAtBottom(atBottom);
+						if (atBottom) {
+							setUnreadBelowCount(0);
+						}
+					}}
+					components={{
+						Header: () =>
+							loadingOlder ? (
+								<div className="flex justify-center py-2">
+									<div className="w-5 h-5 border-2 border-brand-orange border-t-transparent rounded-full animate-spin"></div>
+								</div>
+							) : null,
+						Footer: () => <div className="h-2" />,
+					}}
+					itemContent={(index, block) => (
+						<div className="max-w-4xl mx-auto w-full py-1">
+							{block.isUnreadDivider && (
 								<div key={block.key} className="flex items-center gap-3 my-4 select-none animate-fade-in">
 									<div className="flex-1 border-t border-brand-orange/40" />
 									<span className="px-3 py-0.5 rounded-full text-[10px] font-bold bg-brand-orange/15 border border-brand-orange/40 text-brand-orange shadow-sm tracking-wide uppercase">
@@ -256,42 +270,38 @@ export const MessageList: React.FC<MessageListProps> = ({
 									</span>
 									<div className="flex-1 border-t border-brand-orange/40" />
 								</div>
-							);
-						}
+							)}
 
-						if (block.dateDivider) {
-							return (
+							{block.dateDivider && (
 								<div key={block.key} className="flex items-center justify-center my-3 select-none">
 									<span className="px-3 py-1 rounded-full text-[11px] font-semibold bg-dark-fill-3 border border-border-subtle text-text-muted shadow-sm">
 										{block.dateDivider}
 									</span>
 								</div>
-							);
-						}
+							)}
 
-						return (
-							<MessageGroup
-								key={block.key}
-								messages={block.messages}
-								isOutgoing={block.isOutgoing}
-								currentUserId={currentUserId}
-								isStaff={isStaff}
-								onReply={onReply}
-								onReact={onReact}
-								onEdit={onEdit}
-								onDelete={onDelete}
-								onPin={onPin}
-								onReport={onReport}
-								onRetry={onRetry}
-								onOpenMedia={onOpenMedia}
-								onJumpToMessage={jumpToMessage}
-							/>
-						);
-					})}
-
-					<div ref={bottomSentinelRef} className="h-2" />
-				</div>
-			</div>
+							{block.messages.length > 0 && (
+								<MessageGroup
+									key={block.key}
+									messages={block.messages}
+									isOutgoing={block.isOutgoing}
+									currentUserId={currentUserId}
+									isStaff={isStaff}
+									onReply={onReply}
+									onReact={onReact}
+									onEdit={onEdit}
+									onDelete={onDelete}
+									onPin={onPin}
+									onReport={onReport}
+									onRetry={onRetry}
+									onOpenMedia={onOpenMedia}
+									onJumpToMessage={jumpToMessage}
+								/>
+							)}
+						</div>
+					)}
+				/>
+			)}
 
 			{/* Floating "Scroll to bottom" button */}
 			{!isAtBottom && (

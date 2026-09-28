@@ -10,6 +10,7 @@ import {
 	collection, getDocs, doc, setDoc, getDoc, query, where, orderBy, updateDoc, increment
 } from "firebase/firestore";
 import Link from "next/link";
+import { useRouter } from "next/router";
 import { useSetRecoilState } from "recoil";
 import { authModalState } from "@/atoms/authModalAtom";
 import {
@@ -66,6 +67,7 @@ const LiveCountdown: React.FC<{ targetTime: number }> = ({ targetTime }) => {
 };
 
 export default function ContestsPage() {
+	const router = useRouter();
 	const hasMounted = useHasMounted();
 	const [user] = useAuthState(auth);
 	const setAuthModal = useSetRecoilState(authModalState);
@@ -319,7 +321,7 @@ export default function ContestsPage() {
 			const existingSnap = await getDoc(regRef);
 			if (existingSnap.exists() && existingSnap.data().status === "active") {
 				// Redirect directly if already active virtual participant
-				window.location.href = `/contests/${contestId}`;
+				router.push(`/contests/${contestId}`);
 				return;
 			}
 
@@ -338,7 +340,7 @@ export default function ContestsPage() {
 			});
 
 			triggerRibbon("success", "Virtual participation session started!");
-			window.location.href = `/contests/${contestId}`;
+			router.push(`/contests/${contestId}`);
 		} catch (e: any) {
 			console.error("Virtual join error:", e);
 			triggerRibbon("error", "Failed to start virtual session.");

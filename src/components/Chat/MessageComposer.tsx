@@ -14,6 +14,16 @@ import { ReplyPreview } from "./ReplyPreview";
 import { CodeSnippetModal } from "./CodeSnippetModal";
 import { VoiceRecorder } from "./VoiceRecorder";
 
+export interface StagedFile {
+	id: string;
+	file: File;
+	name: string;
+	size: number;
+	mimeType: string;
+	previewUrl?: string;
+	category: "images" | "documents" | "audio" | "code";
+}
+
 interface MessageComposerProps {
 	conversationId: string;
 	replyToMessage: ChatMessage | null;
@@ -26,11 +36,26 @@ interface MessageComposerProps {
 		type?: "text" | "code" | "image" | "file" | "voice";
 		code?: { language: string; content: string };
 		attachments?: ChatAttachment[];
+		stagedFiles?: File[];
 		replyTo?: MessageReplyReference;
-	}) => Promise<void>;
+	}) => Promise<void> | void;
 	onTyping: () => void;
 	disabled?: boolean;
 	placeholder?: string;
+}
+
+function getFileCategory(file: File): "images" | "documents" | "audio" | "code" {
+	if (file.type.startsWith("image/")) return "images";
+	if (file.type.startsWith("audio/")) return "audio";
+	if (
+		file.type.includes("json") ||
+		file.type.includes("javascript") ||
+		file.type.includes("typescript") ||
+		/\.(ts|tsx|js|jsx|py|cpp|c|java|go|rs|html|css|json|sql|sh)$/i.test(file.name)
+	) {
+		return "code";
+	}
+	return "documents";
 }
 
 const COMMON_EMOJIS = ["😀", "🔥", "🚀", "👍", "❤️", "🎉", "💯", "💻", "🤔", "👏", "✅", "⚡"];
@@ -51,8 +76,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 	const [codeModalOpen, setCodeModalOpen] = useState(false);
 	const [voiceRecording, setVoiceRecording] = useState(false);
 	const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
-	const [uploadingAttachment, setUploadingAttachment] = useState(false);
-	const [pendingAttachments, setPendingAttachments] = useState<ChatAttachment[]>([]);
+	const [stagedFiles, setStagedFiles] = useState<StagedFile[]>([]);
 	const [isDragOver, setIsDragOver] = useState(false);
 
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -66,6 +90,19 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 			textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 160)}px`;
 		}
 	}, [text]);
+
+	// Clean up object URLs on unmount or staged files change
+	useEffect(() => {
+		return () => {
+			stagedFiles.forEach((f) => {
+				if (f.previewUrl) {
+					try {
+						URL.revokeObjectURL(f.previewUrl);
+					} catch (_) {}
+				}
+			});
+		};
+	}, [stagedFiles]);
 
 	// Draft persistence per conversationId
 	useEffect(() => {
@@ -134,9 +171,85 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 		onTyping();
 	};
 
-	const handleSend = async () => {
+	// ─── Stage Files (From File Picker, Drag & Drop, or Clipboard Paste) ────────
+	const handleFilesAdded = useCallback((fileList: FileList | File[] | null) => {
+		if (!fileList || fileList.length === 0) return;
+
+		const filesArray = Array.from(fileList);
+		const validFiles: StagedFile[] = [];
+
+		for (const file of filesArray) {
+			if (file.size > 15 * 1024 * 1024) {
+				alert(`File "${file.name}" exceeds maximum allowed size of 15MB`);
+				continue;
+			}
+			if (file.size === 0) {
+				continue;
+			}
+
+			const isImage = file.type.startsWith("image/");
+			const previewUrl = isImage ? URL.createObjectURL(file) : undefined;
+			validFiles.push({
+				id: `staged_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+				file,
+				name: file.name,
+				size: file.size,
+				mimeType: file.type || "application/octet-stream",
+				previewUrl,
+				category: getFileCategory(file),
+			});
+		}
+
+		if (validFiles.length > 0) {
+			setStagedFiles((prev) => [...prev, ...validFiles]);
+		}
+	}, []);
+
+	const handleRemoveStagedFile = useCallback((id: string) => {
+		setStagedFiles((prev) => {
+			const target = prev.find((f) => f.id === id);
+			if (target?.previewUrl) {
+				try {
+					URL.revokeObjectURL(target.previewUrl);
+				} catch (_) {}
+			}
+			return prev.filter((f) => f.id !== id);
+		});
+	}, []);
+
+	// ─── Clipboard Paste Handler ───────────────────────────────────────────────
+	const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+		const clipboardData = e.clipboardData;
+		if (!clipboardData) return;
+
+		const files: File[] = [];
+		if (clipboardData.files && clipboardData.files.length > 0) {
+			for (let i = 0; i < clipboardData.files.length; i++) {
+				files.push(clipboardData.files[i]);
+			}
+		} else if (clipboardData.items && clipboardData.items.length > 0) {
+			for (let i = 0; i < clipboardData.items.length; i++) {
+				const item = clipboardData.items[i];
+				if (item.kind === "file") {
+					const f = item.getAsFile();
+					if (f) files.push(f);
+				}
+			}
+		}
+
+		if (files.length > 0) {
+			const hasText = clipboardData.getData("text/plain");
+			if (!hasText) {
+				e.preventDefault();
+			}
+			handleFilesAdded(files);
+		}
+	};
+
+	// ─── Instant Optimistic Send ───────────────────────────────────────────────
+	const handleSend = () => {
 		const trimmed = text.trim();
-		if ((!trimmed && pendingAttachments.length === 0) || disabled) return;
+		if ((!trimmed && stagedFiles.length === 0) || disabled) return;
 
 		if (editingMessage) {
 			if (!trimmed) return;
@@ -148,12 +261,12 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 				setText(savedDraft);
 			}
 			if (onEditMessage) {
-				await onEditMessage(msgId, trimmed);
+				onEditMessage(msgId, trimmed);
 			}
 			return;
 		}
 
-		// Clear draft from storage on successful send
+		// Clear draft from storage
 		if (typeof window !== "undefined") {
 			sessionStorage.removeItem(`beastcode_chat_draft_${conversationId}`);
 		}
@@ -169,73 +282,31 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 			  }
 			: undefined;
 
-		const attachmentsToSend = [...pendingAttachments];
+		const filesToSend = stagedFiles.map((f) => f.file);
 		const messageText = trimmed;
 
-		// Clear local state
+		// INSTANT UI CLEARANCE (<5ms perceived latency)
 		setText("");
-		setPendingAttachments([]);
+		setStagedFiles([]);
 		onCancelReply();
 		if (textareaRef.current) {
 			textareaRef.current.style.height = "auto";
+			textareaRef.current.focus();
 		}
 
-		await onSendMessage({
+		// Fire optimistic background send
+		onSendMessage({
 			text: messageText,
-			attachments: attachmentsToSend.length > 0 ? attachmentsToSend : undefined,
+			stagedFiles: filesToSend.length > 0 ? filesToSend : undefined,
 			replyTo,
 		});
-	};
-
-	const handleFileSelect = async (files: FileList | null) => {
-		if (!files || files.length === 0) return;
-		const file = files[0];
-
-		if (file.size > 15 * 1024 * 1024) {
-			alert("File exceeds maximum size of 15MB");
-			return;
-		}
-
-		setUploadingAttachment(true);
-		try {
-			const reader = new FileReader();
-			reader.readAsDataURL(file);
-			reader.onloadend = async () => {
-				const base64Data = reader.result as string;
-				const idToken = await (await import("@/firebase/firebase")).auth.currentUser?.getIdToken();
-
-				const res = await fetch("/api/chat/upload", {
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						Authorization: `Bearer ${idToken}`,
-					},
-					body: JSON.stringify({
-						fileData: base64Data,
-						fileName: file.name,
-						conversationId,
-					}),
-				});
-
-				const data = await res.json();
-				if (data.success && data.attachment) {
-					setPendingAttachments((prev) => [...prev, data.attachment]);
-				} else {
-					alert(data.error || "Failed to upload file");
-				}
-				setUploadingAttachment(false);
-			};
-		} catch (err: any) {
-			console.error("[Attachment upload error]:", err);
-			setUploadingAttachment(false);
-		}
 	};
 
 	const handleSendVoice = async (base64Audio: string, durationSeconds: number) => {
 		setVoiceRecording(false);
 		try {
 			const idToken = await (await import("@/firebase/firebase")).auth.currentUser?.getIdToken();
-			const res = await fetch("/api/chat/upload", {
+			const res = await fetch("/api/chat/attachment", {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
@@ -250,7 +321,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 			});
 			const data = await res.json();
 			if (data.success && data.attachment) {
-				await onSendMessage({
+				onSendMessage({
 					type: "voice",
 					attachments: [data.attachment],
 				});
@@ -270,7 +341,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 			onDrop={(e) => {
 				e.preventDefault();
 				setIsDragOver(false);
-				handleFileSelect(e.dataTransfer.files);
+				handleFilesAdded(e.dataTransfer.files);
 			}}
 			className={`relative border-t border-border-default bg-dark-fill-2 transition-colors ${
 				isDragOver ? "bg-brand-orange/10 border-brand-orange" : ""
@@ -309,33 +380,68 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 			{/* Replying Banner (mutually exclusive with editing) */}
 			{!editingMessage && <ReplyPreview replyMessage={replyToMessage} onCancel={onCancelReply} />}
 
-			{/* Drag & Drop Overlay */}
+			{/* Drag & Drop Full-Surface Overlay */}
 			{isDragOver && (
-				<div className="absolute inset-0 z-30 flex items-center justify-center bg-dark-layer-1/90 border-2 border-dashed border-brand-orange text-brand-orange font-bold text-sm">
-					Drop file here to upload to conversation
+				<div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-dark-layer-1/95 border-2 border-dashed border-brand-orange text-brand-orange font-bold text-sm gap-2 backdrop-blur-sm pointer-events-none animate-fade-in">
+					<FaPaperclip size={24} className="animate-bounce" />
+					<span>Drop files to attach to message</span>
 				</div>
 			)}
 
-			{/* Pending Attachments Strip */}
-			{pendingAttachments.length > 0 && (
-				<div className="flex flex-wrap gap-2 px-4 pt-2">
-					{pendingAttachments.map((att, idx) => (
+			{/* Rich Pre-Send Attachment Staging Area */}
+			{stagedFiles.length > 0 && (
+				<div className="px-3 pt-2.5 pb-2 flex items-center gap-2 overflow-x-auto border-b border-border-subtle bg-dark-fill-3/70">
+					{stagedFiles.map((staged) => (
 						<div
-							key={att.id || idx}
-							className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-dark-fill-3 border border-border-subtle text-xs"
+							key={staged.id}
+							className="group relative flex items-center gap-2.5 p-1.5 pr-8 rounded-xl bg-dark-fill-2 border border-border-default hover:border-brand-orange/40 transition shrink-0 max-w-[220px]"
 						>
-							<span className="truncate max-w-[150px] font-medium text-text-primary">
-								{att.name}
-							</span>
+							{staged.previewUrl ? (
+								<img
+									src={staged.previewUrl}
+									alt={staged.name}
+									className="w-10 h-10 rounded-lg object-cover bg-black/20 shrink-0"
+								/>
+							) : (
+								<div className="w-10 h-10 rounded-lg bg-dark-fill-3 flex items-center justify-center text-brand-orange shrink-0">
+									{staged.category === "code" ? (
+										<FaCode size={16} />
+									) : staged.category === "audio" ? (
+										<FaMicrophone size={16} />
+									) : (
+										<FaPaperclip size={16} />
+									)}
+								</div>
+							)}
+							<div className="min-w-0 flex-1">
+								<div className="text-[11px] font-bold text-text-primary truncate" title={staged.name}>
+									{staged.name}
+								</div>
+								<div className="text-[9px] text-text-muted font-mono">
+									{(staged.size / 1024).toFixed(0)} KB
+								</div>
+							</div>
 							<button
 								type="button"
-								onClick={() => setPendingAttachments((p) => p.filter((_, i) => i !== idx))}
-								className="text-text-muted hover:text-rose-500 transition"
+								onClick={() => handleRemoveStagedFile(staged.id)}
+								className="absolute top-1.5 right-1.5 p-1 rounded-md text-text-muted hover:text-rose-400 hover:bg-dark-fill-3 transition"
+								title="Remove attachment"
+								aria-label="Remove attachment"
 							>
-								<FaTimes size={10} />
+								<FaTimes size={11} />
 							</button>
 						</div>
 					))}
+					<button
+						type="button"
+						onClick={() => {
+							stagedFiles.forEach((f) => f.previewUrl && URL.revokeObjectURL(f.previewUrl));
+							setStagedFiles([]);
+						}}
+						className="text-[10px] text-text-muted hover:text-rose-400 px-2 py-1 rounded transition shrink-0 font-medium"
+					>
+						Clear all
+					</button>
 				</div>
 			)}
 
@@ -352,19 +458,22 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 				<div className="p-3 flex items-end gap-2">
 					{/* Action Buttons: Attach, Code, Emoji */}
 					<div className="flex items-center gap-1 pb-1">
-						{/* Hidden File Input */}
+						{/* Hidden File Input (supports multiple files) */}
 						<input
 							ref={fileInputRef}
 							type="file"
+							multiple
 							className="hidden"
-							onChange={(e) => handleFileSelect(e.target.files)}
+							onChange={(e) => {
+								handleFilesAdded(e.target.files);
+								if (e.target) e.target.value = "";
+							}}
 						/>
 						<button
 							type="button"
 							onClick={() => fileInputRef.current?.click()}
-							disabled={uploadingAttachment}
 							className="p-2 rounded-xl text-text-muted hover:text-brand-orange hover:bg-dark-fill-3 transition disabled:opacity-50"
-							title="Attach file or photo"
+							title="Attach files or photos"
 						>
 							<FaPaperclip size={15} />
 						</button>
@@ -417,13 +526,14 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 						</div>
 					</div>
 
-					{/* Auto-expanding Textarea */}
+					{/* Auto-expanding Textarea with Clipboard Paste Support */}
 					<div className="flex-1 relative">
 						<textarea
 							ref={textareaRef}
 							value={text}
 							onChange={handleTextChange}
 							onKeyDown={handleKeyDown}
+							onPaste={handlePaste}
 							placeholder={disabled ? "Posting restricted in this channel" : placeholder}
 							disabled={disabled}
 							rows={1}
@@ -444,7 +554,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 								<FaCheck size={12} />
 								<span className="hidden sm:inline">Save</span>
 							</button>
-						) : text.trim() || pendingAttachments.length > 0 ? (
+						) : text.trim() || stagedFiles.length > 0 ? (
 							<button
 								type="button"
 								onClick={handleSend}

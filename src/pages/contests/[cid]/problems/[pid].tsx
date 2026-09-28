@@ -8,7 +8,7 @@ import useHasMounted from "@/hooks/useHasMounted";
 import { Problem } from "@/utils/types/problem";
 import { auth, firestore } from "@/firebase/firebase";
 import { useAuthState } from "react-firebase-hooks/auth";
-import { doc, getDoc, setDoc, updateDoc, collection, addDoc, getDocs, query, where, orderBy } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, collection, addDoc, getDocs, query, where, orderBy, onSnapshot } from "firebase/firestore";
 import { problems as staticProblems } from "@/utils/problems";
 import Link from "next/link";
 import { FaLock, FaExclamationTriangle, FaExpand, FaClock, FaChevronLeft, FaSpinner } from "react-icons/fa";
@@ -252,9 +252,6 @@ const ContestProblemPage: React.FC = () => {
 	const terminateUser = useCallback(async (reason: string) => {
 		if (!cid || !user) return;
 		try {
-			// Update status in db
-			const regRef = doc(firestore, "contest_participants", `${cid}_${user.uid}`);
-			await updateDoc(regRef, { status: "terminated" });
 			setParticipantStatus("terminated");
 			setTerminatedReason(reason);
 			
@@ -263,29 +260,49 @@ const ContestProblemPage: React.FC = () => {
 				document.exitFullscreen().catch(() => {});
 			}
 
-			// Send termination confirmation/informational email if not in virtual mode
-			if (!isVirtual) {
-				try {
-					const userToken = await user.getIdToken();
-					await fetch("/api/send-termination-email", {
-						method: "POST",
-						headers: {
-							"Content-Type": "application/json",
-							Authorization: `Bearer ${userToken}`
-						},
-						body: JSON.stringify({
-							contestId: cid,
-							reason
-						})
-					});
-				} catch (emailErr) {
-					console.error("Failed to send termination email:", emailErr);
-				}
-			}
+			// Call hardened /api/contests/terminate endpoint
+			const userToken = await user.getIdToken();
+			await fetch("/api/contests/terminate", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${userToken}`
+				},
+				body: JSON.stringify({
+					contestId: cid,
+					reason
+				})
+			});
 		} catch (e) {
 			console.error("Error terminating user:", e);
 		}
-	}, [cid, user, isVirtual]);
+	}, [cid, user]);
+
+	// Real-time synchronization of participant standing
+	useEffect(() => {
+		if (!cid || !user) return;
+		const partRef = doc(firestore, "contest_participants", `${cid}_${user.uid}`);
+		const unsub = onSnapshot(partRef, (snap) => {
+			if (snap.exists()) {
+				const pData = snap.data();
+				setParticipantStatus(pData.status);
+				if (pData.warningsCount !== undefined) {
+					setWarnings(pData.warningsCount);
+					warningsRef.current = pData.warningsCount;
+				}
+				if (pData.status === "terminated") {
+					setTerminatedReason(pData.terminationReason || "Your session was terminated due to proctoring violations.");
+					if (document.fullscreenElement) {
+						document.exitFullscreen().catch(() => {});
+					}
+				}
+			}
+		}, (err) => {
+			console.error("Error watching participant standing:", err);
+		});
+
+		return () => unsub();
+	}, [cid, user]);
 
 	const logIntegrityEvent = useCallback(async (type: string, details: string) => {
 		if (!cid || !user) return;
@@ -316,6 +333,7 @@ const ContestProblemPage: React.FC = () => {
 			const isStrict = contest.securityLevel === "strict";
 			const newWarnCount = warningsRef.current + 1;
 			setWarnings(newWarnCount);
+			warningsRef.current = newWarnCount;
 
 			try {
 				const regRef = doc(firestore, "contest_participants", `${cid}_${user.uid}`);
@@ -327,7 +345,11 @@ const ContestProblemPage: React.FC = () => {
 			logIntegrityEvent(type === "fullscreen" ? "fullscreen_exit" : "tab_switch", details);
 
 			if (isStrict || newWarnCount >= 3) {
-				terminateUser(type === "fullscreen" ? "Terminated due to fullscreen violation." : "Terminated due to focus switch violation.");
+				terminateUser(
+					isStrict
+						? `Strict Mode Violation: Instant termination triggered by ${type === "fullscreen" ? "exiting fullscreen" : "switching tabs / losing focus"}.`
+						: `Violation Limit Exceeded: 3 proctoring infractions recorded (${type === "fullscreen" ? "exited fullscreen" : "tab switch / lost focus"}).`
+				);
 			} else {
 				setViolationType(type);
 				setPendingWarningCount(newWarnCount);
@@ -338,12 +360,12 @@ const ContestProblemPage: React.FC = () => {
 
 	// Listeners
 	useEffect(() => {
-		if (!contest || contest.securityLevel === "casual") return;
+		if (!contest || contest.securityLevel === "casual" || participantStatus === "terminated") return;
 
 		const onFullscreenChange = () => {
 			const isFull = !!document.fullscreenElement;
 			setIsFullscreen(isFull);
-			if (!isFull) {
+			if (!isFull && !showExamLockModal) {
 				triggerSecurityWarning("fullscreen", "User exited fullscreen mode.");
 			}
 		};
@@ -384,7 +406,7 @@ const ContestProblemPage: React.FC = () => {
 				clearTimeout(blurTimeoutRef.current);
 			}
 		};
-	}, [contest, triggerSecurityWarning]);
+	}, [contest, participantStatus, showExamLockModal, triggerSecurityWarning]);
 
 	const now = getServerTime();
 	const computedStatus = contest
@@ -489,14 +511,29 @@ const ContestProblemPage: React.FC = () => {
 		return (
 			<div className='bg-dark-layer-2 min-h-screen text-white flex flex-col'>
 				<Topbar />
-				<main className='flex-1 flex flex-col justify-center items-center gap-4 px-4 pb-20'>
-					<FaExclamationTriangle className='text-red-500 animate-pulse' size={48} />
-					<h3 className='text-2xl font-bold text-red-500'>Participation Terminated</h3>
-					<p className='text-sm text-gray-400 max-w-md text-center leading-relaxed'>
-						{terminatedReason || "Your exam workspace session has been terminated due to multiple security violations."}
-					</p>
-					<Link href={`/contests/${cid}`} className='bg-dark-fill-3 hover:bg-dark-fill-2 text-white border border-border-default font-bold px-6 py-2.5 rounded-xl text-sm mt-4 transition-all duration-200 hover:scale-105 shadow-lg shadow-black/20'>
-						Return to Portal
+				<main className='flex-1 flex flex-col justify-center items-center gap-5 px-4 pb-20'>
+					<div className="relative">
+						<div className="w-20 h-20 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500 shadow-xl shadow-red-500/10">
+							<FaExclamationTriangle className='animate-pulse' size={40} />
+						</div>
+					</div>
+					<div className="text-center space-y-2 max-w-md">
+						<span className="px-3 py-1 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider bg-red-500/10 text-red-400 border border-red-500/20">
+							Disqualified • Proctoring Violation
+						</span>
+						<h3 className='text-2xl font-black text-white tracking-tight'>Participation Terminated</h3>
+						<p className='text-sm text-gray-400 leading-relaxed'>
+							{terminatedReason || "Your contest workspace session has been terminated due to proctoring policy violations."}
+						</p>
+					</div>
+					<div className="bg-dark-fill-3/30 border border-border-subtle rounded-xl p-4 max-w-md w-full text-center space-y-1 text-xs text-gray-400" style={{ borderColor: "var(--border-subtle)" }}>
+						<p className="font-semibold text-gray-300">Access Revocation Notice</p>
+						<p className="text-[11px] text-gray-500">
+							Your solution editor is locked, further submissions are blocked, and this incident has been recorded in the contest audit log.
+						</p>
+					</div>
+					<Link href={`/contests/${cid}`} className='bg-dark-fill-3 hover:bg-dark-fill-2 text-white border border-border-default font-bold px-6 py-2.5 rounded-xl text-sm transition-all duration-200 hover:scale-105 shadow-lg shadow-black/20'>
+						Return to Contest Overview
 					</Link>
 				</main>
 			</div>
@@ -631,6 +668,9 @@ const ContestProblemPage: React.FC = () => {
 								{pendingWarningCount} / 3
 							</span>
 						</div>
+						<p className="text-[11px] text-rose-400/90 font-medium">
+							Warning {pendingWarningCount} of 3. Incurring {Math.max(0, 3 - pendingWarningCount)} more {3 - pendingWarningCount === 1 ? "violation" : "violations"} will trigger immediate and irreversible contest disqualification.
+						</p>
 
 						<button
 							onClick={() => {

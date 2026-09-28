@@ -218,8 +218,8 @@ const AdminDashboard: React.FC = () => {
 				});
 			}
 			await deleteDoc(docRef);
+			setProblems((prev) => prev.filter((p) => p.id !== id));
 			triggerStatusRibbon("success", `Problem "${id}" soft-deleted and staged.`);
-			fetchProblems();
 		} catch (e: any) {
 			triggerStatusRibbon("error", getFriendlyErrorMessage(e, "Delete failed."));
 		}
@@ -243,8 +243,8 @@ const AdminDashboard: React.FC = () => {
 				batch.delete(docRef);
 			}
 			await batch.commit();
+			setProblems((prev) => prev.filter((p) => !ids.includes(p.id)));
 			triggerStatusRibbon("success", `${ids.length} problems soft-deleted and staged.`);
-			fetchProblems();
 		} catch (e: any) {
 			triggerStatusRibbon("error", getFriendlyErrorMessage(e, "Bulk delete failed."));
 		}
@@ -255,8 +255,10 @@ const AdminDashboard: React.FC = () => {
 			const batch = writeBatch(firestore);
 			ids.forEach((id) => batch.update(doc(firestore, "problems", id), { difficulty }));
 			await batch.commit();
+			setProblems((prev) =>
+				prev.map((p) => (ids.includes(p.id) ? { ...p, difficulty } : p))
+			);
 			triggerStatusRibbon("success", `Difficulty updated for ${ids.length} problems.`);
-			fetchProblems();
 		} catch (e: any) {
 			triggerStatusRibbon("error", getFriendlyErrorMessage(e, "Difficulty change failed."));
 		}
@@ -267,8 +269,10 @@ const AdminDashboard: React.FC = () => {
 			const batch = writeBatch(firestore);
 			ids.forEach((id) => batch.update(doc(firestore, "problems", id), { tags }));
 			await batch.commit();
+			setProblems((prev) =>
+				prev.map((p) => (ids.includes(p.id) ? { ...p, tags } : p))
+			);
 			triggerStatusRibbon("success", `Tags updated for ${ids.length} problems.`);
-			fetchProblems();
 		} catch (e: any) {
 			triggerStatusRibbon("error", getFriendlyErrorMessage(e, "Tag change failed."));
 		}
@@ -279,8 +283,10 @@ const AdminDashboard: React.FC = () => {
 			const batch = writeBatch(firestore);
 			ids.forEach((id) => batch.update(doc(firestore, "problems", id), policy));
 			await batch.commit();
+			setProblems((prev) =>
+				prev.map((p) => (ids.includes(p.id) ? { ...p, ...policy } : p))
+			);
 			triggerStatusRibbon("success", `Execution policy applied to ${ids.length} problems.`);
-			fetchProblems();
 		} catch (e: any) {
 			triggerStatusRibbon("error", getFriendlyErrorMessage(e, "Policy apply failed."));
 		}

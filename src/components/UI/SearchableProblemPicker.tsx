@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { FaSearch, FaTimes, FaPlus, FaMinus, FaArrowUp, FaArrowDown, FaHistory, FaStar, FaFilter } from "react-icons/fa";
+import { FaSearch, FaTimes, FaPlus, FaMinus, FaArrowUp, FaArrowDown, FaHistory, FaStar, FaFilter, FaSpinner } from "react-icons/fa";
 import BeastCodeSelect from "./BeastCodeSelect";
 import BeastCodePagination from "./BeastCodePagination";
 
@@ -19,9 +19,9 @@ interface SearchableProblemPickerProps {
 	onClose: () => void;
 	availableProblems: RichProblem[];
 	currentContestProblemIds: string[];
-	onAddProblems: (problemIds: string[]) => void;
-	onRemoveProblems: (problemIds: string[]) => void;
-	onReorderProblems: (problemIds: string[]) => void;
+	onAddProblems: (problemIds: string[]) => void | Promise<void>;
+	onRemoveProblems: (problemIds: string[]) => void | Promise<void>;
+	onReorderProblems: (problemIds: string[]) => void | Promise<void>;
 }
 
 const SearchableProblemPicker: React.FC<SearchableProblemPickerProps> = ({
@@ -41,6 +41,7 @@ const SearchableProblemPicker: React.FC<SearchableProblemPickerProps> = ({
 	const [searchHistory, setSearchHistory] = useState<string[]>([]);
 	const [favorites, setFavorites] = useState<string[]>([]);
 	const [selectedIds, setSelectedIds] = useState<string[]>([]);
+	const [pendingIds, setPendingIds] = useState<string[]>([]);
 
 	// Pagination state
 	const [currentPage, setCurrentPage] = useState(1);
@@ -147,31 +148,66 @@ const SearchableProblemPicker: React.FC<SearchableProblemPickerProps> = ({
 		onReorderProblems(updated);
 	};
 
-	const handleAdd = (id: string) => {
-		if (selectedIds.includes(id)) return;
-		onAddProblems([id]);
-		addToHistory(searchQuery);
-	};
-
-	const handleRemove = (id: string) => {
-		onRemoveProblems([id]);
-	};
-
-	const handleBulkAdd = () => {
-		const toAdd = filteredProblems
-			.map((p) => p.id)
-			.filter((id) => !selectedIds.includes(id));
-		if (toAdd.length > 0) {
-			onAddProblems(toAdd);
+	const handleAdd = async (id: string) => {
+		if (selectedIds.includes(id) || pendingIds.includes(id)) return;
+		setPendingIds((prev) => [...prev, id]);
+		setSelectedIds((prev) => [...prev, id]);
+		try {
+			await onAddProblems([id]);
+			addToHistory(searchQuery);
+		} catch (err) {
+			setSelectedIds((prev) => prev.filter((x) => x !== id));
+		} finally {
+			setPendingIds((prev) => prev.filter((x) => x !== id));
 		}
 	};
 
-	const handleBulkRemove = () => {
+	const handleRemove = async (id: string) => {
+		if (pendingIds.includes(id)) return;
+		setPendingIds((prev) => [...prev, id]);
+		const prevSelected = [...selectedIds];
+		setSelectedIds((prev) => prev.filter((x) => x !== id));
+		try {
+			await onRemoveProblems([id]);
+		} catch (err) {
+			setSelectedIds(prevSelected);
+		} finally {
+			setPendingIds((prev) => prev.filter((x) => x !== id));
+		}
+	};
+
+	const handleBulkAdd = async () => {
+		const toAdd = filteredProblems
+			.map((p) => p.id)
+			.filter((id) => !selectedIds.includes(id) && !pendingIds.includes(id));
+		if (toAdd.length > 0) {
+			setPendingIds((prev) => [...prev, ...toAdd]);
+			setSelectedIds((prev) => [...prev, ...toAdd]);
+			try {
+				await onAddProblems(toAdd);
+			} catch (err) {
+				setSelectedIds((prev) => prev.filter((x) => !toAdd.includes(x)));
+			} finally {
+				setPendingIds((prev) => prev.filter((x) => !toAdd.includes(x)));
+			}
+		}
+	};
+
+	const handleBulkRemove = async () => {
 		const toRemove = filteredProblems
 			.map((p) => p.id)
-			.filter((id) => selectedIds.includes(id));
+			.filter((id) => selectedIds.includes(id) && !pendingIds.includes(id));
 		if (toRemove.length > 0) {
-			onRemoveProblems(toRemove);
+			setPendingIds((prev) => [...prev, ...toRemove]);
+			const prevSelected = [...selectedIds];
+			setSelectedIds((prev) => prev.filter((x) => !toRemove.includes(x)));
+			try {
+				await onRemoveProblems(toRemove);
+			} catch (err) {
+				setSelectedIds(prevSelected);
+			} finally {
+				setPendingIds((prev) => prev.filter((x) => !toRemove.includes(x)));
+			}
 		}
 	};
 
@@ -436,14 +472,22 @@ const SearchableProblemPicker: React.FC<SearchableProblemPickerProps> = ({
 											</div>
 
 											<button
+												disabled={pendingIds.includes(prob.id)}
 												onClick={() => (isAdded ? handleRemove(prob.id) : handleAdd(prob.id))}
 												className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition ${
-													isAdded
+													pendingIds.includes(prob.id)
+														? "opacity-75 cursor-not-allowed bg-dark-fill-3 text-gray-400"
+														: isAdded
 														? "bg-red-600/10 border border-red-500/20 text-red-400 hover:bg-red-600 hover:text-white"
 														: "bg-brand-orange hover:bg-brand-orange-s text-white"
 												}`}
 											>
-												{isAdded ? (
+												{pendingIds.includes(prob.id) ? (
+													<>
+														<FaSpinner className="animate-spin" size={10} />
+														{isAdded ? "Removing..." : "Adding..."}
+													</>
+												) : isAdded ? (
 													<>
 														<FaMinus size={10} /> Remove
 													</>
@@ -520,9 +564,14 @@ const SearchableProblemPicker: React.FC<SearchableProblemPickerProps> = ({
 												</button>
 												<button
 													onClick={() => handleRemove(id)}
-													className="p-1 hover:bg-red-500/10 rounded text-red-400 hover:bg-red-600 hover:text-white transition duration-150"
+													disabled={pendingIds.includes(id)}
+													className="p-1 hover:bg-red-500/10 rounded text-red-400 hover:bg-red-600 hover:text-white transition duration-150 disabled:opacity-40 disabled:pointer-events-none"
 												>
-													<FaTimes size={10} />
+													{pendingIds.includes(id) ? (
+														<FaSpinner className="animate-spin" size={10} />
+													) : (
+														<FaTimes size={10} />
+													)}
 												</button>
 											</div>
 										</div>

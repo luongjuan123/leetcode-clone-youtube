@@ -150,8 +150,8 @@ export const classificationProblems: MLProblemDefinition[] = [
 		category: "machine-learning",
 		tags: ["machine-learning", "naive-bayes", "classification", "probability"],
 		description: "Compute the log posterior probability for binary classes assuming Gaussian feature likelihoods.",
-		story: `<p>A viral epidemiology unit uses Gaussian Naive Bayes to screen for pathogen strains (Class 0: Benign, Class 1: Pathogenic). For each class <code>c</code>, each feature <code>j</code> follows a normal distribution with mean <code>mu_cj</code> and variance <code>sigma2_cj</code>. The class prior is <code>P(c) = N_c / N</code>.</p>`,
-		task: "Given training data, compute the unnormalized log-posterior: log(P(c)) + sum(-0.5 * log(2*pi*sigma2_cj) - ((x_j - mu_cj)^2 / (2*sigma2_cj))) for both classes, and output the predicted class (0 or 1).",
+		story: `<p>A viral epidemiology unit uses Gaussian Naive Bayes to screen for pathogen strains (Class 0: Benign, Class 1: Pathogenic). For each class <code>c</code>, each feature <code>j</code> follows a normal distribution with mean <code>mu_cj</code> and population variance <code>sigma2_cj = (1 / N_c) * sum (x_{ij} - mu_cj)^2</code> (with variance floor <code>eps = 1e-6</code>, i.e., <code>max(sigma2_cj, 1e-6)</code>). The class prior is <code>P(c) = N_c / N</code>.</p>`,
+		task: "Given training data, compute the unnormalized log-posterior: log(P(c)) + sum(-0.5 * log(2*pi*sigma2_cj) - ((x_j - mu_cj)^2 / (2*sigma2_cj))) for both classes, and output the predicted class (0 or 1). Use population variance with epsilon floor 1e-6.",
 		inputFormat: `<p>The first line contains integers <code>N</code> (samples) and <code>D</code> (features).</p>
 <p>The next <code>N</code> lines each contain <code>D</code> real numbers followed by binary label <code>c</code> (0 or 1).</p>
 <p>The last line contains <code>D</code> real numbers: query instance <code>q</code>.</p>`,
@@ -161,7 +161,9 @@ export const classificationProblems: MLProblemDefinition[] = [
 		constraints: formatConstraints([
 			"4 <= N <= 100",
 			"1 <= D <= 5",
-			"Both classes have at least 2 samples"
+			"Both classes have at least 2 samples",
+			"Use population variance: sigma2_cj = (1 / N_c) * sum (x_ij - mu_cj)^2",
+			"Variance floor: max(sigma2_cj, 1e-6)"
 		]),
 		points: 150,
 		customCheckerType: "whitespace",
@@ -602,7 +604,7 @@ export const classificationProblems: MLProblemDefinition[] = [
 		category: "machine-learning",
 		tags: ["machine-learning", "svm", "support-vector-machine", "optimization"],
 		description: "Compute the geometric margin 2 / ||w||_2 and identify support vectors on the decision boundary.",
-		story: `<p>A terrain navigation rover on Saturn's moon Titan classifies terrain as Navigable (+1) or Hazard (-1) using a Hard-Margin Linear Support Vector Machine. Given the separating hyperplane parameters <code>w</code> and <code>b</code>, the geometric margin is <code>M = 2 / ||w||_2</code>. Support vectors are data points that satisfy <code>y_i * (dot(w, x_i) + b) = 1.0</code> (within floating-point tolerance 1e-4).</p>`,
+		story: `<p>A terrain navigation rover on Saturn's moon Titan classifies terrain as Navigable (+1) or Hazard (-1) using a Hard-Margin Linear Support Vector Machine. Given the separating hyperplane parameters <code>w</code> and <code>b</code>, the geometric margin is <code>M = 2 / ||w||_2</code>. Support vectors are data points that satisfy <code>|y_i * (dot(w, x_i) + b) - 1.0| <= 1e-3</code>.</p>`,
 		task: "Given hyperplane parameters [b, w] and N points, output the geometric margin and the count of support vectors.",
 		inputFormat: `<p>The first line contains integers <code>D</code> (dimension) and <code>N</code> (number of points).</p>
 <p>The second line contains <code>b</code> followed by <code>D</code> weights <code>w[1] ... w[D]</code>.</p>
@@ -613,7 +615,8 @@ export const classificationProblems: MLProblemDefinition[] = [
 		constraints: formatConstraints([
 			"1 <= D <= 5",
 			"2 <= N <= 50",
-			"||w|| > 0"
+			"||w|| > 0",
+			"Support vector condition: |y_i * (dot(w, x_i) + b) - 1.0| <= 1e-3"
 		]),
 		points: 150,
 		customCheckerType: "whitespace",

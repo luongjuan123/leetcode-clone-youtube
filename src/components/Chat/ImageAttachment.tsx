@@ -18,6 +18,39 @@ export const ImageAttachment: React.FC<ImageAttachmentProps> = ({
 }) => {
 	const { blobUrl, loading, error, retry } = useAuthorizedChatMedia(attachment);
 
+	// 0. Active Uploading State with inline progress bar
+	if (attachment.isUploading || (attachment.uploadProgress !== undefined && attachment.uploadProgress < 100)) {
+		const progress = attachment.uploadProgress ?? 0;
+		return (
+			<div className={`relative rounded-xl overflow-hidden border border-black/20 shadow-sm max-w-[280px] sm:max-w-[380px] ${className}`}>
+				{attachment.url ? (
+					<img
+						src={attachment.url}
+						alt={attachment.name}
+						className="max-h-72 sm:max-h-80 w-auto object-cover rounded-xl filter brightness-50"
+					/>
+				) : (
+					<div className="w-56 h-48 bg-black/40 flex items-center justify-center">
+						<FaImage size={24} className="text-white/40" />
+					</div>
+				)}
+				<div className="absolute inset-0 flex flex-col items-center justify-center p-3 text-white">
+					<div className="w-8 h-8 rounded-full border-2 border-white/20 border-t-brand-orange animate-spin mb-2" />
+					<span className="text-xs font-mono font-bold">{progress}%</span>
+					<div className="w-32 bg-white/20 rounded-full h-1.5 mt-2 overflow-hidden">
+						<div
+							className="bg-brand-orange h-full rounded-full transition-all duration-200"
+							style={{ width: `${progress}%` }}
+						/>
+					</div>
+					<span className="text-[10px] text-white/80 truncate max-w-[200px] mt-1 font-mono">
+						Uploading...
+					</span>
+				</div>
+			</div>
+		);
+	}
+
 	// 1. Loading Skeleton State (Smooth aspect-ratio placeholder, zero layout shift)
 	if (loading) {
 		return (

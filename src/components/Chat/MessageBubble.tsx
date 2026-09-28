@@ -79,6 +79,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 			{/* Bubble Shell */}
 			<div
 				className={`relative rounded-2xl p-3 shadow-sm transition-all duration-150 ${
+					message.deliveryStatus === "sending" ? "opacity-85" : "opacity-100"
+				} ${
 					isOutgoing
 						? "bg-brand-orange text-white rounded-br-sm"
 						: "bg-dark-fill-3 border border-border-subtle text-text-primary rounded-bl-sm"

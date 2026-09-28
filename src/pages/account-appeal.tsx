@@ -192,10 +192,12 @@ const AccountAppealPage: React.FC = () => {
 				throw new Error(data.error?.message || data.message || "Failed to submit appeal.");
 			}
 
-			setFeedback({ type: "success", text: "Appeal submitted successfully. Page will reload..." });
-			setTimeout(() => {
-				window.location.reload();
-			}, 2500);
+			setFeedback({ type: "success", text: "Appeal submitted successfully! Your case is now under review." });
+			setModState((prev) => ({
+				...prev,
+				status: "APPEALED",
+				deleteTimerPaused: true
+			}));
 		} catch (err: any) {
 			setFeedback({ type: "error", text: err.message });
 		} finally {

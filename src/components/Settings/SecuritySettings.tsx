@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/router";
 import { auth } from "@/firebase/firebase";
 import { useAuthState } from "react-firebase-hooks/auth";
 import {
@@ -43,6 +44,7 @@ interface SecurityScoreData {
 }
 
 export default function SecuritySettings() {
+	const router = useRouter();
 	const [user] = useAuthState(auth);
 	const [activeTab, setActiveTab] = useState<"overview" | "password" | "mfa" | "sessions" | "history">("overview");
 
@@ -294,7 +296,7 @@ export default function SecuritySettings() {
 						localStorage.removeItem("bc_session_id");
 					}
 					await auth.signOut();
-					window.location.href = "/";
+					router.push("/");
 				}, 2200);
 			} else {
 				setModalError(data.error || "Verification failed.");
@@ -377,7 +379,7 @@ export default function SecuritySettings() {
 						localStorage.removeItem("bc_session_id");
 					}
 					await auth.signOut();
-					window.location.href = "/";
+					router.push("/");
 				} else {
 					fetchSecurityData();
 				}

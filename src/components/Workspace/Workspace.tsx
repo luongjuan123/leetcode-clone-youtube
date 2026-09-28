@@ -74,7 +74,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ problem, contestId }) => {
 	const [customInputChecked, setCustomInputChecked] = useState(false);
 	const [customInputText, setCustomInputText] = useState("");
 	const [activeTestCaseId, setActiveTestCaseId] = useState(0);
-	const [consoleTab, setConsoleTab] = useState<"testcases" | "custominput" | "results">("testcases");
+	const [consoleTab, setConsoleTab] = useState<"testcases" | "custominput" | "results" | "submission">("testcases");
 	const [activeExampleId, setActiveExampleId] = useState(0);
 	
 	const [fontSize] = useLocalStorage("lcc-fontSize", "16px");
@@ -1087,11 +1087,9 @@ const Workspace: React.FC<WorkspaceProps> = ({ problem, contestId }) => {
 																		<td className="px-6 py-4 text-right pr-8">
 																			<button
 																				onClick={() => {
-																					if (contestId) {
-																						router.push(`/contests/${contestId}/problems/${problem.id}/submissions/${sub.id}`);
-																					} else {
-																						router.push(`/problems/${problem.id}/submissions/${sub.id}`);
-																					}
+																					setSelectedSub(sub);
+																					setSelectedSubTestCaseIndex(0);
+																					setConsoleTab("submission");
 																				}}
 																				className="bg-dark-fill-3 hover:bg-dark-fill-2 border border-border-subtle text-text-secondary text-xs font-bold px-4.5 py-1.5 rounded-lg transition duration-150 shadow-sm"
 																				style={{ borderColor: "var(--border-subtle)" }}

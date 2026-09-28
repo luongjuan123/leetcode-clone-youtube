@@ -1,6 +1,7 @@
 import admin from "firebase-admin";
 import { allStoryProblems, validateProblemDefinitions } from "./problem-generator/index";
 import { formatProblemStatement } from "./problem-generator/utils";
+import { getEnrichedProblemFields } from "./specs/index";
 
 const projectId = process.env.FIREBASE_PROJECT_ID || "beastcode-7555e";
 
@@ -52,6 +53,9 @@ async function main() {
 
 			totalTestCasesGenerated += testCases.length;
 
+			const baseStatement = formatProblemStatement(def.title, def.story, def.task);
+			const enriched = getEnrichedProblemFields(def.id, baseStatement, def.constraints);
+
 			const docPayload = {
 				id: def.id,
 				slug: def.id,
@@ -60,10 +64,10 @@ async function main() {
 				category: def.category,
 				tags: def.tags,
 				description: def.description,
-				problemStatement: formatProblemStatement(def.title, def.story, def.task),
+				problemStatement: enriched ? enriched.enrichedStatement : baseStatement,
 				inputFormat: def.inputFormat,
 				outputFormat: def.outputFormat,
-				constraints: def.constraints,
+				constraints: enriched ? enriched.enrichedConstraints : def.constraints,
 				starterCode: "",
 				starterFunctionName: "",
 				handlerFunction: "",

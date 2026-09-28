@@ -147,8 +147,8 @@ export const ContestsTab: React.FC<ContestsTabProps> = ({ triggerStatusMessage }
 		try {
 			const contestRef = doc(firestore, "contests", id);
 			await updateDoc(contestRef, { status: "archived" });
+			setContests((prev) => prev.map((c) => (c.id === id ? { ...c, status: "archived" } : c)));
 			triggerStatusMessage("success", "Contest status set to Archived");
-			fetchContests();
 		} catch (error: any) {
 			console.error("Error archiving contest:", error);
 			triggerStatusMessage("error", "Failed to archive contest.");
@@ -213,8 +213,22 @@ export const ContestsTab: React.FC<ContestsTabProps> = ({ triggerStatusMessage }
 				fastestAccepted: {}
 			});
 
+			const clonedItem: ContestListItem = {
+				id: newId,
+				title: newTitle,
+				description: origData.description || "",
+				startTime: origData.startTime || 0,
+				endTime: origData.endTime || 0,
+				duration: origData.duration || 120,
+				visibility: origData.visibility || "public",
+				securityLevel: origData.securityLevel || "standard",
+				status: "draft",
+				createdAt: Date.now(),
+				leaderboardFreeze: origData.leaderboardFreeze || 0,
+				registrationEnabled: origData.registrationEnabled !== false
+			};
+			setContests((prev) => [clonedItem, ...prev]);
 			triggerStatusMessage("success", `Contest cloned successfully as "${newTitle}"!`);
-			fetchContests();
 		} catch (error: any) {
 			console.error("Error cloning contest:", error);
 			triggerStatusMessage("error", getFriendlyErrorMessage(error, "Cloning failed. Please try again."));
@@ -226,12 +240,13 @@ export const ContestsTab: React.FC<ContestsTabProps> = ({ triggerStatusMessage }
 	// Delete Contest
 	const handleConfirmDelete = async () => {
 		if (!contestToDelete) return;
+		const deletedId = contestToDelete.id;
 		try {
 			// 1. Delete contest doc
-			await deleteDoc(doc(firestore, "contests", contestToDelete.id));
+			await deleteDoc(doc(firestore, "contests", deletedId));
 
 			// 2. Delete contest problems mapping
-			const cpQuery = query(collection(firestore, "contest_problems"), where("contestId", "==", contestToDelete.id));
+			const cpQuery = query(collection(firestore, "contest_problems"), where("contestId", "==", deletedId));
 			const cpSnapshot = await getDocs(cpQuery);
 			const batch = writeBatch(firestore);
 			cpSnapshot.forEach((docSnap) => {
@@ -240,11 +255,11 @@ export const ContestsTab: React.FC<ContestsTabProps> = ({ triggerStatusMessage }
 			await batch.commit();
 
 			// 3. Delete statistics
-			await deleteDoc(doc(firestore, "contest_statistics", contestToDelete.id));
+			await deleteDoc(doc(firestore, "contest_statistics", deletedId));
 
+			setContests((prev) => prev.filter((c) => c.id !== deletedId));
 			triggerStatusMessage("success", "Contest deleted successfully");
 			setContestToDelete(null);
-			fetchContests();
 		} catch (error: any) {
 			console.error("Error deleting contest:", error);
 			triggerStatusMessage("error", "Failed to delete contest.");

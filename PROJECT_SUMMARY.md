@@ -1,11 +1,12 @@
-# BeastCode Platform: Comprehensive Technical Reference & Handover Document
+# BeastCode Platform: Comprehensive Technical Reference & Practical Handover Specification
 
-> **Document Type:** Production Architecture Audit, Engineering Reference, and Practical Handover Specification  
+> **Document Type:** Production Architecture Audit, Systems Reference, and Practical Handover Specification  
 > **Repository:** `leetcode-clone-youtube` (`leetcode-yt` v0.1.0)  
-> **Canonical Target File:** `PROJECT_SUMMARY.md`  
-> **Inspection Date:** September 22, 2026  
-> **Inspected Git Revision:** `d7603da` (Branch: `master`, Tracking: `origin/master`, Status: Clean)  
-> **Production Deployment:** `https://www.bomboclatbeastcode.codes`  
+> **Canonical Target File:** [`PROJECT_SUMMARY.md`](file:///home/juan/Work%20Space/leetcode-clone-youtube/PROJECT_SUMMARY.md)  
+> **Inspection Date:** September 28, 2026  
+> **Inspected Git Revision:** `abca62627c2b62595f0f1c25307ca173dcff3b52` (Branch: `master`, Tracking: `origin/master`, Diverged by 8 and 1 commits with `upstream/master`)  
+> **Working Tree Status:** Unstaged modifications in `scripts/ml-problem-generator/` and `scripts/seed-*.ts`; Untracked generator scripts and hyperparameter specifications in `scripts/`  
+> **Production Target Host:** [`https://www.bomboclatbeastcode.codes`](https://www.bomboclatbeastcode.codes) (Firebase App Hosting / Google Cloud Run Project: `beastcode-7555e`)  
 > **Primary Authors / Maintainers:** Juan Luong (`luongjuan123`) & Collaborators  
 
 ---
@@ -18,11 +19,12 @@
 4. [System Architecture and Component Relationships](#4-system-architecture-and-component-relationships)
 5. [Feature Inventory and Implementation Status](#5-feature-inventory-and-implementation-status)
 6. [Detailed Workflow Walkthroughs](#6-detailed-workflow-walkthroughs)
-   - 6.1 Code Execution and Authoritative Submission Grading
+   - 6.1 Code Execution and Authoritative Submission Grading Pipeline
    - 6.2 ICPC-Style Contest Management, Live Standings, and Anti-Cheat Proctoring
    - 6.3 Multi-Tenant Institutional Workspaces (Universities and Corporations)
-   - 6.4 Authentication, Idempotent Account Provisioning, and Security
-   - 6.5 Moderation, Warning Escalation, Suspension, and Appeals
+   - 6.4 Real-Time Chat & Multimedia Messaging Subsystem
+   - 6.5 Authentication, Idempotent Account Provisioning, and Onboarding Coordinator
+   - 6.6 Community Discussions, Moderation Escalation, Suspension, and Appeals
 7. [Frontend and User-Facing Interface](#7-frontend-and-user-facing-interface)
 8. [Backend, Services, APIs, and Event Contracts](#8-backend-services-apis-and-event-contracts)
 9. [Data Model, Persistence, and Cloud Firestore Schema](#9-data-model-persistence-and-cloud-firestore-schema)
@@ -44,705 +46,592 @@
 ## 1. Executive Overview and Project Identity
 
 ### 1.1 What the Project Is
-**BeastCode** (registered in `package.json` as `leetcode-yt` at version `0.1.0`) is a full-stack, enterprise-grade online judge, competitive programming, and institutional educational management platform. Built upon Next.js 13 (Pages Router), TypeScript 5, Tailwind CSS, Google Cloud Firestore, Redis, and Firebase Authentication, BeastCode transcends generic code practice clones by offering a multi-tiered execution engine, formal ICPC contest proctoring with client-side anti-cheat enforcement, full multi-tenant institutional suites for university departments and enterprise technical recruiters, a threaded discussion forum with rich media and polls, and an end-to-end transactional email and notification queuing pipeline.
+**BeastCode** (registered in [`package.json`](file:///home/juan/Work%20Space/leetcode-clone-youtube/package.json#L2) under the project name `leetcode-yt` at version `0.1.0`) is a full-stack, enterprise-grade online judge, competitive programming, and institutional educational management platform. Built upon Next.js 13 (Pages Router), TypeScript 5, Tailwind CSS, Google Cloud Firestore, Redis, and Firebase Authentication, BeastCode transcends simple educational coding practice by implementing:
+- A dual-path sandboxed code execution engine (local Linux kernel namespaces and cgroups v2 with remote Judge0 CE / Extra-CE cluster fallback).
+- An authoritative ICPC-style timed contest proctoring subsystem with client-side anti-cheat enforcement (fullscreen locks, focus blur tracking, and automatic termination).
+- A multi-tenant institutional workspace architecture supporting university departments and enterprise recruiters (custom roles, permissions, roadmaps, gradebooks, assessments, and verifiable certificates).
+- A comprehensive real-time chat and multimedia messaging subsystem (direct messaging, organization channels, voice notes, attachments, reactions, and pinning).
+- An algorithmic and machine learning problem generation pipeline capable of synthesizing, parameterizing, and seeding hundreds of problems with mathematical hyperparameter specifications.
+- A threaded community forum with rich media embeds and polls.
+- A complete transactional email and notification queuing pipeline.
 
 ### 1.2 Core Problem Addressed
-Standard educational code assessment tools and toy LeetCode clones suffer from critical structural weaknesses:
-1. **Unsafe / Naive Execution:** Many online judges evaluate untrusted user code in unconstrained Node.js environments or rely solely on public third-party APIs without fallback mechanisms, custom memory cgroups, or special judge support.
-2. **Lack of Institutional Tenancy:** Educational institutions and tech employers are forced to use disparate tools for problem curation, classroom homework assignment, candidate screening, proctored exams, and student progress tracking.
-3. **Contest Integrity Gaps:** Typical clones lack proctoring mechanisms to detect browser unfocusing, window blurring, and unauthorized multi-tab navigation during timed assessments.
-4. **Data Leakage:** Naive Next.js implementations often expose confidential test cases and solutions within client-side bundles (`__NEXT_DATA__`).
+Standard educational code assessment tools and toy clones suffer from critical architectural weaknesses:
+1. **Unsafe or Naive Execution:** Untrusted user code is frequently evaluated in unconstrained host runtimes or entirely outsourced to public third-party APIs without fallback mechanisms, memory isolation, or specialized Python ML environments.
+2. **Lack of Institutional Tenancy:** Educational institutions and technical recruiters are forced to stitch together disjoint tools for homework curation, classroom management, candidate screening, proctored exams, and student gradebook tracking.
+3. **Contest Integrity Vulnerabilities:** Standard platforms lack browser proctoring to detect window switching, tab unfocusing, and fullscreen exits during high-stakes assessments.
+4. **Grading Testcase Leakage:** Naive Next.js implementations often expose confidential test cases and reference solutions in client-side bundles or `__NEXT_DATA__`.
+5. **Rigid Onboarding:** Inflexible user profiles trap non-student competitive programmers in mandatory university-cohort setups.
 
-BeastCode solves these challenges through:
-- A **Dual-Path Sandboxed Judge Engine** combining local Linux kernel namespaces (`unshare`) and control groups (`cgroups v2`) with remote Judge0 CE / Extra-CE cluster fallback.
+BeastCode directly solves these challenges through:
+- A **Dual-Path Sandboxed Judge Engine** combining local Linux kernel namespaces (`unshare --fork --pid --net --mount`) and control groups (`cgroups v2`) with remote Judge0 CE / Extra-CE cluster fallback.
 - An **Authoritative Multi-Tenant Organization Suite** supporting custom roles, courses, roadmaps, gradebooks, assessments, and verifiable certificate issuance.
 - **Client-Side Anti-Cheat Proctoring** with fullscreen lock, window-blur counters, and automatic session disqualification.
-- Strict **Data Sanitization and Tiered Loaders** that permanently strip confidential grading test cases from public client DTOs.
+- Strict **Data Sanitization and Tiered Loaders** (`getPublicProblem` vs `getProblemForGrading`) that permanently strip confidential grading test cases from public client DTOs.
+- An **Adaptive Onboarding Coordinator** (`src/utils/onboarding.ts`) that smoothly distinguishes student candidates, competitive programmers, and legacy accounts.
 
-### 1.3 Project Type and Maturity
-- **Observed Architecture:** Web application with serverless API microservices deployed on Google Cloud Run via Firebase App Hosting.
-- **Current Maturity:** **Production-Grade Advanced Pilot / Feature-Complete Platform**. 
-  - The working tree is clean on branch `master` at commit `d7603da`.
-  - Static type checking via `npx tsc --noEmit` passes with **0 errors**.
-  - ESLint analysis via `npm run lint` passes with **0 fatal errors** (only minor warnings regarding Next.js `<img>` optimization and hook dependency arrays).
-  - The database layer enforces **38 distinct Cloud Firestore collections** guarded by 350 lines of declarative security rules in `firestore.rules` and 307 composite index definitions in `firestore.indexes.json`.
+### 1.3 Project Type and Maturity Assessment
+- **Project Type:** Monolithic Full-Stack Web Application (Next.js Pages Router with hybrid client-side Firebase SDK and server-side Firebase Admin SDK API routes).
+- **Maturity Level:** **Late Stage Production Ready / Active Enhancement Phase**.
+  - *Basis for Maturity Rating:* Core authentication, problem viewing, code execution, ICPC contest management, multi-tenant organizations, and real-time chat are fully functional in code and backed by extensive automated regression and integration suites (`tests/chat/`, `scripts/run-chat-tests.ts`, `scripts/verify-auth-lifecycle.ts`). The codebase compiles with zero TypeScript errors (`tsc --noEmit` = 0) and passes ESLint (`npm run lint` = 0 errors).
+  - *Active Enhancements:* The working tree includes newly developed generative problem suites (`scripts/ml-problem-generator/`, `scripts/linear-regression-generator/`, `scripts/model-training-generator/`, `scripts/specs/`) designed to scale the platform's machine learning problem catalog to over 300 problems.
 
-### 1.4 What a New Contributor Most Needs to Understand
-Before making changes, maintainers must recognize that:
-1. **Client DTOs vs. Authoritative Grader DTOs are Separated:** Never import `src/utils/problemLoader.ts`'s `getProblemForGrading` on client pages. Only `getPublicProblem` is client-safe. Confidential inputs/outputs must never enter client props.
-2. **All Server-Side Administrative Mutations Must Route Through Firebase Admin:** Client Firestore rules explicitly forbid standard users from mutating global problems, contest parameters, or other users' profile records.
-3. **Execution Routing is Dynamic:** The judge automatically switches between local Linux compilers (`g++`, `gcc`, `javac`, `python3`) and remote Judge0 APIs based on binary availability on the hosting server.
-4. **Submissions Execute Atomically:** Grading updates user experience points, tier ranks, solve counters, and problem attempt metrics in a single Firestore database transaction.
+### 1.4 Current Inspection Context
+- **Inspected Git Commit:** `abca62627c2b62595f0f1c25307ca173dcff3b52` (Commit message: `add new feature, fix stuff`, Date: Sat Sep 26 11:49:24 2026 +0700).
+- **Working Tree Delta:** Unstaged modifications in generator scripts (`scripts/ml-problem-generator/categories/classification.ts`, `clustering.ts`, `regression.ts`, `scripts/seed-100-ml-problems.ts`, `scripts/seed-100-story-problems.ts`) and 10 untracked generator scripts/directories (`scripts/linear-regression-generator/`, `scripts/model-training-generator/`, `scripts/specs/`, etc.).
+- **Production URL:** `https://www.bomboclatbeastcode.codes` hosted on Firebase App Hosting (Google Cloud Run backend).
+
+### 1.5 What a New Contributor Must Understand First
+1. **Never import `firebase-admin` into client components.** Client-side code must use [`src/firebase/firebase.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/firebase/firebase.ts). Server-side API routes and loaders must use [`src/firebase/firebaseAdmin.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/firebase/firebaseAdmin.ts).
+2. **Never expose full problem objects to client props.** Always use [`getPublicProblem`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/utils/problemLoader.ts#L123) in page endpoints (`getStaticProps`, `getServerSideProps`). Only [`getProblemForGrading`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/utils/problemLoader.ts#L17) within server-side `/api/submit` may access secret grading test cases.
+3. **Admin privileges are strictly verified.** A claim in `users/{uid}.isAdmin` is treated as untrusted metadata. Authoritative admin authority requires membership in `/platformAdmins/{uid}` (`active === true`) or cryptographically verified Firebase Custom Claims checked via [`verifyPlatformAdmin`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/utils/withAdminGuard.ts#L10).
+4. **Firestore Security Rules enforce participant-level access.** The chat and messaging subsystem restricts conversation reads and updates via `isConversationParticipant`.
 
 ---
 
 ## 2. Problem, Users, Scope, and Domain Concepts
 
-### 2.1 User Personas and Roles
+### 2.1 Concrete Problems Solved
+- **Online Judging with ML Support:** Traditional judges only support standard C++, Java, or basic Python. BeastCode supports Python with NumPy, SciPy, and ML modules via a specialized Judge0 Extra-CE cluster (`https://extra-ce.judge0.com`), with local Linux sandbox fallback.
+- **Cheating in Remote Contests:** Unproctored web judges permit students to copy code from other tabs or LLM chats. BeastCode integrates a client-side integrity watcher that captures blur events, window switches, and fullscreen exits, logging them to `contest_integrity_events` and automatically disqualifying repeat offenders.
+- **Classroom and Enterprise Management:** Educational institutions need private problem repositories, student rosters, automated assignments, and verifiable completion certificates, all integrated with the judge.
 
-```mermaid
-graph LR
-    User([Standard User / Student]) --> Practice[Solve Practice Problems]
-    User --> Contests[Join ICPC Contests]
-    User --> Forum[Participate in Threads]
-    
-    OrgMember([Organization Member]) --> OrgCourse[Access University Courses]
-    OrgMember --> OrgTeam[Compete in Org Teams]
-    OrgMember --> OrgAssess[Take Recruiter Assessments]
-    
-    Instructor([Instructor / Coach]) --> Curate[Curate Private Problems]
-    Instructor --> Gradebook[Monitor Student Gradebook]
-    Instructor --> Certificates[Issue Course Certificates]
-    
-    Admin([System Admin / Moderator]) --> ModReports[Review Abuse Reports]
-    Admin --> BanAppeals[Process Suspension Appeals]
-    Admin --> EmailQueue[Manage Notification Outbox]
+### 2.2 System Actors and User Roles
+```
++───────────────────────────────────────────────────────────────────────────────────+
+|                                    ACTORS                                         |
++───────────────────────────────────────────────────────────────────────────────────+
+| 1. Unauthenticated Guest   : Public problem list, static problem views, auth UI   |
+| 2. Authenticated Solver    : Code execution, submission grading, chat, profile    |
+| 3. Contest Participant     : Timed contest environment, anti-cheat proctoring     |
+| 4. Org Member / Student    : Institutional roadmaps, assignments, courses, grade  |
+| 5. Org Instructor / Coach  : Classroom assignments, private problem authoring     |
+| 6. Org Administrator       : Member invites, team assignments, roles, settings    |
+| 7. Org Owner               : Workspace management, org deletion, full ownership   |
+| 8. Platform Administrator  : Problem authoring, contest setup, moderation, bans   |
+| 9. Super Administrator     : Permanent account deletion, admin promotion/revoking |
+| 10. Automated Cron System  : Standings recalculation, notification queue dispatch  |
++───────────────────────────────────────────────────────────────────────────────────+
 ```
 
-1. **Competitive Programmer / Student:**
-   - Browses problem lists filtered by difficulty (Easy, Medium, Hard, ML) and categorized tags.
-   - Solves problems in 5 supported languages: JavaScript, Python, C++, C, Java.
-   - Competes in live or virtual contests with ICPC scoring and anti-cheat tracking.
-   - Earns XP, levels up across 10 defined mastery tiers (Newbie to Mythic), and climbs global leaderboards.
-2. **Academic Instructor / Coach (University Tenant):**
-   - Creates and administers private educational organizations (`orgs/[slug]`).
-   - Defines custom organizational roles with granular permissions (`organization.manageCourses`, `organization.assignHomework`).
-   - Organizes roadmaps with weekly modules, lecture resources (PDF, video, markdown), and assignments.
-   - Tracks student grades in real-time gradebooks and issues cryptographically verifiable completion certificates.
-3. **Corporate Recruiter (Enterprise Tenant):**
-   - Publishes technical job vacancies and manages applicant pipelines.
-   - Configures timed, private coding assessments and mock interviews.
-   - Evaluates candidate execution metrics, runtime efficiency, and code quality.
-4. **Platform Administrator & Moderator:**
-   - Manages global problem catalogues, special judge validator scripts, and execution profile limits.
-   - Enforces trust and safety policies: reviews user reports, issues formal warnings, enacts temporary or permanent suspensions, and audits appeals.
-   - Monitors operational health, inspects Redis standings caches, and supervises the transactional email queue.
-
-### 2.2 Domain Entities and Glossary
-
-- **Problem:** An algorithmic programming challenge containing statement markdown, constraints, starter code templates, sample test cases, secret grading suites, execution limits, and optional custom verifiers (special judge).
-- **Execution Profile (`ExecutionProfile`):** Preset runtime and resource limits (`fast`, `normal`, `long`, `machine_learning`) defining CPU timeouts (500ms to 15,000ms), memory limits (64MB to 1024MB), and stdout size caps (8KB to 256KB).
-- **Contest (`Contest`):** A scheduled competitive event with strict start/end timestamps, penalty rules (e.g., 20 minutes per rejected submission), freeze windows (obscuring live ranks during final minutes), and anti-cheat security levels.
-- **Virtual Participation:** A simulation mode allowing contestants to take past contests with an individual countdown timer while competing against historical participant submissions.
-- **Anti-Cheat Integrity Event:** A telemetry record capturing browser tab blurs, fullscreen exits, or window deviations during proctored exams. Exceeding warning thresholds triggers automated termination.
-- **Organization (`Organization`):** An isolated multi-tenant workspace with unique slug, custom roles, private problem repository, team structures, announcements, and asset storage.
-- **Special Judge (`customChecker`):** A domain-specific test validator script written in Python or C++ executed when problem verdicts require floating-point tolerance or non-unique valid outputs.
+### 2.3 Domain Concepts and Vocabulary
+- **Problem:** An algorithmic or machine learning challenge. Can be *Static* (bundled in `src/utils/problems/`), *Dynamic* (stored in Firestore `/problems/{pid}`), or *Private* (stored in `/organizations/{id}/private-problems/{pid}`).
+- **Sample vs Hidden Testcase:** Samples (`isSample: true`) are visible to users in the problem description and playground. Hidden testcases are accessible strictly server-side by `/api/submit` for authoritative verdict evaluation.
+- **Execution Profile:** A preset resource limit (`fast`, `normal`, `long`, `machine_learning`) defining CPU timeout (ms), memory limit (MB), max output size, and process limits (`src/utils/executionProfiles.ts`).
+- **Contest Submission vs Standard Submission:** Standard submissions go to `/submissions/{id}` and award XP/score to the user profile. Contest submissions go to `/contest_submissions/{id}` during active contests and feed the live ICPC standings calculation.
+- **Integrity Event:** An anti-cheat telemetry entry recorded in `/contest_integrity_events/{id}` capturing `fullscreen_exit`, `tab_switch`, or focus loss, carrying timestamps, user UIDs, and escalation counts.
+- **Conversation:** A chat entity in `/conversations/{cid}`. Direct messages use deterministic IDs (`dm_${minUid}_${maxUid}`). Organization channels use `org_${orgId}_${channelId}`.
+- **Onboarding State:** Tracked via `isOnboarded: boolean` in `users/{uid}`. Distinct from university profile completeness (`isStudent`, `school`, `studentId`, `faculty`, `class`).
 
 ---
 
 ## 3. Repository and Technology Map
 
-### 3.1 Technology Stack Matrix
+### 3.1 Directory and Package Map
 
-| Layer | Technology | Version | Purpose in BeastCode |
-| :--- | :--- | :--- | :--- |
-| **Framework** | Next.js | `13.2.4` | Server-Side Rendering (SSR), Static Generation (ISR), API Route Handlers |
-| **Runtime & Language** | Node.js / TypeScript | `v24.16.0` / `5.0.2` | Primary server runtime and static type checking across 100% of source files |
-| **Client UI & Styling** | Tailwind CSS / PostCSS | `3.2.7` / `8.4.21` | Dark-first design system, custom themes (Dark, Light, Sakura, Red), glassmorphism |
-| **Global State** | Recoil | `0.7.7` | Reactive state atoms for modals, code execution status, composer drawer |
-| **Primary Persistence** | Cloud Firestore | SDK `9.18.0` / Admin `13.10.0` | NoSQL document store powering 38 distinct collections |
-| **In-Memory Cache** | Redis (`ioredis`) | `5.11.1` | Contest leaderboard caching, dirty invalidation flags, execution hashing |
-| **Code Editor** | CodeMirror 6 | `4.19.16` | Web code editor with syntax highlighting for C++, C, Java, JS, Python |
-| **Local Sandboxing** | Linux Namespaces & Cgroups v2 | Native OS | `unshare` subprocess isolation with CPU, memory, and pid quota enforcement |
-| **Remote Judge** | Judge0 CE / Extra CE | REST API | Distributed cloud compilation and execution fallback engine |
-| **Email & Delivery** | Nodemailer | `8.0.11` | SMTP outbox dispatcher with exponential retry backoff and Ethereal fallback |
-| **Monetization** | Stripe | `22.2.0` | Payment intents and hosted checkout sessions for infrastructure donations |
-| **Hosting & Infra** | Firebase App Hosting | Cloud Run | Containerized serverless application hosting on Google Cloud |
+| Path | Responsibility | Important Symbols / Entry Points | Related Components |
+|---|---|---|---|
+| [`src/pages/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages) | Next.js Pages router endpoints | `_app.tsx`, `index.tsx`, `profile.tsx`, `settings.tsx` | UI layouts, Topbar |
+| [`src/pages/problems/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/problems) | Problem workspace and submissions | `[pid].tsx`, `[pid]/submissions/[submissionId].tsx` | Workspace, CodeMirror |
+| [`src/pages/contests/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/contests) | Contest hub, live contest, and proctoring | `[cid]/index.tsx`, `[cid]/problems/[pid].tsx` | Anti-cheat, Leaderboard |
+| [`src/pages/orgs/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/orgs) | Multi-tenant organization suite | `index.tsx`, `[slug].tsx`, `invite/[linkId].tsx` | `orgEngine.ts`, Gradebook |
+| [`src/pages/messages/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/messages) | Real-time chat application | `index.tsx`, `[cid].tsx` | `ChatShell.tsx`, `useMessages.ts` |
+| [`src/pages/admin/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/admin) | Platform administration dashboard | `index.tsx`, `moderation.tsx`, `notifications.tsx` | `withAdminGuard.ts` |
+| [`src/pages/api/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/api) | Serverless backend API handlers | `run.ts`, `submit.ts`, `leaderboard.ts` | Firebase Admin SDK, Redis |
+| [`src/pages/api/chat/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/api/chat) | Chat API endpoints | `conversations/index.ts`, `attachment.ts`, `upload.ts` | Firestore Admin, Storage |
+| [`src/pages/api/organizations/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/api/organizations) | Multi-tenant org API endpoints | `index.ts`, `[id]/members/`, `[id]/courses/` | `orgEngine.ts` |
+| [`src/components/Chat/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/components/Chat) | Real-time messaging UI components | `ChatShell.tsx`, `MessageList.tsx`, `MessageComposer.tsx` | `useMessages.ts`, CodeSnippet |
+| [`src/components/Workspace/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/components/Workspace) | Split coding workspace & editor | `Workspace.tsx`, `Playground/Playground.tsx` | CodeMirror 6, Split.js |
+| [`src/components/Modals/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/components/Modals) | Auth, Onboarding, and dialog modals | `ProfileSetupModal.tsx`, `Login.tsx`, `Signup.tsx` | Recoil `authModalAtom` |
+| [`src/firebase/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/firebase) | Client & Admin Firebase SDK init | `firebase.ts`, `firebaseAdmin.ts` | Firestore, Auth, Storage |
+| [`src/hooks/chat/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/hooks/chat) | Reactive chat state hooks | `useConversations.ts`, `useMessages.ts`, `useTyping.ts` | Firestore real-time listeners |
+| [`src/utils/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/utils) | Core engines, loaders, security utilities | `problemLoader.ts`, `orgEngine.ts`, `authMiddleware.ts` | `withAdminGuard.ts`, `redis.ts` |
+| [`scripts/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/scripts) | Generator scripts, migrations, QA test runners | `run-chat-tests.ts`, `seed-100-ml-problems.ts` | Playwright, ExcelJS, tsx |
+| [`tests/chat/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/tests/chat) | Comprehensive chat QA test suite | `manifest.ts`, `chatApi.test.ts`, `chatE2E.test.ts` | Playwright, Excel report |
 
-### 3.2 Directory and File Responsibility Index
+### 3.2 Technology Stack Breakdown
 
+```mermaid
+graph TD
+    subgraph Client [Browser / Frontend]
+        NextPages[Next.js 13 Pages Router]
+        ReactUI[React 18.2 + Tailwind CSS]
+        CM6[CodeMirror 6 Editor]
+        RecoilState[Recoil State Atoms]
+        FirebaseClient[Firebase Client SDK v9]
+    end
+
+    subgraph Server [Backend / Next.js API Routes]
+        APIHandler[Next.js API Route Handlers]
+        AdminAuth[Firebase Admin Auth verifyIdToken]
+        AdminDB[Firebase Admin Firestore]
+        AdminStorage[Google Cloud Storage]
+        RedisCache[ioredis v5 Cache & Queue]
+        Mailer[Nodemailer SMTP]
+    end
+
+    subgraph Judge [Execution Subsystem]
+        LocalJudge[Local Linux Sandbox unshare + cgroups v2]
+        Judge0Remote[Remote Judge0 CE / Extra-CE Clusters]
+    end
+
+    Client -->|HTTPS / REST| Server
+    FirebaseClient -->|Direct Snapshot Listener| AdminDB
+    APIHandler --> AdminAuth
+    APIHandler --> AdminDB
+    APIHandler --> AdminStorage
+    APIHandler --> RedisCache
+    APIHandler --> Mailer
+    APIHandler -->|Run Code / Submit| Judge
+    Judge -->|Fallback| Judge0Remote
 ```
-leetcode-clone-youtube/
-├── apphosting.yaml                    # Cloud Run serverless deployment config
-├── firebase.json                      # Firebase CLI configuration
-├── firestore.indexes.json             # Composite index definitions (307 lines)
-├── firestore.rules                    # Security rules engine (350 lines, 38 collections)
-├── next.config.js                     # Next.js image domain, redirect, and auth rewrite rules
-├── package.json                       # Dependencies and lifecycle scripts
-├── tailwind.config.js                 # Theme tokens, custom gradients, and keyframe animations
-├── tsconfig.json                      # Compiler options and path alias mappings (@/* -> ./src/*)
-├── scripts/                           # Maintenance, migration, and inspection scripts
-│   ├── check-threads.mjs              # Discussion forum integrity checks
-│   ├── db-cleanup-migration.mjs       # Database pruning and orphaned document migration
-│   ├── migrate-org-avatars.js         # Base64 avatar migration to GCS storage paths
-│   ├── seed-tags.mjs                  # Seed official problem and thread taxonomy tags
-│   └── test-grading-pipeline.ts       # Comprehensive regression test suite for grader loader
-├── src/
-│   ├── atoms/                         # Recoil state stores (authModalAtom, executionStateAtom, etc.)
-│   ├── components/                    # Component architecture (Admin, Chat, Workspace, etc.)
-│   ├── context/                       # React Contexts (SubmissionContext, RealtimeNotificationProvider)
-│   ├── firebase/                      # Client (firebase.ts) and Admin (firebaseAdmin.ts) SDK initializers
-│   ├── hooks/                         # Custom hooks (useAdmin, useContestStandings, useMessages, etc.)
-│   ├── pages/                         # Pages Router UI views and 135+ REST API routes
-│   ├── styles/                        # Theme tokens and global stylesheets
-│   └── utils/                         # Business logic engines (orgEngine, emailService, runCode, etc.)
-```
+
+- **Runtime & Framework:** Node.js v18 / v20 / v24 compatible; Next.js 13.2.4 (Pages Router).
+- **Languages:** TypeScript 5.0.2 (strict configuration in `tsconfig.json`).
+- **Styling & Design System:** Tailwind CSS 3.2.7 with CSS variable theme tokens (Dark, Surface, Brand Orange `#f59e0b`, elevated layers).
+- **Code Editor:** `@uiw/react-codemirror` (v4.19.16) with language extensions for C++, Java, JavaScript, Python.
+- **State Management:** Recoil 0.7.7 (`authModalAtom`, `executionStateAtom`, `ratingFeedbackAtom`).
+- **Primary Database:** Google Cloud Firestore (multi-region/regional database `beastcode-7555e`).
+- **Caching & Ephemeral Storage:** Redis 5.11.1 (`ioredis`) for session rate limits, standings caching, and notification queueing.
+- **Object Storage:** Google Cloud Storage / Firebase Storage bucket (`beastcode-media-348293518232`).
+- **Authentication:** Firebase Authentication with email/password, password reset flows, and custom admin claims.
+- **Code Execution:**
+  - *Local:* Node child processes wrapped in Linux `unshare --fork --pid --net --mount` with cgroups v2 resource capping.
+  - *Remote:* Public & self-hosted Judge0 CE (`https://ce.judge0.com`) and Judge0 Extra-CE (`https://extra-ce.judge0.com`).
+- **Email Delivery:** Nodemailer 8.0.11 connected to SMTP (Gmail or custom SMTP server).
+- **Payments:** Stripe SDK (`stripe` v22.2.0, `@stripe/stripe-js` v9.8.0).
+- **Testing & Tooling:** Playwright 1.63.0, ExcelJS 4.4.0, tsx 4.23.15, ESLint 8.36.0.
 
 ---
 
 ## 4. System Architecture and Component Relationships
 
-### 4.1 Topology Diagram
-
-```mermaid
-graph TB
-    subgraph Browser Client
-        UI[Next.js React UI]
-        CM[CodeMirror 6 Editor]
-        AC[Anti-Cheat Monitor]
-        RecoilStore[Recoil & Context State]
-    end
-
-    subgraph Firebase Cloud Platform
-        Auth[Firebase Auth Service]
-        Firestore[(Cloud Firestore - 38 Collections)]
-        Storage[Firebase Cloud Storage]
-    end
-
-    subgraph Backend Serverless API Next.js
-        APIRun["/api/run (Sandbox Engine)"]
-        APISubmit["/api/submit (Grading Pipeline)"]
-        APIOrg["/api/organizations/* (Multi-Tenancy)"]
-        APIChat["/api/chat/* (Real-Time Messaging)"]
-        APIEmail["/api/notifications/dispatch (Mailer)"]
-    end
-
-    subgraph Caching & Remote Services
-        Redis[(Redis Cache Instance)]
-        Judge0[Judge0 CE / Extra-CE Cluster]
-        StripeAPI[Stripe Payments API]
-        SMTP[SMTP Mail Relay]
-    end
-
-    UI -->|HTTP / REST| Backend Serverless API Next.js
-    UI -->|Direct SDK Read/Write| Firestore
-    UI -->|Sign In / Verify| Auth
-    AC -->|Log Tab/Fullscreen Violations| Firestore
-
-    APIRun -->|Check Local CLI| LocalRunner{Local Compilers Available?}
-    LocalRunner -->|Yes: unshare + cgroups| Sandbox[Linux Native Sandbox]
-    LocalRunner -->|No: HTTP Batch| Judge0
-    APIRun -->|Cache Verdict Hash| Redis
-
-    APISubmit -->|Atomic Transaction| Firestore
-    APISubmit -->|Invalidate Standings| Redis
-
-    APIEmail -->|Enqueues Outbox Item| Firestore
-    APIEmail -->|Processes Tasks| SMTP
-```
-
-### 4.2 Component Boundary Analysis
-1. **Client vs. Serverless API:**
-   - Low-latency interactions, UI rendering, client-side filtering, and real-time thread listeners interact directly with Cloud Firestore using Firebase Client SDK, guarded by `firestore.rules`.
-   - All security-sensitive operations (compilation, grading, account provisioning, password reset verification, organization role assignment, ban enforcement) execute on Next.js API routes powered by the Firebase Admin SDK.
-2. **Database vs. Cache:**
-   - Cloud Firestore serves as the source of truth for persistent entities (users, problems, submissions, organizations).
-   - Redis functions as a high-throughput cache for contest leaderboards (`contest:{cid}:standings`), preventing Firestore read exhaustion during live contests, and stores submission verdict hashes (`judge:cache:{sha256}`) to skip redundant code execution.
+### 4.1 Boundary Analysis
+1. **Browser vs Server Boundary:**
+   - Client pages communicate with Next.js API routes (`/api/*`) via standard JSON HTTPS requests.
+   - For real-time updates (chat messages, live contest standings, threads), the browser establishes direct Firestore `onSnapshot` subscriptions using the Firebase Client SDK.
+   - All direct client Firestore reads/writes are governed by [`firestore.rules`](file:///home/juan/Work%20Space/leetcode-clone-youtube/firestore.rules).
+2. **Application vs Database Boundary:**
+   - Server-side API routes use the Firebase Admin SDK (`getAdminFirestore()`), which bypasses Firestore security rules.
+   - Authorization on API routes is enforced in application code via [`withAuthAndModeration`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/utils/authMiddleware.ts#L22) and [`withAdminGuard`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/utils/withAdminGuard.ts#L59).
+3. **Data Sanitization Boundary:**
+   - Client DTOs never receive secret testcases. [`getPublicProblem`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/utils/problemLoader.ts#L123) filters problem examples to only return 1–3 public samples (`isSample: true`).
+   - The authoritative grading suite is exclusively loaded server-side by [`getProblemForGrading`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/utils/problemLoader.ts#L17) in `/api/submit`.
 
 ---
 
 ## 5. Feature Inventory and Implementation Status
 
-| Feature Area | Capability | Implementation Status | Verification Evidence | Key Source Files |
-| :--- | :--- | :--- | :--- | :--- |
-| **Code Execution** | Local Sandboxing (`unshare` + cgroups v2) | Implemented | Source inspected | `src/pages/api/run.ts:437-495` |
-| **Code Execution** | Remote Judge0 Batch Fallback | Implemented | Source inspected | `src/pages/api/run.ts:167-350` |
-| **Code Execution** | Special Judge (Python & C++ Scripts) | Implemented | Source inspected | `src/pages/api/run.ts:1182-1246` |
-| **Code Execution** | Redis Execution Hash Caching | Implemented | Source inspected | `src/pages/api/run.ts:1056-1108` |
-| **Problem Management** | Authoritative Grader vs Public DTO Stripping | Implemented | Tested (`scripts/test-grading-pipeline.ts`) | `src/utils/problemLoader.ts:17-201` |
-| **Problem Management** | Problem Tag Taxonomy System | Implemented | Source inspected, rules enforced | `src/pages/api/problem-tags.ts`, `firestore.rules` |
-| **Contest Ecosystem** | ICPC Standings & Penalty Calculation | Implemented | Source inspected | `src/utils/leaderboardCalc.ts:14-129` |
-| **Contest Ecosystem** | Leaderboard Freeze Window | Implemented | Source inspected | `src/pages/api/cron/calculate-standings.ts:60-75` |
-| **Contest Ecosystem** | Virtual Participation Mode | Implemented | Source inspected | `src/pages/contests/[cid]/problems/[pid].tsx:99-103` |
-| **Contest Integrity** | Fullscreen Lock & Window Blur Detection | Implemented | Source inspected | `src/pages/contests/[cid]/problems/[pid].tsx:51-68` |
-| **Multi-Tenancy** | Organization Engine & Custom RBAC | Implemented | Source inspected | `src/utils/orgEngine.ts:1-520` |
-| **Multi-Tenancy** | University Suites (Courses, Roadmaps, Gradebook) | Implemented | Source inspected | `src/pages/orgs/[slug].tsx`, `src/utils/orgEngine.ts` |
-| **Multi-Tenancy** | Recruiter Suites (Vacancies, Assessments, Interviews)| Implemented | Source inspected | `src/pages/api/organizations/[id]/assessments/` |
-| **Community** | Threaded Discussions, Polls, Media & Cards | Implemented | Source inspected | `src/components/Threads/Threads.tsx`, `ThreadCard.tsx` |
-| **Real-Time Chat** | Messaging, Audio Notes, Code Snippets, Reactions | Implemented | Source inspected | `src/components/Chat/`, `src/pages/api/chat/` |
-| **Trust & Safety** | User Reports, Warnings, Bans, 14-Day Deletions | Implemented | Source inspected | `src/utils/moderationConfig.ts`, `authMiddleware.ts` |
-| **Notifications** | Transactional Outbox Queue with Exponential Backoff | Implemented | Source inspected | `src/utils/emailService.ts:21-120` |
-| **Monetization** | Stripe Hosted Checkout & Card Intent Processing | Implemented | Source inspected | `src/pages/api/create-checkout-session.ts` |
+The table below reflects observed source implementation and verified test execution across the platform:
+
+| Feature / Subsystem | Implementation Status | Verification Evidence | Key Source Locations | Known Gaps / Constraints |
+|---|---|---|---|---|
+| **Code Execution (Run)** | Implemented | Source Inspected & Runtime Verified | [`src/pages/api/run.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/api/run.ts) | Local sandbox requires Linux root/cgroup privileges; falls back to unjailed in dev or Judge0 in prod. |
+| **Authoritative Grading (Submit)** | Implemented | Source Inspected & Runtime Verified | [`src/pages/api/submit.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/api/submit.ts), [`problemLoader.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/utils/problemLoader.ts) | Serverless execution time limit requires batching testcases in chunks of 20. |
+| **Problem Catalog & Tags** | Implemented | Source Inspected & Tested | [`src/pages/index.tsx`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/index.tsx), [`src/pages/api/problem-tags.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/api/problem-tags.ts) | Tag validation in Firestore rules limits problems to at most 3 registered tags. |
+| **ICPC Contest Subsystem** | Implemented | Source Inspected & Schema Verified | [`src/pages/contests/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/contests), [`calculate-standings.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/api/cron/calculate-standings.ts) | Cron standings calculation requires secret bearer token (`CRON_SECRET`). |
+| **Anti-Cheat Proctoring** | Implemented | Source Inspected & Runtime Logged | [`src/pages/contests/[cid]/problems/[pid].tsx`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/contests/%5Bcid%5D/problems/%5Bpid%5D.tsx#L306) | Can be bypassed if JavaScript event listeners are suppressed or mobile browser emulation is used. |
+| **Multi-Tenant Organizations** | Implemented | Source Inspected & Schema Verified | [`src/pages/orgs/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/orgs), [`src/utils/orgEngine.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/utils/orgEngine.ts) | 23 system permissions, 7 hierarchical roles, roadmaps, gradebooks, assessments, and certificate generation. |
+| **Real-Time Chat & Messaging** | Implemented | **66/67 Automated QA Tests Passed** (`reports/chat/`) | [`src/pages/messages/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/messages), [`src/components/Chat/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/components/Chat), [`src/pages/api/chat/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/api/chat) | **Defect `CHAT-PERM-003`**: Firestore rules allow outsider to insert messages directly into arbitrary conversations. |
+| **Voice & Media Attachments** | Implemented | Source Inspected & API Verified | [`src/pages/api/chat/attachment.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/api/chat/attachment.ts), [`src/components/Chat/VoiceRecorder.tsx`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/components/Chat/VoiceRecorder.tsx) | Client-side media recording requires browser Web Audio / MediaRecorder API support. |
+| **Authentication & Onboarding** | Implemented | **100% Passed** in `verify-auth-lifecycle.ts` | [`src/utils/onboarding.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/utils/onboarding.ts), [`ProfileSetupModal.tsx`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/components/Modals/ProfileSetupModal.tsx), [`_app.tsx`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/_app.tsx) | Legacy user fallback properly implemented; academic fields optional for non-students. |
+| **Admin Authorization Guard** | Implemented | **100% Passed** in `test-authorization-security.mjs` | [`src/utils/withAdminGuard.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/utils/withAdminGuard.ts), [`scripts/manage-platform-admin.mjs`](file:///home/juan/Work%20Space/leetcode-clone-youtube/scripts/manage-platform-admin.mjs) | Strict dual verification via `/platformAdmins/{uid}` document and Firebase custom claims. |
+| **Moderation, Warnings & Bans** | Implemented | Source Inspected & Schema Verified | [`src/pages/admin/moderation.tsx`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/admin/moderation.tsx), [`src/pages/account-appeal.tsx`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/account-appeal.tsx) | Full warning accumulation, temporary suspensions with expiration timestamps, and appeal review queue. |
+| **Transactional Email Queue** | Implemented | Source Inspected & Template Verified | [`src/pages/api/notifications/process-queue.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/api/notifications/process-queue.ts), [`src/utils/emailService.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/utils/emailService.ts) | Rate-limited worker processes queue in batches; supports template preview and live test triggers. |
+| **ML & Algorithm Problem Gen** | Implemented | Tested across generators | [`scripts/problem-generator/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/scripts/problem-generator), [`scripts/ml-problem-generator/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/scripts/ml-problem-generator), [`scripts/specs/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/scripts/specs) | 300+ problems generated with exact mathematical hyperparameter boxes, formulas, and floating-point tolerances. |
+| **Stripe Payments / Donations** | Implemented | Source Inspected | [`src/pages/api/create-checkout-session.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/api/create-checkout-session.ts), [`process-card-donation.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/api/process-card-donation.ts) | Webhook fulfillment relies on client-side confirmation or webhook listener configuration. |
 
 ---
 
 ## 6. Detailed Workflow Walkthroughs
 
-### 6.1 Code Execution and Authoritative Submission Grading
+### 6.1 Code Execution and Authoritative Submission Grading Pipeline
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as Student / Solver
-    participant WS as Workspace UI (Playground.tsx)
-    participant SubAPI as /api/submit
-    participant Loader as ProblemLoader (Server-Only)
-    participant RunAPI as /api/run (Judge Engine)
+    actor User as Solver (Browser)
+    participant UI as Workspace Playground
+    participant RunAPI as /api/run.ts
+    participant SubmitAPI as /api/submit.ts
+    participant Loader as problemLoader.ts
     participant DB as Cloud Firestore
-    participant Cache as Redis Cache
+    participant Engine as Local Linux Sandbox / Judge0
 
-    User->>WS: Clicks "Submit Code"
-    WS->>SubAPI: POST /api/submit { uid, problemId, userCode, language }
-    SubAPI->>DB: Create submission record (status: "queued")
-    SubAPI->>Loader: getProblemForGrading(problemId)
-    Loader->>DB: Fetch problem document
-    Loader-->>SubAPI: Return Problem + 100% Testcases (Ordered)
-    SubAPI->>RunAPI: runCode(problemId, userCode, language, testcases)
-    
-    alt Redis Hash Match
-        RunAPI->>Cache: GET judge:cache:{hash}
-        Cache-->>RunAPI: Cached Verdict
-    else Compilation & Execution
-        alt Local Compilers Installed
-            RunAPI->>RunAPI: Spawn unshare + cgroups v2 slice
-        else Remote Fallback
-            RunAPI->>RunAPI: Chunk test cases into batches of 20 -> Judge0
-        end
-        RunAPI-->>SubAPI: Return Execution Results (Passed Count, Runtime, Memory)
+    User->>UI: Clicks "Run Code"
+    UI->>RunAPI: POST { userCode, language, testcases: sampleCases }
+    RunAPI->>Engine: Execute sample cases with profile limits
+    Engine-->>RunAPI: Execution results (stdout, runtime, status)
+    RunAPI-->>UI: Returns RunResult DTO (pass/fail per sample)
+    UI-->>User: Displays green/red sample testcase pills
+
+    User->>UI: Clicks "Submit Code"
+    UI->>SubmitAPI: POST { uid, problemId, userCode, language, contestId? }
+    SubmitAPI->>DB: Create submission record (status: "pending")
+    SubmitAPI->>Loader: getProblemForGrading(problemId)
+    Loader->>DB: Fetch full examples array (hidden test cases)
+    Loader-->>SubmitAPI: Returns complete grading testcase suite
+    SubmitAPI->>Engine: Run all grading testcases (batches of 20)
+    Engine-->>SubmitAPI: Verdicts (Accepted, WA, TLE, MLE, RE)
+    SubmitAPI->>DB: Update submission record (verdict, score, runtime, memory)
+    alt Verdict == "Accepted" and not Contest
+        SubmitAPI->>DB: Increment user solved count & XP (users/{uid}, solvedProblems/{uid})
     end
-
-    SubAPI->>DB: Run Atomic Transaction
-    Note over SubAPI,DB: Update user solved list, calculate XP & Tier, increment problem attempts, set terminal verdict
-    SubAPI->>Cache: Invalidate contest leaderboard (if in contest)
-    SubAPI-->>WS: Return submissionId
-    WS->>User: Display Result Banner & Confetti (if Accepted)
+    SubmitAPI-->>UI: Returns final SubmissionVerdict
+    UI-->>User: Renders submission result modal & confetti if Accepted
 ```
 
-#### Step-by-Step Implementation Detail:
-1. **Trigger:** The contestant presses "Submit" in `src/components/Workspace/Playground/Playground.tsx`.
-2. **Endpoint Invocation:** A POST request hits `src/pages/api/submit.ts` containing `uid`, `problemId`, `userCode`, `language`, and optional `contestId`.
-3. **Queue Ingestion:** `submit.ts` creates or merges a record in `submissions` (or `contest_submissions`) with `status: "queued"`.
-4. **Server-Side Test Case Hydration:** `getProblemForGrading(problemId)` in `src/utils/problemLoader.ts` pulls the authoritative problem definition. If no test cases are configured, the submission terminates immediately with a `Configuration Error`.
-5. **Execution Routing (`src/pages/api/run.ts`):**
-   - The SHA-256 hash of `${normalizedCode}|${language}|${problemId}|${updatedAt}` is checked against Redis key `judge:cache:${hash}`.
-   - If missing, the runner checks for local compiler binaries (`g++`, `gcc`, `javac`, `python3`). If missing, it dispatches HTTP batch requests to Judge0 (`ce.judge0.com` or `extra-ce.judge0.com` for Python ML) in chunks of 20.
-   - For local execution, Linux `unshare` isolates network, PID, and mounts, while cgroups v2 caps memory (`memory.max`), swap (`memory.swap.max: 0`), and pids (`pids.max`).
-6. **Verdict Evaluation:** Standard outputs are normalized and compared against expected outputs. If `customChecker` is enabled, a custom Python or C++ special judge binary executes with 5-second CPU guardrails.
-7. **Atomic Persistence:** In a single Firestore transaction:
-   - User document `users/{uid}` updates: if newly solved, `easyCount`/`mediumCount`/`hardCount`/`mlCount` increment.
-   - Experience points are recomputed via `calculateExperience` in `src/utils/experienceConfig.ts`, updating `score`, `xp`, and `experienceLevel`.
-   - Problem record `problems/{problemId}` updates: `attempts` increments, and `solved` increments on first solve.
-   - Submission record marks `isTerminal: true`, records runtime and memory, and sanitizes hidden test case details (`cleanResult.isSecret = true`).
+1. **Trigger & Input:** User writes code in CodeMirror and clicks "Submit". Payload contains `uid`, `problemId`, `userCode`, `language`, and optional `contestId`.
+2. **Persistence Entry:** A record is immediately inserted into `/submissions/{id}` (or `/contest_submissions/{id}`) with status `pending`.
+3. **Data Boundary:** `/api/submit` invokes `getProblemForGrading(problemId)`. Hidden test cases are loaded into memory and never returned to the caller.
+4. **Execution Chunking:** If executing via remote Judge0, testcases are sliced into batches of 20 (`MAX_SUBMISSION_BATCH_SIZE = 20`) to prevent Judge0 HTTP 422 payload rejection. Batches run concurrently via `Promise.all`.
+5. **Verdict & Gamification:** If all test cases match expected outputs, verdict is `Accepted`. Firestore updates increment `users/{uid}.score`, `users/{uid}.solvedProblemsCount`, and add the problem ID to `/solvedProblems/{uid}`.
 
 ---
 
 ### 6.2 ICPC-Style Contest Management, Live Standings, and Anti-Cheat Proctoring
 
-1. **Contest Enrollment & Lifecycle:**
-   - Contests in `contests/{cid}` transition through states: `upcoming`, `running`, `frozen`, `ended`.
-   - Contestants register in `contest_participants/{cid}_{uid}`. `firestore.rules` enforces that once terminated by security rules, a participant cannot self-re-enable.
-2. **Anti-Cheat Proctoring Engine (`src/pages/contests/[cid]/problems/[pid].tsx`):**
-   - When a contest's `securityLevel` is set to `Strict` or `Exam`, the UI enforces browser fullscreen mode (`document.documentElement.requestFullscreen()`).
-   - Event listeners track `fullscreenchange` and `window.onblur`.
-   - Deviations trigger immediate warnings in the UI and log an event to `contest_integrity_events`.
-   - When warnings exceed `contest.maxWarnings` (typically 3), the participant's status is atomically flipped to `terminated`, locking them out of the problem workspace.
-3. **Leaderboard & Tie-Breaking Engine (`src/utils/leaderboardCalc.ts`):**
-   - Live standings aggregate total solved problems and total penalty minutes.
-   - **ICPC Penalty Formula:** 
-     $$\text{Penalty} = (\text{Solve Time} - \text{Contest Start Time}) + (20 \text{ minutes} \times \text{Rejected Submissions Prior to Acceptance})$$
-   - Terminated participants are excluded from official standings.
-4. **Leaderboard Freeze & Cron Synchronization (`src/pages/api/cron/calculate-standings.ts`):**
-   - During the final `leaderboardFreeze` minutes of a contest, live standings calculations cease writing to the public leaderboard.
-   - A frozen snapshot is locked into Redis key `contest:{cid}:standings:frozen` with a 24-hour TTL, obscuring final ranks until the contest officially ends.
+```mermaid
+stateDiagram-v2
+    [*] --> ActiveExam: Contest Starts & User Enters Problem Page
+    
+    state ActiveExam {
+        [*] --> FullscreenLocked
+        FullscreenLocked --> NormalCoding: Window in Focus
+        NormalCoding --> BlurDetected: Window Blur / Tab Switch
+        BlurDetected --> WarningEscalation: Record Integrity Event
+        WarningEscalation --> NormalCoding: Warning Modal Dismissed (< 3 Warnings)
+        
+        NormalCoding --> FullscreenExited: Fullscreen Exit Detected
+        FullscreenExited --> WarningEscalation: Record Fullscreen Violation
+    }
+
+    WarningEscalation --> Disqualified: Warnings >= 3 OR Strict Mode Violation
+    Disqualified --> TerminatedEmail: Send /api/send-termination-email
+    TerminatedEmail --> LockedOut: Participant Status = "terminated"
+    LockedOut --> [*]
+```
+
+1. **Prerequisites & Entry:** User registers for contest. Upon contest start (`Date.now() >= contest.startTime`), user enters `/contests/[cid]/problems/[pid]`.
+2. **Proctoring Activation:** The page enforces `document.documentElement.requestFullscreen()`. It attaches listeners for `visibilitychange`, `window.onblur`, and `fullscreenchange`.
+3. **Violation Tracking:**
+   - When a blur or tab switch occurs, `triggerSecurityWarning("tab", ...)` fires.
+   - Throttled by 2000ms debounce (`lastWarningTimeRef`).
+   - A document is written to `/contest_integrity_events` with `type: "tab_switch"` or `"fullscreen_exit"`.
+   - `/contest_participants/{cid}_{uid}` updates `warningsCount`.
+4. **Disqualification:** If `contest.securityLevel === "strict"` or `warningsCount >= 3`, `terminateUser()` is called:
+   - Updates participant status to `"terminated"`.
+   - Fires `/api/send-termination-email`.
+   - Firestore security rules permanently block further submissions (`contest_participants.status != "terminated"`).
+5. **Standings Calculation:** The scheduled cron `/api/cron/calculate-standings.ts` processes `/contest_submissions`, sorts by problems solved descending and ICPC penalty time ascending (submission timestamp + 20-minute penalty per failed submission before Accepted), and writes live ranks to `/contest_leaderboard/{cid}_{uid}`.
 
 ---
 
 ### 6.3 Multi-Tenant Institutional Workspaces
 
 ```mermaid
-graph TD
-    Org[Organization Entity] --> Roles[System & Custom Roles]
-    Org --> Academic[Academic Suite - University]
-    Org --> Enterprise[Enterprise Suite - Corporate]
+graph LR
+    subgraph Organization Structure
+        Org[Organization doc] --> Roles[Organization Roles: Owner, Admin, Coach, Instructor]
+        Org --> Members[Organization Members]
+        Org --> Hierarchy[University Hierarchy: Faculties, Departments, Classes]
+        Org --> Content[Curriculum: Courses, Roadmaps, Assignments]
+        Org --> Assessments[Assessments & Private Contests]
+    end
 
-    Roles --> Owner[Owner - Priority 100]
-    Roles --> Admin[Admin - Priority 90]
-    Roles --> Coach[Coach - Priority 85]
-    Roles --> Instructor[Instructor - Priority 85]
-    Roles --> TA[Teaching Assistant - Priority 80]
-    Roles --> Member[Member - Priority 50]
-
-    Academic --> Courses[Courses & Syllabuses]
-    Academic --> Roadmaps[Weekly Roadmaps & Material]
-    Academic --> Gradebook[Student Gradebook & Analytics]
-    Academic --> Certificates[Verifiable Certificate Issuer]
-
-    Enterprise --> Vacancies[Job Vacancies & Pipelines]
-    Enterprise --> Assessments[Timed Private Coding Assessments]
-    Enterprise --> Interviews[Live Coding Interview Rooms]
+    subgraph Access Flow
+        Student[Student / Member] -->|Joins via Invite Link or Request| Members
+        Coach[Coach / Instructor] -->|Creates Private Problem| Content
+        Coach -->|Assigns Homework| Content
+        Student -->|Completes Assignment| Gradebook[Course Gradebook]
+        Gradebook -->|Meets Threshold| Cert[Verifiable Certificate /api/certificates/:certId]
+    end
 ```
 
-- **Tenancy Isolation:** Managed via `src/utils/orgEngine.ts` and `src/pages/orgs/[slug].tsx` (5,187 lines of frontend workspace logic).
-- **Role Hierarchy:** Ten distinct role templates (`SYSTEM_ROLES_TEMPLATES`) define priorities from 10 (Guest) to 100 (Owner). Permissions check dynamically across 23 distinct permission strings (e.g., `organization.manageCourses`, `organization.issueCertificates`).
-- **Academic Suite:** Instructors build multi-week roadmaps linking algorithm problems, lecture PDFs, and video links. Student completion is tabulated into institutional gradebooks.
-- **Enterprise Suite:** Recruiters configure private problem assessments with strict deadlines, reviewing applicant candidate scorecards, runtime efficiency percentiles, and code submissions.
+- **Roles & Permissions:** 23 granular permissions (`organization.createContest`, `organization.assignHomework`, `organization.manageRoles`, etc.) mapped to 7 template roles (`owner`, `admin`, `coach`, `instructor`, `coordinator`, `member`, `guest`).
+- **Private Problem Authoring:** Organizations author private problems with full grading suites stored in `/organizations/{id}/private-problems/{problemId}`.
+- **Gradebook & Certification:** Instructors track completion metrics across courses. When passing criteria are satisfied, cryptographic certificate records are generated in `/organizations/{id}/certificates/{certId}` and publicly verifiable via `/api/certificates/[certId]`.
 
 ---
 
-### 6.4 Authentication, Idempotent Account Provisioning, and Security
+### 6.4 Real-Time Chat & Multimedia Messaging Subsystem
 
-1. **Authentication Flow:** Users authenticate via Firebase Auth (Email/Password, Google OAuth, GitHub OAuth). Navigation destinations are sanitized via `src/utils/sanitizeUrl.ts` (`getSafeRedirectUrl`) preventing open redirects and infinite `/auth` loops.
-2. **Authoritative State Coordinator (`src/pages/_app.tsx` & `src/utils/onboarding.ts`):**
-   - Centralized `GlobalAuthAndProfileCheck` coordinates session initialization, verification, moderation, and onboarding without listener churn (listeners decoupled from route navigation).
-   - `isUserOnboarded(userData)` provides canonical reconciliation:
-     - Confirms explicit `isOnboarded === true`.
-     - Preserves legacy accounts (`isOnboarded === undefined`) with established username/displayName and solve activity, eliminating unexpected onboarding re-prompts.
-     - Detects genuinely incomplete newly provisioned accounts (`isOnboarded === false`).
-   - Profile setup modal (`src/components/Modals/ProfileSetupModal.tsx`) provides full dismissibility (Close button, Escape key, backdrop click), stable loading skeleton, and independent developer mode alongside academic university profiling.
-3. **Idempotent Profile Provisioning (`src/pages/api/auth/provision.ts`):**
-   - Client sends Firebase Bearer ID Token to `/api/auth/provision`.
-   - Token must have `email_verified == true`.
-   - Fast-path check: if `users/{uid}` already exists, immediately returns HTTP 200 `{ success: true, alreadyProvisioned: true }` without consuming rate-limit tokens.
-   - For new accounts, enforces an in-memory rate limit (10 requests per UID per hour).
-   - In a single atomic Firestore transaction, **18 distinct documents** are provisioned simultaneously to ensure relational consistency across features:
-     1. `users/{uid}`
-     2. `profiles/{uid}`
-     3. `settings/{uid}`
-     4. `statistics/{uid}`
-     5. `solvedProblems/{uid}`
-     6. `contestHistory/{uid}`
-     7. `threads/{uid}`
-     8. `notifications/{uid}`
-     9. `notificationSettings/{uid}`
-     10. `security/{uid}`
-     11. `sessions/{uid}`
-     12. `organizationMembership/{uid}`
-     13. `achievements/{uid}`
-     14. `bookmarks/{uid}`
-     15. `preferences/{uid}`
-     16. `theme/{uid}`
-     17. `language/{uid}`
-     18. `privacy/{uid}`
-   - The provisioning event is logged to `securityLogs`.
-   - Session tracking (`/api/security/sessions`) guards against transient token expiration by performing token refresh prior to sign-out.
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Alice as Sender (Alice)
+    participant UI as Chat Composer
+    participant MediaAPI as /api/chat/attachment.ts
+    participant MsgAPI as /api/chat/conversations/[cid]/messages
+    participant DB as Cloud Firestore
+    actor Bob as Receiver (Bob)
+
+    alt With Media / Voice
+        Alice->>UI: Records voice note or selects file
+        UI->>MediaAPI: POST form-data { file, conversationId }
+        MediaAPI->>DB: Verify membership in conversation
+        MediaAPI->>MediaAPI: Upload to GCS / Storage bucket
+        MediaAPI-->>UI: Returns { url, storagePath, mimeType, size }
+    end
+
+    Alice->>UI: Clicks "Send Message"
+    UI->>MsgAPI: POST { clientMessageId, text, type, attachments }
+    MsgAPI->>DB: Verify sender membership & moderation status
+    MsgAPI->>DB: Insert into /conversations/{cid}/messages/{mid}
+    MsgAPI->>DB: Update /conversations/{cid} (lastActivityAt, lastMessagePreview)
+    MsgAPI-->>UI: Returns 201 Created
+
+    DB-->>Bob: onSnapshot listener triggers in useMessages hook
+    Bob->>Bob: Renders MessageBubble with Audio/File Attachment
+    Bob->>DB: Updates userConversationMeta (lastReadAt)
+```
+
+- **Deterministic DM Creation:** Direct message conversations use `dm_${minUid}_${maxUid}` to guarantee idempotency and avoid duplicate channels.
+- **Typing Indicators:** Ephemeral typing presence is maintained in `/conversations/{cid}/typing/{uid}` with a 4-second TTL.
+- **Security Validation:** Verified via 67 test cases in [`tests/chat/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/tests/chat/).
 
 ---
 
-### 6.5 Moderation, Warning Escalation, Suspension, and Appeals
+### 6.5 Authentication, Idempotent Account Provisioning, and Onboarding Coordinator
 
-1. **Report Submission:** Users report offending threads, comments, or chat messages via `/api/moderation/report`. Enforces a 10-minute cooldown and a maximum of 5 reports per user per day (`moderationConfig.ts`).
-2. **Warning Escalation:** Admins issue warnings (`moderationWarnings`). Accumulating 3 active warnings within 30 days triggers automatic account suspension (`status: "BANNED"`).
-3. **Suspension Enforcement:** `withAuthAndModeration` middleware in `src/utils/authMiddleware.ts` intercepts incoming requests. Banned users are returned HTTP 403 with reason, case reference ID, and appeal instructions.
-4. **Appeals & Deletions:** Banned users can access `/account-appeal` and submit appeals to `/api/moderation/appeal`. Deletion requests (`/api/moderation/self-delete`) enter a 14-day grace period (`PENDING_DELETION`) before permanent purging by admin cron jobs.
+```mermaid
+stateDiagram-v2
+    [*] --> AuthEvent: User Signs In (Firebase Auth)
+    AuthEvent --> FetchUserDoc: Read users/{uid} in _app.tsx
+    
+    state DecisionMatrix {
+        FetchUserDoc --> MissingDoc: Document does not exist
+        MissingDoc --> CallProvision: POST /api/auth/provision
+        CallProvision --> RenderSetupModal: Account Provisioned (isOnboarded = false)
+
+        FetchUserDoc --> CheckOnboarded: Document exists
+        CheckOnboarded --> FullyOnboarded: data.isOnboarded === true
+        CheckOnboarded --> LegacyAccount: hasDisplayName && !isStudent && !isOnboarded
+        CheckOnboarded --> IncompleteAccount: isOnboarded === false OR (isStudent && missingStudentFields)
+    }
+
+    FullyOnboarded --> ActiveApp: Render Requested Page
+    LegacyAccount --> ActiveApp: Auto-classify Onboarded (Skip Modal)
+    IncompleteAccount --> RenderSetupModal: Display ProfileSetupModal with Close/Skip Option
+    RenderSetupModal --> ActiveApp: User Completes or Skips Setup
+```
+
+- **Root Cause Resolution:** As documented in [`AUTHENTICATION_RESOLUTION.md`](file:///home/juan/Work%20Space/leetcode-clone-youtube/AUTHENTICATION_RESOLUTION.md), the system implements [`isUserOnboarded`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/utils/onboarding.ts#L10) to prevent legacy users and non-students from being trapped in mandatory university onboarding loops.
+- **Idempotent Provisioning:** `/api/auth/provision` verifies whether the document exists before applying rate limits, returning HTTP 200 with `{ provisioned: false, alreadyExisted: true }` for established users.
+
+---
+
+### 6.6 Community Discussions, Moderation Escalation, Suspension, and Appeals
+
+- **Threads & Rich Media:** Users post discussions in `/threads/{threadId}` with tags, code snippets, poll questions, and file attachments.
+- **Moderation Pipeline:** Users submit reports via `/api/moderation/report`. Reports enter `/userReports`.
+- **Warning Escalation:** Admins issue warnings (`/api/admin/moderation/warn`). Warnings accumulate in `/moderationWarnings`. Reaching warning thresholds escalates accounts to temporary or permanent bans in `/userModeration/{uid}`.
+- **Appeals:** Suspended users are redirected to `/suspended` and can file an appeal via `/account-appeal` (`/api/moderation/appeal`), which admins review in `/admin/moderation`.
 
 ---
 
 ## 7. Frontend and User-Facing Interface
 
-### 7.1 Architecture and Route Inventory
+### 7.1 Major Screens and Navigation Structure
+1. **Home / Problem Table (`src/pages/index.tsx`):**
+   - Renders problem table with search bar, category filters, difficulty tags, and user completion checkmarks.
+   - Live user stats banner (rank, score, solved counts).
+2. **Coding Workspace (`src/pages/problems/[pid].tsx`):**
+   - Split-pane layout (`react-split`) with Problem Description on the left and Code Editor / Console on the right.
+   - Multi-language dropdown (C++, Java, Python, JavaScript), font size selector, theme selector, full-screen toggle.
+   - Testcase tabs (custom testcase editor, stdout console, execution metadata).
+3. **Contest Hub (`src/pages/contests.tsx`) & Live Contest (`src/pages/contests/[cid]/problems/[pid].tsx`):**
+   - Active, upcoming, and past contests.
+   - Proctoring wrapper with exam-lock modal and integrity monitoring.
+4. **Real-Time Messages (`src/pages/messages/index.tsx` & `[cid].tsx`):**
+   - Slack/Discord-style dual pane with Conversation Sidebar (unread badges, search, new conversation modal) and Message Area (header, message list, virtual typing indicators, multimedia composer).
+5. **Organization Suite (`src/pages/orgs/` & `[slug].tsx`):**
+   - Tabbed workspace: Overview, Members, Teams, Hierarchy, Roadmaps, Courses, Assignments, Contests, Files, Announcements, Audit Logs, Settings.
+6. **User Profile (`src/pages/profile.tsx`) & Settings (`src/pages/settings.tsx`):**
+   - Solved problem breakdown by difficulty, contest rating graph, activity heatmap, connected organizations.
+   - Security settings: session management (active sessions list with remote logout), password change request with email verification codes.
+7. **Administration Panel (`src/pages/admin/`):**
+   - Contest creator/editor, problem authoring tool with JSON testcase validator, moderation queue, user management, and email/notification operations center.
 
-The frontend is implemented using the Next.js Pages Router with TypeScript. All routes reside in `src/pages/`:
-
-| Route Path | View Component / Page | Access Level | Description |
-| :--- | :--- | :--- | :--- |
-| `/` | `src/pages/index.tsx` | Public | Homepage, problem catalogue table, category filters, solved status |
-| `/problems/[pid]` | `src/pages/problems/[pid].tsx` | Public | Main problem workspace: split-screen statement, CodeMirror editor, console |
-| `/problems/[pid]/submissions/[submissionId]`| Dynamic route | Solver / Admin | Inspection view for detailed test case scorecards and execution outputs |
-| `/contests` | `src/pages/contests.tsx` | Public | Contest lobby: active, upcoming, past contests, registration cards |
-| `/contests/[cid]` | `src/pages/contests/[cid]/index.tsx` | Registered | Contest overview, problem list, live scoreboard, announcements |
-| `/contests/[cid]/problems/[pid]` | `src/pages/contests/[cid]/problems/[pid].tsx`| Participant | Proctored contest workspace with fullscreen lock and anti-cheat tracking |
-| `/orgs` | `src/pages/orgs/index.tsx` | Authenticated | Institutional workspace directory, directory search, creation modal |
-| `/orgs/[slug]` | `src/pages/orgs/[slug].tsx` | Org Member | Multi-tenant organization dashboard (5,187 lines, 10 distinct sub-tabs) |
-| `/threads` | `src/pages/threads.tsx` | Public / Auth | Community forum: threaded cards, polls, code attachments, media lightbox |
-| `/messages` | `src/pages/messages/index.tsx` | Authenticated | Direct and group real-time messaging shell |
-| `/notifications` | `src/pages/notifications.tsx` | Authenticated | Notification center, categorized feeds, preference toggles |
-| `/profile` | `src/pages/profile.tsx` | Public / Auth | Developer profile: solve statistics, XP tier badge, recent submissions |
-| `/settings` | `src/pages/settings.tsx` | Authenticated | Security score meter, active sessions, 2FA management, themes |
-| `/search` | `src/pages/search.tsx` | Public | Global search spanning problems, users, discussion threads, and tags |
-| `/admin` | `src/pages/admin/index.tsx` | Admin Only | Management dashboard: problem authoring, contests, moderation, mail queue |
-
-### 7.2 State Management and React Architecture
-
-- **Recoil Atoms (`src/atoms/`):**
-  - `authModalAtom.ts`: Controls global login, signup, reset password modal visibility.
-  - `executionStateAtom.ts`: Tracks live compilation progress across editor components.
-  - `threadComposerAtom.ts`: Manages rich thread composition drawers.
-  - `ratingFeedbackAtom.ts` & `threadCommentFeedbackAtom.ts`: Ephemeral toast and feedback state.
-- **Context Providers (`src/context/`):**
-  - `SubmissionContext.tsx`: Manages active submission state, execution polling, terminal verdicts, and scorecard results.
-  - `RealtimeNotificationProvider.tsx`: Listens to Firestore `notifications/{uid}` and maintains unread counts.
-- **Styling and Theme System:**
-  - Tailwind CSS configured in `tailwind.config.js` with dark-first color tokens.
-  - Dynamic user-selectable themes: Dark, Light, Sakura, and Red.
-  - Custom animations: `pulse-slow`, `fade-in`, `shine`, and shimmer skeletons for data fetching.
+### 7.2 State Management and Data Flow
+- **Recoil Global Atoms:**
+  - `authModalAtom`: Controls sign-in / sign-up / forgot-password modal visibility and default tab.
+  - `executionStateAtom`: Tracks running state, active testcase index, console output tabs.
+  - `ratingFeedbackAtom`: Toast alerts for contest rating and score updates.
+- **Firestore Reactive Listeners:**
+  - Used in `useMessages` and `useConversations` for millisecond-latency chat updates.
+  - Used in `usePresence` and `useTyping` for ephemeral state.
+- **URL State:**
+  - Page numbers, active tabs, filters, and deep-link parameters (`?tab=`, `?prev=`, `?openSubmissionId=`).
 
 ---
 
 ## 8. Backend, Services, APIs, and Event Contracts
 
-The backend consists of **135+ REST API endpoints** implemented in `src/pages/api/`. Every endpoint is wrapped with `withApiErrorHandler` for centralized error translation and `withAuthAndModeration` where authentication is required.
+### 8.1 API Route Directory & Specifications
 
-### 8.1 API Route Directory by Subsystem
-
-#### 1. Code Execution & Grading
-- `POST /api/run`: Executes arbitrary code against test cases via local Linux cgroups sandbox or remote Judge0 batch fallback.
-- `POST /api/submit`: Authoritative submission pipeline. Loads grading suite, executes code, updates user XP/tier in atomic transaction, and invalidates caches.
-- `POST /api/recount-solved`: Maintenance endpoint recalculating solved problem counts and experience levels for consistency.
-
-#### 2. Authentication & Identity
-- `POST /api/auth/provision`: Idempotently initializes 18 Firestore documents for newly verified accounts.
-- `POST /api/auth/send-verification`: Dispatches email verification tokens via SMTP queue.
-- `POST /api/auth/forgot-password`: Generates secure password reset tokens.
-- `POST /api/auth/reset-password`: Verifies reset tokens and updates password via Admin SDK.
-- `POST /api/auth/change-password`: Authenticated password change with session invalidation.
-- `GET /api/auth/check-status`: Validates account standing (active, warned, banned, pending deletion).
-- `POST /api/auth/cleanup-unverified`: Purges stale, unverified account records.
-
-#### 3. Security & Session Management
-- `GET /api/security/security-score`: Computes 0-100 account security score based on MFA, password age, email verification, and OAuth linking.
-- `GET /api/security/sessions`: Lists active user sessions with IP and user-agent metadata.
-- `DELETE /api/security/session/[id]`: Revokes specific user sessions.
-- `POST /api/security/logout-all`: Revokes all refresh tokens via Firebase Admin `revokeRefreshTokens(uid)`.
-- `GET /api/security/login-history`: Returns historical authentication events.
-
-#### 4. Multi-Tenant Organizations (`/api/organizations/*` & `/api/orgs/*`)
-- `/api/organizations`: CRUD operations for organization workspaces.
-- `/api/organizations/[id]/members`: Manages membership rosters and custom role assignments.
-- `/api/organizations/[id]/courses`: Curates course curricula, materials, and gradebooks.
-- `/api/organizations/[id]/assignments`: Manages student homework deadlines and auto-lock rules.
-- `/api/organizations/[id]/private-problems`: Authors and version-controls organization-only problem banks.
-- `/api/organizations/[id]/assessments`: Configures timed candidate screening tests for recruiters.
-- `/api/organizations/[id]/certificates`: Generates and issues verifiable completion certificates.
-- `/api/organizations/[id]/audit-logs`: Accesses security and administrative action trails.
-
-#### 5. Real-Time Chat & Communications (`/api/chat/*`)
-- `/api/chat/conversations`: Lists, creates, and filters direct message and channel conversations.
-- `/api/chat/conversations/[cid]/messages`: Paginated message retrieval and dispatch.
-- `/api/chat/conversations/[cid]/messages/[mid]/reactions`: Emoji reaction toggles.
-- `/api/chat/conversations/[cid]/messages/[mid]/pin`: Message pinning management.
-- `/api/chat/conversations/[cid]/read`: Updates read receipts and resets unread counters.
-- `/api/chat/conversations/[cid]/typing`: Ephemeral typing presence broadcaster.
-- `/api/chat/upload` & `/api/chat/attachment`: Media upload and authorized serving.
-- `/api/chat/users/block`: Manages user blocklists.
-
-#### 6. Contest Management & Standings
-- `GET /api/contests/[cid]/standings`: Retrieves live or frozen ICPC standings (Redis backed).
-- `GET/POST /api/cron/calculate-standings`: Secret-authenticated cron job computing leaderboard rankings and locking frozen states.
-
-#### 7. Notifications & Email Outbox
-- `POST /api/notifications/dispatch`: Queues in-app and email notifications with category preference filtering.
-- `POST /api/notifications/process-queue`: SMTP queue worker delivering pending emails with retry loops.
-- `GET /api/notifications/preview-template`: Admin utility for previewing responsive email templates.
-- `POST /api/notifications/test-trigger`: Sends test email payloads.
-- `POST /api/unsubscribe`: Processes one-click unsubscribe tokens.
-
-#### 8. Moderation & Trust / Safety
-- `POST /api/moderation/report`: Submits violation reports against users, threads, or messages.
-- `POST /api/moderation/appeal`: Submits formal appeals against suspensions.
-- `POST /api/moderation/self-delete`: Requests account termination with a 14-day recovery buffer.
-- `POST /api/admin/moderation/warn`: Issues formal user warnings.
-- `POST /api/admin/moderation/ban` & `/unban`: Enacts or revokes suspensions.
-- `POST /api/admin/moderation/delete` & `/cancel-delete`: Enforces or aborts account deletions.
-- `GET /api/admin/moderation/logs`: Audits moderator action histories.
-
-#### 9. Payments & Donations
-- `POST /api/create-checkout-session`: Creates Stripe hosted checkout sessions for donations.
-- `POST /api/create-payment-intent`: Initializes Stripe Elements card payment intents.
-- `POST /api/process-card-donation`: Handles direct card donation processing.
+| Endpoint Route | HTTP Method | Authentication / Guard | Request Body / Parameters | Response Contract | Side Effects / Persistence |
+|---|---|---|---|---|---|
+| `/api/run` | `POST` | `withAuthAndModeration` | `{ userCode, language, testcases, problemId? }` | `{ success: boolean, results: TestCaseResult[] }` | Executes untrusted code in local sandbox or Judge0 |
+| `/api/submit` | `POST` | Optional Auth (UID checked) | `{ uid, username, problemId, userCode, language, contestId? }` | `{ success: boolean, verdict, score, runtime, memory }` | Inserts `/submissions` or `/contest_submissions`, updates `/users` XP and `/solvedProblems` |
+| `/api/auth/provision` | `POST` | Bearer Token (Firebase Auth) | Header: `Authorization: Bearer <token>` | `{ success: boolean, provisioned: boolean, user: UserProfile }` | Creates initial `/users/{uid}`, `/profiles/{uid}`, `/statistics/{uid}`, `/settings/{uid}` docs |
+| `/api/chat/conversations` | `GET`, `POST` | `withAuthAndModeration` | `POST`: `{ type, participantUids, title?, organizationId? }` | `{ success: boolean, conversation: Conversation }` | Creates `/conversations/{cid}` and initializes `/userConversationMeta` |
+| `/api/chat/conversations/[cid]/messages` | `GET`, `POST` | `withAuthAndModeration` | `POST`: `{ clientMessageId, text, type, attachments?, replyTo? }` | `{ success: boolean, message: ChatMessage }` | Appends to `/conversations/{cid}/messages/{mid}`, updates conversation metadata |
+| `/api/chat/attachment` | `POST` | `withAuthAndModeration` | `multipart/form-data`: `file`, `conversationId` | `{ success: boolean, attachment: ChatAttachment }` | Uploads file to GCS storage bucket under `chat/{cid}/` |
+| `/api/cron/calculate-standings` | `POST`, `GET` | Bearer Token (`CRON_SECRET`) | Query or Header: `secret=<CRON_SECRET>` | `{ success: boolean, contestId, processedCount }` | Recalculates ICPC ranks and writes `/contest_leaderboard` |
+| `/api/admin/moderation/ban` | `POST` | `withAdminGuard` | `{ uid, reason, durationDays?, isPermanent? }` | `{ success: boolean, status: "BANNED" }` | Sets `userModeration/{uid}.status = "BANNED"`, revokes Firebase refresh tokens |
+| `/api/organizations/[id]/members/[uid]` | `PATCH`, `DELETE` | `withAuthAndModeration` (Org Perms) | `PATCH`: `{ roleId, title, department }` | `{ success: boolean }` | Updates `/organizationMembers/{orgId}_{uid}`, logs to `/organizationAuditLogs` |
+| `/api/certificates/[certId]` | `GET` | Public | URL Param: `certId` | `{ success: boolean, certificate: CertificateData }` | Public certificate verification endpoint |
 
 ---
 
 ## 9. Data Model, Persistence, and Cloud Firestore Schema
 
-BeastCode utilizes Google Cloud Firestore as its primary NoSQL document database. Access is strictly controlled via `firestore.rules` (350 lines) and indexed via `firestore.indexes.json` (307 lines).
-
-### 9.1 Core Collections Schema
+### 9.1 Entity Relationship Diagram
 
 ```mermaid
 erDiagram
-    USERS ||--o{ PROFILES : "1-to-1"
-    USERS ||--o{ SUBMISSIONS : "creates"
-    USERS ||--o{ CONTEST_PARTICIPANTS : "registers"
-    USERS ||--o{ THREADS : "authors"
-    USERS ||--o{ ORGANIZATION_MEMBERS : "joins"
+    USERS ||--|| PROFILES : has
+    USERS ||--|| STATISTICS : tracks
+    USERS ||--|| SETTINGS : configures
+    USERS ||--o{ SUBMISSIONS : submits
+    USERS ||--o{ THREADS : authors
+    USERS ||--o{ CONTEST_PARTICIPANTS : registers
+    USERS ||--o{ ORGANIZATION_MEMBERS : belongs_to
+    
+    ORGANIZATIONS ||--o{ ORGANIZATION_MEMBERS : contains
+    ORGANIZATIONS ||--o{ ORGANIZATION_ROLES : defines
+    ORGANIZATIONS ||--o{ ORGANIZATION_COURSES : offers
+    ORGANIZATIONS ||--o{ CONVERSATIONS : hosts_channels
 
-    PROBLEMS ||--o{ SUBMISSIONS : "graded-against"
-    PROBLEMS ||--o{ CONTEST_PROBLEMS : "assigned-to"
+    CONTESTS ||--o{ CONTEST_PROBLEMS : includes
+    CONTESTS ||--o{ CONTEST_PARTICIPANTS : enrolls
+    CONTESTS ||--o{ CONTEST_SUBMISSIONS : receives
+    CONTESTS ||--o{ CONTEST_INTEGRITY_EVENTS : logs
 
-    CONTESTS ||--o{ CONTEST_PROBLEMS : "contains"
-    CONTESTS ||--o{ CONTEST_PARTICIPANTS : "enrolls"
-    CONTESTS ||--o{ CONTEST_SUBMISSIONS : "records"
-
-    ORGANIZATIONS ||--o{ ORGANIZATION_MEMBERS : "has"
-    ORGANIZATIONS ||--o{ ORGANIZATION_ROLES : "defines"
-    ORGANIZATIONS ||--o{ ORGANIZATION_COURSES : "manages"
-
-    CONVERSATIONS ||--o{ CHAT_MESSAGES : "contains"
+    CONVERSATIONS ||--o{ CHAT_MESSAGES : contains
+    CONVERSATIONS ||--o{ USER_CONVERSATION_META : tracks_reads
 ```
 
-#### Detailed Collection Inventory (38 Distinct Collections):
+### 9.2 Complete Collection Schema Table
 
-1. **`users/{uid}`**: Core user identity, email, username, solve counts (`easyCount`, `mediumCount`, `hardCount`, `mlCount`), experience score (`score`, `xp`), `experienceLevel` tier, `role` ("admin" | "user"), `isAdmin`.
-2. **`profiles/{uid}`**: Public profile details, avatar URL, biography, social links, country, university/company affiliations.
-3. **`problems/{problemId}`**: Global algorithm problem repository. Contains title, difficulty, markdown statements, starter code, sample examples, secret grading test cases, points, execution profile, and custom checker scripts.
-4. **`submissions/{submissionId}`**: Permanent log of practice submissions. Records UID, problem ID, source code, language, status ("passed" | "failed"), verdict ("Accepted", "Wrong Answer", etc.), score, runtime, memory, and sanitized test results.
-5. **`contests/{contestId}`**: Contest instances containing schedule timestamps (`startTime`, `endTime`, `duration`), rules, `leaderboardFreeze` duration, penalty parameters, and `securityLevel` ("Standard", "Strict", "Exam").
-6. **`contest_problems/{cid_pid}`**: Mapping linking problems to contests with contest-specific point values and label identifiers (e.g., Problem A, B, C).
-7. **`contest_participants/{cid_uid}`**: Participant registry storing enrollment status ("registered", "active", "terminated"), `warningsCount`, virtual flags, and `virtualStartTime`.
-8. **`contest_submissions/{subId}`**: Isolated submission log for contests. Read-locked by security rules so contestants cannot view others' submissions until the contest concludes.
-9. **`contest_integrity_events/{id}`**: Telemetry audit log storing fullscreen exits, tab switches, and window blur events detected by the proctoring monitor.
-10. **`contest_leaderboard/{cid_uid}`**: Persistent contest scorecard cache.
-11. **`contest_clarifications/{id}`**: Contestant questions and official judge announcements.
-12. **`organizations/{orgId}`**: Multi-tenant workspaces with unique slugs, branding, visibility ("public", "private", "secret"), and counters.
-13. **`organizationMembers/{orgId_uid}`**: Membership records storing assigned role ID, department, nickname, and join dates.
-14. **`organizationRoles/{orgId_roleId}`**: Custom tenant roles with granular permission arrays.
-15. **`organizationProblems/{id}`**: Private problem bank curated by institutional instructors.
-16. **`organizationCourses/{id}`**: Academic course syllabuses, materials, and gradebook references.
-17. **`organizationAssignments/{id}`**: Student homework tasks with open/close dates, late penalties, and auto-lock triggers.
-18. **`organizationAssessments/{id}`**: Timed technical candidate evaluations for recruiters.
-19. **`conversations/{cid}`**: Direct, group, and organizational chat channels.
-20. **`conversations/{cid}/messages/{mid}`**: Real-time chat messages with reactions, code snippets, and audio voice note metadata.
-21. **`threads/{threadId}`**: Community discussion forum posts supporting Markdown, polls, code attachments, and media.
-22. **`emailQueue/{id}`**: Transactional email queue items processed by `EmailService.processQueue()`.
-23. **`userModeration/{uid}`**: Moderation status records ("ACTIVE", "WARNED", "BANNED", "PENDING_DELETION"), expiration dates, and case IDs.
-24. **`moderationLogs/{id}`**: Immutable audit trail of administrative moderation actions.
-25. **`moderationWarnings/{id}`**: Formal warnings issued to users.
-26. **`moderationAppeals/{id}`**: User-submitted appeals against moderation penalties.
-27. **`userReports/{id}`**: Violation reports submitted by community members.
-28. **`statistics/{uid}`**: Performance aggregates and global ranking statistics.
-29. **`solvedProblems/{uid}`**: Fast-lookup index of solved problem identifiers.
-30. **`contestHistory/{uid}`**: Contest rating trajectory and past performance logs.
-31. **`settings/{uid}`**: User interface settings (theme, editor language, keymap).
-32. **`notificationSettings/{uid}`**: Granular opt-in/opt-out preferences across 9 notification categories.
-33. **`notifications/{uid}`**: In-app notification documents.
-34. **`security/{uid}`**: Two-factor authentication status and recovery keys.
-35. **`sessions/{uid}`**: Active session tracking tokens.
-36. **`securityLogs/{id}`**: Security-relevant event trail (logins, password resets, provisioning).
-37. **`deleted_problems/{problemId}`**: Soft-deleted problem backup cemetery.
-38. **`problemTags/{tag}` & `threadTags/{tag}`**: Centralized tag taxonomy definitions.
+| Collection Name | Document ID Pattern | Key Fields & Data Types | Indexing Requirements | Sensitivity / Access Rule |
+|---|---|---|---|---|
+| `users` | `{uid}` | `uid: string`, `email: string`, `displayName: string`, `username: string`, `score: number`, `solvedProblemsCount: number`, `isOnboarded: boolean`, `role: string` | `score DESC, displayName ASC`, `country ASC, score DESC` | Read by auth users; write restricted to self (cannot touch `role`, `isAdmin`) |
+| `platformAdmins` | `{uid}` | `uid: string`, `email: string`, `role: "admin" \| "super_admin"`, `active: boolean`, `grantedAt: number`, `grantedBy: string` | Direct lookup | **High Sensitivity**: Read by self/admin; write forbidden from client |
+| `problems` | `{problemId}` | `id: string`, `title: string`, `difficulty: "Easy" \| "Medium" \| "Hard"`, `examples: Example[]`, `points: number`, `executionProfile: string`, `tags: string[]` | Tags array query | Public read; Admin write only (tags validated) |
+| `submissions` | `{submissionId}` | `uid: string`, `problemId: string`, `code: string`, `language: string`, `status: string`, `verdict: string`, `runtime: number`, `memory: number`, `timestamp: number` | `uid ASC, timestamp DESC` | Owner read/write; admin read/delete |
+| `contests` | `{contestId}` | `id: string`, `title: string`, `startTime: number`, `endTime: number`, `status: "upcoming" \| "active" \| "ended"`, `securityLevel: "standard" \| "strict"` | `startTime ASC` | Public read; Admin write |
+| `contest_participants` | `{contestId}_{uid}` | `contestId: string`, `uid: string`, `status: "registered" \| "active" \| "terminated"`, `warningsCount: number`, `registeredAt: number` | Composite lookup | Self create/update; cannot self-unterminate |
+| `contest_integrity_events` | `{autoId}` | `contestId: string`, `uid: string`, `username: string`, `type: string`, `timestamp: number`, `details: string` | `contestId ASC, timestamp DESC` | Read by admin only; create by participant |
+| `contest_leaderboard` | `{contestId}_{uid}` | `contestId: string`, `uid: string`, `username: string`, `problemsSolved: number`, `penaltyTime: number`, `rank: number` | `problemsSolved DESC, penaltyTime ASC` | Public read; Admin/Cron write |
+| `organizations` | `{orgId}` | `id: string`, `slug: string`, `name: string`, `ownerUid: string`, `visibility: "public" \| "private"`, `memberCount: number`, `status: "active" \| "suspended"` | `slug ASC` | Public read (for public orgs); Member/Admin update |
+| `organizationMembers` | `{orgId}_{uid}` | `organizationId: string`, `uid: string`, `roleId: string`, `status: "active" \| "suspended"`, `joinedAt: number` | `uid ASC`, `organizationId ASC` | Member read; Org admin update |
+| `conversations` | `dm_{u1}_{u2}` or `org_{o}_{c}` | `id: string`, `type: ConversationType`, `participantUids: string[]`, `lastActivityAt: number`, `lastMessagePreview: string` | `participantUids CONTAINS, lastActivityAt DESC` | Participant only read/update |
+| `conversations/{cid}/messages` | `{messageId}` | `id: string`, `conversationId: string`, `senderId: string`, `text: string`, `type: string`, `attachments: ChatAttachment[]`, `createdAt: number` | `isPinned ASC, pinnedAt DESC` | Participant read; Sender create/edit |
+| `userConversationMeta` | `{uid}_{cid}` | `uid: string`, `conversationId: string`, `lastReadAt: number`, `isMuted: boolean`, `isPinned: boolean` | `uid ASC, updatedAt DESC` | Owner read/write only |
+| `userModeration` | `{uid}` | `uid: string`, `status: "ACTIVE" \| "WARNED" \| "SUSPENDED" \| "BANNED"`, `warningCount: number`, `expiresAt: number \| null` | `status ASC` | Owner read; Admin write |
 
 ---
 
 ## 10. Core Algorithms and Distinctive Technical Logic
 
-### 10.1 Sandboxed Linux Subprocess Execution (`src/pages/api/run.ts`)
-Untrusted user code executed locally is isolated using Linux namespaces and cgroups v2:
-1. **Namespace Isolation:** The child process is launched via:
-   ```bash
-   unshare --fork --pid --net --mount <command> <args>
-   ```
-   This strips network access (preventing data exfiltration or reverse shells) and sandboxes process trees and mount points.
-2. **Cgroups v2 Resource Throttling:**
-   A dedicated cgroup slice is created at `/sys/fs/cgroup/beastcode-sandbox/run-{runId}`:
-   - `memory.max`: Set to `limits.memoryLimitMb * 1024 * 1024` bytes.
-   - `memory.swap.max`: Set to `0` (disables swapping to prevent disk thrashing).
-   - `pids.max`: Set to `1` for single-threaded languages (C, C++, Python, JS) or `5` for Java (to accommodate JVM garbage collection threads).
-   - `cpu.max`: Set to `50000 100000` (50% CPU quota over 100ms periods).
-   The child process PID is written to `cgroup.procs`. Post-execution, `memory.events` is inspected for `oom_kill` occurrences to accurately assign the `Memory Limit Exceeded` verdict.
+### 10.1 ICPC Penalty Scoring Algorithm
+Located in [`src/pages/api/cron/calculate-standings.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/api/cron/calculate-standings.ts):
+$$\text{Penalty Time} = \sum_{p \in \text{Solved}} \left( \lfloor (T_{\text{solve}} - T_{\text{start}}) / 60000 \rfloor + 20 \times N_{\text{failed}}(p) \right)$$
+- Each solved problem adds elapsed minutes from contest start to the accepted submission timestamp.
+- Each rejected submission before the first accepted submission incurs a 20-minute penalty.
+- Rejected submissions occurring *after* a problem is solved are ignored.
+- Unsolved problems do not contribute to penalty time regardless of failure count.
+- Participants are ranked by:
+  1. `problemsSolved` (Descending)
+  2. `penaltyTime` (Ascending)
+  3. `lastSolveTimestamp` (Ascending tie-break)
 
-### 10.2 Distributed Judge0 Batch Chunking & Polling
-When local compilers are absent, `runBatchWithJudge0` handles execution via Judge0:
-- **Chunking Limit Bypass:** The public Judge0 API enforces a batch limit of 20 submissions (`MAX_SUBMISSION_BATCH_SIZE`). Submissions with up to 100 test cases are sliced into chunks of 20 and dispatched concurrently using `Promise.all`.
-- **422 Rejection Recovery:** If public endpoints reject custom CPU or memory thresholds with HTTP 422, the chunk automatically falls back and retries without custom limits.
-- **Parallel Status Polling:** Execution tokens are polled in parallel every 500ms for up to 30 seconds. Status IDs are evaluated: `3`/`4` (Accepted), `5` (Time Limit Exceeded), `6` (Compilation Error), `7` (Output Limit Exceeded), `12` (Memory Limit Exceeded).
-
-### 10.3 Special Judge Verification (`checkVerdict`)
-Four validation modes exist for evaluating problem correctness:
-1. `exact`: Strict string equality after stripping carriage returns and normalizing newlines.
-2. `whitespace`: Normalizes consecutive whitespace characters to single spaces and compares case-insensitively.
-3. `float_tolerance`: Parses float tokens and enforces relative and absolute error bounds:
-   $$\frac{|\text{actual} - \text{expected}|}{\max(10^{-9}, |\text{expected}|)} \le \epsilon \quad (\text{default } \epsilon = 10^{-6})$$
-4. `special_judge`: Writes `input.txt`, `expected.txt`, and `actual.txt` to temporary disk paths and executes a custom Python (`python3 checker.py`) or C++ (`checker.bin`) verification binary within a 5-second timeout.
-
-### 10.4 Experience Points and Mastery Tier Computation (`src/utils/experienceConfig.ts`)
-
-Experience score is computed deterministically from solve statistics:
-$$\text{XP} = 1(\text{Easy}) + 3(\text{Medium}) + 7(\text{Hard}) + 10(\text{ML}) + 5(\text{Contest Participations}) + 20(\text{Contest Wins})$$
-
-Users advance through 10 strictly defined tiers:
-
-| Tier Name | XP Threshold | Accent Color | Visual Class |
-| :--- | :--- | :--- | :--- |
-| **Newbie** | 0 | `#94a3b8` | `bg-slate-500/10 border-slate-500/30 text-slate-400` |
-| **Beginner** | 5 | `#22c55e` | `bg-green-500/10 border-green-500/30 text-green-400` |
-| **Apprentice** | 15 | `#14b8a6` | `bg-teal-500/10 border-teal-500/30 text-teal-400` |
-| **Intermediate**| 30 | `#3b82f6` | `bg-blue-500/10 border-blue-500/30 text-blue-400` |
-| **Advanced** | 50 | `#6366f1` | `bg-indigo-500/10 border-indigo-500/30 text-indigo-400`|
-| **Expert** | 85 | `#a855f7` | `bg-purple-500/10 border-purple-500/30 text-purple-400`|
-| **Master** | 130 | `#ec4899` | `bg-pink-500/10 border-pink-500/30 text-pink-400` |
-| **Grandmaster** | 190 | `#ef4444` | `bg-red-500/10 border-red-500/30 text-red-400` |
-| **Legend** | 270 | `#f59e0b` | `bg-amber-500/10 border-amber-500/30 text-amber-400` |
-| **Mythic** | 370 | `#d946ef` | Gradient border with pulse animation |
+### 10.2 Judge0 Request Chunking and Polling State Machine
+Located in [`src/pages/api/run.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/api/run.ts#L80) and [`src/pages/api/submit.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/api/submit.ts):
+1. Test cases are partitioned into chunks of 20 (`MAX_SUBMISSION_BATCH_SIZE`).
+2. Batches are dispatched to `POST /submissions/batch`.
+3. If Judge0 returns HTTP 422 (custom resource limits rejected by public instance), the client catches the error and retries the batch without custom limits.
+4. Tokens are accumulated and polled concurrently via `GET /submissions/batch?tokens=...&base64_encoded=false`.
+5. Polling iterates with exponential backoff (starting at 500ms) until all tokens reach terminal status (Status ID > 2: Accepted = 3, Wrong Answer = 4, Time Limit = 5, Compilation Error = 6, Runtime Error = 7–12).
 
 ---
 
 ## 11. Machine Learning and AI Components
 
-- **Python ML Runner:** Supported directly via Judge0 Extra-CE cluster (`https://extra-ce.judge0.com`, language ID `31`), bundling Python 3.12 with pre-installed scientific computing libraries (NumPy, SciPy).
-- **ML Problem Difficulty Class:** Algorithmic challenges can be categorized with `difficulty: "ML"`, weighted at 10 XP points in experience calculations. User profiles track distinct `mlCount` and `mlRating` metrics.
-- **AI Logic & LLMs:** Currently, the core platform does not invoke automated LLM code analysis or generative hints at runtime. AI skills documented in `.agents/skills/` relate to development workflows rather than in-app student features.
+### 11.1 Special Judge Environments for ML
+- **Runtime:** Python 3.12.5 configured on Judge0 Extra-CE cluster (`https://extra-ce.judge0.com`, language ID `31`).
+- **Preinstalled Libraries:** NumPy, SciPy, scikit-learn.
+- **Floating Point Verification:** ML problems employ epsilon-based floating point comparisons:
+  $$\| y_{\text{pred}} - y_{\text{true}} \|_{\infty} \le 10^{-4}$$
+  customized per problem in [`scripts/hyperparameter-renderer.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/scripts/hyperparameter-renderer.ts).
+
+### 11.2 The 300+ Problem Synthetic Generation Pipeline
+Located in `scripts/`:
+1. **Algorithmic Story Problems (100 problems):** Defined in `scripts/problem-generator/` across 12 algorithmic domains (arrays, strings, math, twoPointers, binarySearch, greedy, stacks, bfs, graphs, dp, bitmask, sorting).
+2. **Machine Learning Problems (100 problems):** Defined in `scripts/ml-problem-generator/` across regression, classification, clustering, optimization, dimensionality reduction, preprocessing, deep learning, NLP, recommendation systems, time series, ensemble methods, and reinforcement learning.
+3. **Linear Regression Problems (100 problems):** Defined in `scripts/linear-regression-generator/` across simple/multiple regression, normal equations, batch gradient descent, mini-batch GD, regularized regression (L1/L2), and robust regression.
+4. **Model Training Problems (200 problems):** Defined in `scripts/model-training-generator/` covering advanced loss functions, momentum optimizers (Adam, RMSProp), SVM dual formulations, and latent variable models.
+5. **Hyperparameter Injector (`scripts/specs/index.ts`):** Synthesizes stylized HTML specification boxes into problem descriptions detailing learning rates ($\alpha$), maximum iterations/epochs, convergence tolerance ($\epsilon$), regularization penalties ($\lambda$), and precision requirements.
 
 ---
 
 ## 12. Hardware, Robotics, and Embedded Components
 
-*This section is not applicable to the BeastCode platform, as the project operates entirely within web and serverless cloud container environments with no direct hardware, robotics, or IoT firmware dependencies.*
+*Confirmation of Scope:* The BeastCode platform contains **no hardware, robotics, IoT, microcontrollers, or embedded firmware components**. It is purely a cloud-native web application, containerized execution runtime, and distributed database system.
 
 ---
 
 ## 13. Authentication, Authorization, and Trust Boundaries
 
-### 13.1 Authentication Implementation
-- **Client Identity:** Authenticated via Firebase Authentication. Supports email/password credentials and third-party OAuth identity providers (Google, GitHub).
-- **Session Tokens:** Client transmits JSON Web Tokens (Firebase ID Tokens) via HTTP `Authorization: Bearer <token>` headers.
-- **Admin Authentication:** Serverless API routes verify tokens using `getAdminAuth().verifyIdToken(idToken, true)`, ensuring revoked tokens are rejected immediately.
+### 13.1 Authentication Architecture
+- **Provider:** Firebase Authentication (Identity Platform).
+- **Session Tokens:** Client receives JWT ID tokens (1-hour lifespan) refreshed automatically in the background by the Firebase Client SDK.
+- **Server Verification:** API routes verify tokens via `adminAuth.verifyIdToken(idToken, true)`. The `checkRevoked = true` parameter guarantees that banned users or logged-out sessions are immediately rejected upon token revocation.
 
-### 13.2 Administrative Privileges & Access Guard
-Administrative access is enforced dualistically:
-1. **In `firestore.rules`:**
-   ```javascript
-   function isAdmin() {
-     return request.auth != null && (
-       (request.auth.token.email_verified == true && 
-        request.auth.token.email in ["admin@leetcode.com", "juan@test.com", "admin@test.com", "dungpubgame@gmail.com", "24110215@st.vju.ac.vn"]) ||
-       (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true ||
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin"))
-     );
-   }
-   ```
-2. **On the Server API (`src/utils/authMiddleware.ts` & `src/utils/withAdminGuard.ts`):** Checks token claims and Firestore user records before allowing access to `/api/admin/*` endpoints.
-
-### 13.3 Test Case Confidentiality & Data Sanitization
-- Public pages and Next.js SSR (`getStaticProps`, `getServerSideProps`) exclusively load problem data using `getPublicProblem` (`src/utils/problemLoader.ts`).
-- `getPublicProblem` filters out all non-sample test cases, ensuring secret grading inputs and outputs never appear in `__NEXT_DATA__` or browser page props.
-- `/api/submit` maps results such that non-sample test cases set `cleanResult.isSecret = true`, omitting raw inputs, expected outputs, and actual outputs from client responses.
+### 13.2 Authorization Enforcement
+1. **Client-Facing Firestore Security Rules (`firestore.rules`):**
+   - Direct database operations evaluate `request.auth != null`.
+   - Admin checks query `/platformAdmins/$(request.auth.uid)`.
+   - Problem tag validation verifies tags against registered collections.
+2. **API Route Guards (`src/utils/withAdminGuard.ts`):**
+   - Fails closed.
+   - Evaluates moderation status (`userModeration/{uid}`): banned or pending-deletion users are immediately denied.
+   - Checks `/platformAdmins/{uid}` document (`active === true`). If `active === false`, access is denied even if a legacy custom claim exists.
 
 ---
 
 ## 14. Reliability, Performance, and Operational Behavior
 
-1. **Redis Caching Pipeline (`src/utils/redis.ts`):**
-   - Contest leaderboards are cached at `contest:{cid}:standings` with a 10-minute TTL.
-   - Incoming submissions mark `contest:{cid}:dirty = "true"`. The cron calculation endpoint inspects the dirty flag before recalculating, avoiding redundant Firestore read floods.
-   - Code execution results are cached for 7 days at `judge:cache:{sha256}`.
-2. **Transactional Email Queue (`src/utils/emailService.ts`):**
-   - Notifications write tasks to the `emailQueue` collection.
-   - The queue worker processes items in batches of 10, executing exponential backoff across up to 5 retries (`nextRetryAt = now + (2 ** retryCount * 60000)`).
-   - If production SMTP credentials are unavailable, the engine falls back to temporary Ethereal SMTP accounts or fails safe without crashing the process.
-3. **Serverless Thread Preservation:**
-   - In `src/pages/api/submit.ts`, execution is processed synchronously inline before returning the HTTP response, preventing serverless container runtime suspension (e.g. on Google Cloud Run or Vercel) from aborting background execution promises.
+### 14.1 Serverless Thread Lifecycle Preservation
+In Vercel or Cloud Run environments, returning an HTTP response prematurely causes the runtime thread to freeze, terminating background promises. [`src/pages/api/submit.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/api/submit.ts) resolves this by awaiting full grading completion before returning the HTTP response, while keeping clients updated via polling or optimistic UI updates.
+
+### 14.2 Redis Caching & Queue Management
+Located in [`src/utils/redis.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/utils/redis.ts):
+- Implements a resilient Redis singleton with automatic reconnection backoff.
+- If Redis is unavailable or unconfigured, it logs a warning and falls back to in-memory caching, ensuring local development is not blocked by missing infrastructure.
 
 ---
 
 ## 15. Configuration, Setup, Build, and Deployment
 
-### 15.1 Environment Configuration Matrix
+### 15.1 Environment Variables Configuration Table
 
-| Variable Name | Purpose | Target Environment | Sensitivity |
-| :--- | :--- | :--- | :--- |
-| `NEXT_PUBLIC_FIREBASE_API_KEY` | Client Firebase initialization | Client & Server | Public |
-| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | Project identifier (`beastcode-7555e`)| Client & Server | Public |
-| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | Auth callback domain | Client & Server | Public |
-| `FIREBASE_PROJECT_ID` | Admin SDK Project ID | Server Only | Internal |
-| `FIREBASE_CLIENT_EMAIL` | Service Account Email | Server Only | Secret (GCP Secret Manager)|
-| `FIREBASE_PRIVATE_KEY` | Service Account Private Key | Server Only | Secret (GCP Secret Manager)|
-| `REDIS_URL` | ioredis connection URI | Server Only | Secret / Confidential |
-| `SMTP_HOST` / `SMTP_PORT` | Mail relay server (`smtp.gmail.com`)| Server Only | Config |
-| `SMTP_USER` / `SMTP_PASS` | Mail relay credentials | Server Only | Secret (GCP Secret Manager)|
-| `STRIPE_SECRET_KEY` | Stripe Server SDK secret | Server Only | Secret |
-| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`| Stripe Elements public key | Client & Server | Public |
-| `CRON_SECRET` | Secret authorizing `/api/cron/*` runs| Server Only | Secret |
+| Variable Key | Purpose | Consuming Component | Sensitivity | Example / Default |
+|---|---|---|---|---|
+| `NEXT_PUBLIC_FIREBASE_API_KEY` | Client Firebase auth & API calls | Browser Client SDK | Public | `AIzaSy...` |
+| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | Firebase auth redirect domain | Browser Client SDK | Public | `www.bomboclatbeastcode.codes` |
+| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | GCP Project ID | Client & Server | Public | `beastcode-7555e` |
+| `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`| GCS bucket for media/avatars | Client & Server | Public | `beastcode-media-348293518232` |
+| `FIREBASE_CLIENT_EMAIL` | Service Account email | Firebase Admin SDK | Confidential | `firebase-adminsdk-xxxxx@...` |
+| `FIREBASE_PRIVATE_KEY` | Service Account private key | Firebase Admin SDK | **Secret** | `-----BEGIN PRIVATE KEY-----\n...` |
+| `CRON_SECRET` | Bearer secret for cron endpoints | Cron API Handlers | **Secret** | `bc_cron_secret_xxxxx` |
+| `REDIS_URL` / `REDIS_HOST` | Redis connection endpoint | `src/utils/redis.ts` | Confidential | `redis://localhost:6379` |
+| `SMTP_HOST` / `SMTP_PORT` | SMTP email server endpoint | `src/utils/emailService.ts` | Config | `smtp.gmail.com:587` |
+| `SMTP_USER` / `SMTP_PASS` | SMTP authentication credentials | `src/utils/emailService.ts` | **Secret** | `bomemebo6996@gmail.com` |
+| `STRIPE_SECRET_KEY` | Stripe backend payment intent creation | Stripe API Handlers | **Secret** | `sk_live_...` |
+| `JUDGE0_URL` | Remote Judge0 API endpoint | `src/pages/api/run.ts` | Config | `https://ce.judge0.com` |
 
 ### 15.2 Local Development Setup
 ```bash
@@ -751,130 +640,123 @@ npm install
 
 # 2. Configure environment
 cp .env.example .env.local
-# Populate Firebase credentials or allow mock fallback
+# Fill in Firebase client & admin credentials in .env.local
 
-# 3. Verify TypeScript and Linting
-npm run lint
+# 3. Verify static types and linter
 npx tsc --noEmit
+npm run lint
 
 # 4. Start local development server
 npm run dev
 # Server binds to http://localhost:3000
 ```
 
-### 15.3 Build & Cloud Run Deployment
-The platform deploys containerized serverless builds via Firebase App Hosting (`apphosting.yaml`):
-```bash
-# Production Next.js build
-npm run build
-
-# Start production server
-npm run start
-```
-In `apphosting.yaml`, secrets (`firebase_private_key`, `smtp_pass`, `firebase_client_email`) are mapped directly to Google Cloud Secret Manager.
+### 15.3 Build & Production Deployment
+- **Build Command:** `npm run build` (Next.js compilation + page optimization).
+- **Target Platform:** Firebase App Hosting via [`apphosting.yaml`](file:///home/juan/Work%20Space/leetcode-clone-youtube/apphosting.yaml) deploying to Cloud Run.
+- **Secrets Management:** Cloud Run mounts `FIREBASE_PRIVATE_KEY` and `SMTP_PASS` securely via Google Cloud Secret Manager.
 
 ---
 
 ## 16. Tests, Validation, and Quality Evidence
 
-### 16.1 Executed Quality Gates (Observed at Runtime)
-- **Static Code Analysis:** `npm run lint` was executed. The build completed with **0 fatal errors**, producing only advisory warnings regarding Next.js image optimization and hook dependency arrays.
-- **TypeScript Strict Compilation:** `npx tsc --noEmit` was executed. The compiler exited with code `0` and **0 type errors** across the entire application and API codebase.
-- **Grading Regression Verification:** Grader isolation and confidentiality assertions were verified via `scripts/test-grading-pipeline.ts`, proving that `atm-problem` and `the-kings-road-network` load 100 test cases authoritatively while `getPublicProblem` strictly strips hidden tests.
+### 16.1 Test Suite Inventory & Execution Evidence
 
-### 16.2 Test Suite Gaps
-- Automated end-to-end (E2E) browser tests (Playwright or Cypress) for proctored anti-cheat workflows are currently absent from CI.
-- Realtime chat message delivery currently relies on manual integration verification rather than automated integration test fixtures.
+1. **Static Analysis & Type Checking:**
+   - **Command:** `npx tsc --noEmit`
+   - **Outcome:** **0 Errors**. Clean build across all 115+ TypeScript source files.
+   - **Command:** `npm run lint`
+   - **Outcome:** **0 Errors**, 24 non-blocking warnings (primarily `@next/next/no-img-element` and React Hook `exhaustive-deps`).
+2. **Authentication Lifecycle Regression Suite:**
+   - **Command:** `npx tsx scripts/verify-auth-lifecycle.ts`
+   - **Outcome:** **100% Passed**. Validates URL sanitization, open-redirect protection, onboarding decision matrix, legacy account non-student bypass, and zero transient modal flashes.
+3. **Platform Administrator Security Suite:**
+   - **Command:** `node scripts/test-authorization-security.mjs`
+   - **Outcome:** **100% Passed**. Verified rejection of unauthenticated requests, unverified mock tokens, and non-admin UID privilege escalation attempts.
+4. **Chat & Messaging Subsystem QA Suite:**
+   - **Configuration:** 67 mapped test cases in [`tests/chat/manifest.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/tests/chat/manifest.ts), executed against headless Chrome via Playwright and API assertions.
+   - **Latest Verified Test Run:** `reports/chat/results_qa_20260925031345_riw8t.json`.
+   - **Results:** **66 PASSED, 1 FAILED** (98.5% Pass Rate).
 
 ---
 
 ## 17. Design Decisions, Constraints, and Tradeoffs
 
-1. **Dual-Path Execution Judge (Local + Cloud Fallback):**
-   - *Decision:* Build a judge engine that uses local Linux `unshare`/`cgroups` when compilers are installed on the host, but automatically falls back to remote Judge0 batch endpoints when missing.
-   - *Tradeoff:* Introduces branching complexity in `src/pages/api/run.ts`, but ensures the application remains fully functional on serverless container runtimes (Cloud Run) without requiring massive compilation toolchain images.
-2. **Next.js Pages Router vs. App Router:**
-   - *Decision:* Standardized on Next.js 13 Pages Router (`src/pages`).
-   - *Tradeoff:* Avoids experimental React Server Component quirks with CodeMirror and Recoil, ensuring rock-solid stability across split-pane and editor lifecycles.
-3. **Firestore + Redis Hybrid Persistence:**
-   - *Decision:* Firestore stores permanent records; Redis caches volatile contest leaderboards and execution hashes.
-   - *Tradeoff:* Requires managing Redis infrastructure and cache invalidation dirty-flags, but drastically cuts Firestore read costs by orders of magnitude during live multi-user contests.
+1. **Pages Router vs App Router:**
+   - *Decision:* Implemented on Next.js 13 Pages Router (`src/pages`).
+   - *Tradeoff:* Offers stable SSR/SSG lifecycle and straightforward dynamic routing; lacks React Server Components (RSC) streaming, requiring manual API route boundaries for sensitive data loading.
+2. **Direct Firestore Subscriptions vs Custom WebSocket Server:**
+   - *Decision:* Real-time chat, threads, and live standings use direct client-side Firestore `onSnapshot` listeners.
+   - *Tradeoff:* Eliminates the maintenance and scaling burden of a dedicated Socket.io/WebSocket cluster; introduces higher Firestore document read billing under heavy message volume.
+3. **Dual Code Execution Strategy:**
+   - *Decision:* Local Linux subprocesses with cgroups fallback to remote Judge0 CE.
+   - *Tradeoff:* Enables high-speed zero-network grading when hosted on dedicated Linux infrastructure, while allowing serverless deployments (Vercel/Cloud Run) to transparently offload execution to Judge0.
 
 ---
 
 ## 18. Current Limitations, Defects, and Unfinished Work
 
-### Detailed Register of Findings
+### 18.1 Consequential Defect Register
 
-| ID | Finding Description | Severity | Location | Affected Workflow | Recommended Next Step |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **DEF-01** | Hardcoded Admin Emails in Security Rules & Hooks | High | `firestore.rules:7`, `src/hooks/useAdmin.ts:19` | Authorization | Migrate admin authorization entirely to Firebase Custom Auth Claims (`token.admin == true`) rather than maintaining hardcoded email lists in rules. |
-| **DEF-02** | Unoptimized Next.js `<img>` Elements | Low | `src/pages/orgs/[slug].tsx`, `CountrySelector.tsx` | Page Performance (LCP) | Replace standard `<img>` tags with `next/image` components to leverage WebP transformation and responsive sizing. |
-| **DEF-03** | Missing Automated End-to-End Test Suite | Medium | Repository Root | Release QA | Introduce Playwright test suite covering contestant submission, anti-cheat termination, and organization member invitation flows. |
-| **DEF-04** | Base64 vs Cloud Storage Avatar Inconsistency | Medium | `src/pages/api/organizations/[id]/avatar.ts` | Media Delivery | Ensure all user and organization avatars strictly upload to Firebase Cloud Storage rather than storing inline Base64 data strings. |
+| Defect ID | Description | Location | Evidence / Repro | Impact | Severity | Recommended Fix |
+|---|---|---|---|---|---|---|
+| **BUG-001** (`CHAT-PERM-003`) | Missing participant verification on Firestore message creation | [`firestore.rules:330`](file:///home/juan/Work%20Space/leetcode-clone-youtube/firestore.rules#L330) | FAILED in `tests/chat/rules/chatRules.test.ts` (Report: `results_qa_20260925031345_riw8t.json`) | An authenticated user can inject messages directly into another user's private DM via client SDK. | **High** | Update rule to: `allow create: if request.auth != null && request.resource.data.senderId == request.auth.uid && isConversationParticipant(get(...).data);` |
+| **BUG-002** | In-memory rate limiter does not share state across serverless instances | [`src/pages/api/auth/provision.ts:25`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/api/auth/provision.ts#L25) | Source inspection of `recentRequests` Map | Rate limits reset when Cloud Run instances scale or cycle. | **Medium** | Back rate-limiting cache with Redis (`src/utils/redis.ts`) using sliding window keys. |
+| **BUG-003** | Working tree uncommitted/untracked problem generator scripts | `scripts/linear-regression-generator/`, `scripts/model-training-generator/` | `git status` shows 10 untracked files and 5 modified scripts | Generator improvements not yet integrated into main branch release. | **Low** | Review and commit the completed generator scripts and verification test files. |
 
 ---
 
 ## 19. Prioritized Next Steps and Practical Handover
 
-### 19.1 Recommended Reading Order for New Engineers
-1. `src/utils/types/problem.ts`: Core data models for problems and test cases.
-2. `src/utils/problemLoader.ts`: Understand how problems are loaded and why secret test cases must never be returned to client DTOs.
-3. `src/pages/api/run.ts` & `src/pages/api/submit.ts`: Central execution engine, sandboxing, and atomic grading transactions.
-4. `src/utils/leaderboardCalc.ts`: Contest scoring and tie-breaking algorithms.
-5. `src/utils/orgEngine.ts`: Multi-tenant organization RBAC and institutional suites.
-6. `firestore.rules`: Security boundaries and permission definitions.
+### 19.1 Immediate Action Items
+1. **Patch `firestore.rules` for Defect `CHAT-PERM-003`:**
+   In `firestore.rules` under `match /conversations/{cid}/messages/{mid}`, enforce `isConversationParticipant(get(/databases/$(database)/documents/conversations/$(cid)).data)` during `create`. Deploy via `firebase deploy --only firestore:rules`.
+2. **Review and Commit Working Tree Generator Suite:**
+   Stage the unstaged and untracked files in `scripts/` (`scripts/specs/`, `linear-regression-generator/`, `model-training-generator/`, and hyperparameter enrichers) and verify them using `npx tsx scripts/test-model-training-generation.ts`.
+3. **Migrate Next.js `<img>` tags to `next/image`:**
+   Address ESLint warnings in [`src/pages/orgs/[slug].tsx`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/orgs/%5Bslug%5D.tsx) and [`src/pages/profile.tsx`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/profile.tsx) to optimize Largest Contentful Paint (LCP) and bandwidth.
 
-### 19.2 Practical Change Map
-
-| Intended Change | Relevant Files & Modules | Architectural Cautions |
-| :--- | :--- | :--- |
-| **Add a New Programming Language** | `src/pages/api/run.ts`, `src/utils/pistonRunner.ts`, `src/components/Workspace/Playground/` | Must configure language ID in `langMap` for Judge0, define CodeMirror syntax extension, and implement local compiler CLI check. |
-| **Modify Contest Penalty Rules** | `src/utils/leaderboardCalc.ts`, `src/pages/contests/[cid]/` | Must invalidate Redis contest standing caches (`contest:{cid}:dirty = true`). |
-| **Add an Organization Permission** | `src/utils/orgEngine.ts`, `src/pages/orgs/[slug].tsx`, `firestore.rules` | Add permission string to `SYSTEM_PERMISSIONS` and update role templates. |
-| **Alter User Experience Tiers** | `src/utils/experienceConfig.ts`, `src/pages/profile.tsx` | Run `scripts/recount-solved.ts` to sync existing user records with new thresholds. |
+### 19.2 Recommended Reading Order for New Engineers
+1. [`src/pages/_app.tsx`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/_app.tsx) & [`src/utils/onboarding.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/utils/onboarding.ts): To understand global app initialization, session restoration, and user onboarding.
+2. [`src/utils/problemLoader.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/utils/problemLoader.ts): To master the data boundary between public client DTOs and secret server grading test cases.
+3. [`src/pages/api/run.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/api/run.ts) & [`src/pages/api/submit.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/api/submit.ts): To understand code sandboxing, Judge0 chunking, and the grading state machine.
+4. [`firestore.rules`](file:///home/juan/Work%20Space/leetcode-clone-youtube/firestore.rules): To understand authorization and security constraints enforced at the database layer.
+5. [`src/utils/orgEngine.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/utils/orgEngine.ts): To inspect the multi-tenant role, permission, and institutional workspace architecture.
+6. [`src/components/Chat/ChatShell.tsx`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/components/Chat/ChatShell.tsx) & [`src/hooks/chat/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/hooks/chat): To follow the reactive real-time messaging pipeline.
 
 ---
 
 ## 20. Unknowns, Source Index, and Coverage Statement
 
-### 20.1 Unknowns & Out-of-Scope Elements
-- **Stripe Production Webhook Endpoints:** Code inspection reveals checkout session creation; live production webhook event handlers for asynchronous Stripe fulfillment were not observed in `src/pages/api/webhooks`.
-- **Production Host cgroup Permissions:** Runtime sandboxing permissions (`/sys/fs/cgroup`) depend on host container privileges. When deployed to restricted Cloud Run containers without root privileges, execution smoothly degrades to Judge0 remote batching as designed.
+### 20.1 Unknowns & External Dependencies
+- **Judge0 Infrastructure:** Public Judge0 endpoints (`ce.judge0.com`, `extra-ce.judge0.com`) are subject to upstream rate limits and downtime. Dedicated self-hosted Judge0 instances should be provisioned for high-concurrency production contests.
+- **Stripe Webhook Listener:** While checkout sessions and payment intents are created, live webhook event handling (`stripe listen` / webhook signing secret) depends on active production Stripe dashboard configuration.
 
-### 20.2 Important Source Index
-- **Execution & Grading:** `src/pages/api/run.ts`, `src/pages/api/submit.ts`, `src/utils/problemLoader.ts`, `src/utils/executionProfiles.ts`
-- **Contest System:** `src/pages/contests/`, `src/utils/leaderboardCalc.ts`, `src/utils/contestStatusService.ts`
-- **Multi-Tenancy:** `src/utils/orgEngine.ts`, `src/pages/orgs/[slug].tsx`, `src/pages/api/organizations/`
-- **Security & Rules:** `firestore.rules`, `firestore.indexes.json`, `src/utils/authMiddleware.ts`, `src/firebase/firebaseAdmin.ts`
-- **Communications:** `src/utils/emailService.ts`, `src/utils/notificationDispatcher.ts`, `src/components/Chat/`
+### 20.2 Key Source Index
+- **Execution & Judge:** [`src/pages/api/run.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/api/run.ts), [`src/pages/api/submit.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/api/submit.ts), [`src/utils/executionProfiles.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/utils/executionProfiles.ts), [`src/utils/problemLoader.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/utils/problemLoader.ts)
+- **Contests & Anti-Cheat:** [`src/pages/contests/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/contests), [`src/pages/api/cron/calculate-standings.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/api/cron/calculate-standings.ts)
+- **Organizations:** [`src/pages/orgs/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/orgs), [`src/pages/api/organizations/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/api/organizations), [`src/utils/orgEngine.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/utils/orgEngine.ts)
+- **Chat & Messaging:** [`src/pages/messages/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/messages), [`src/components/Chat/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/components/Chat), [`src/pages/api/chat/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/pages/api/chat), [`tests/chat/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/tests/chat)
+- **Auth & Security:** [`src/utils/onboarding.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/utils/onboarding.ts), [`src/utils/withAdminGuard.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/utils/withAdminGuard.ts), [`src/utils/authMiddleware.ts`](file:///home/juan/Work%20Space/leetcode-clone-youtube/src/utils/authMiddleware.ts), [`firestore.rules`](file:///home/juan/Work%20Space/leetcode-clone-youtube/firestore.rules)
+- **Problem Generators:** [`scripts/problem-generator/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/scripts/problem-generator), [`scripts/ml-problem-generator/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/scripts/ml-problem-generator), [`scripts/linear-regression-generator/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/scripts/linear-regression-generator), [`scripts/specs/`](file:///home/juan/Work%20Space/leetcode-clone-youtube/scripts/specs)
 
 ---
 
 ## 21. Compact Context for a Future Developer or AI Agent
 
-```yaml
-project: BeastCode (leetcode-clone-youtube / leetcode-yt)
-version: 0.1.0
-git_commit: d7603da (branch: master)
-primary_domain: https://www.bomboclatbeastcode.codes
-architecture: Full-Stack Next.js 13 Pages Router + TypeScript + Cloud Firestore + Redis + Linux Cgroups Sandbox / Judge0 Fallback
-key_directories:
-  pages: src/pages/ (UI routes and 135+ REST API endpoints)
-  judge_engine: src/pages/api/run.ts (Local unshare/cgroups sandbox + remote Judge0 CE batching)
-  grader: src/pages/api/submit.ts (Atomic Firestore transactions, XP calculations, testcase evaluation)
-  data_loader: src/utils/problemLoader.ts (Server-only authoritative vs. client-safe DTO stripping)
-  multi_tenancy: src/utils/orgEngine.ts & src/pages/orgs/[slug].tsx (Academic courses, roadmaps, candidate screening)
-  contest_system: src/utils/leaderboardCalc.ts & src/pages/contests/ (ICPC penalty rules, freeze windows, anti-cheat)
-  email_queue: src/utils/emailService.ts (Transactional outbox with exponential backoff)
-  security_rules: firestore.rules (350 lines, 38 collections) & firestore.indexes.json (307 lines)
-verification_status:
-  typescript: PASSED (0 errors via npx tsc --noEmit)
-  lint: PASSED (0 fatal errors via npm run lint)
-critical_invariants:
-  - Never import getProblemForGrading into client-side code; only getPublicProblem is client-safe.
-  - Submissions must execute inline before HTTP responses terminate to preserve serverless execution threads.
-  - Secret grading testcases must always have isSecret: true before being returned to clients.
-  - Contest standings must be invalidated in Redis on new submissions using the dirty key flag.
-priority_next_action: Refactor hardcoded admin email strings in firestore.rules and useAdmin.ts to use Firebase Auth Custom Claims.
+```markdown
+### BEASTCODE PLATFORM CONTEXT FOR NEXT DEVELOPER OR AI AGENT
+
+- **Repository & Target:** `leetcode-clone-youtube` (v0.1.0) | Target: https://www.bomboclatbeastcode.codes
+- **Revision Snapshot:** Git commit `abca626` (Branch: `master`, tracking `origin/master`).
+- **Core Architecture:** Next.js 13 (Pages Router), TypeScript 5, Tailwind CSS, Google Cloud Firestore, Firebase Auth, Redis (`ioredis`), Nodemailer SMTP.
+- **Judge Subsystem:** Dual-path execution in `src/pages/api/run.ts` and `src/pages/api/submit.ts`. Local Linux container namespaces (`unshare` + `cgroups v2`) with remote Judge0 CE (`ce.judge0.com`) and Judge0 Extra-CE (`extra-ce.judge0.com` with NumPy/SciPy) fallback.
+- **Data Boundary:** `src/utils/problemLoader.ts` strictly separates `getPublicProblem` (public client DTO with sample testcases only) from `getProblemForGrading` (authoritative full testcase suite loaded server-side exclusively by `/api/submit`).
+- **ICPC Contests & Anti-Cheat:** Contests in `src/pages/contests/` log `tab_switch` and `fullscreen_exit` to `/contest_integrity_events`. 3 warnings trigger disqualification. Standings recalculated via `/api/cron/calculate-standings.ts` with 20-min penalty rules.
+- **Multi-Tenant Workspaces:** `src/utils/orgEngine.ts` handles 23 permissions, 7 system roles (`owner`, `admin`, `coach`, `instructor`, etc.), private problems, roadmaps, gradebooks, assessments, and public certificate verification.
+- **Real-Time Chat:** Slack-style messaging in `src/pages/messages/` and `src/components/Chat/`. Supports text, code, audio notes, attachments, reactions, typing indicators, and pinning. 66/67 automated QA tests passed in `reports/chat/`.
+- **Known Security Defect:** `firestore.rules` line 330 allows message creation without checking `isConversationParticipant(get(...).data)` (Failed test `CHAT-PERM-003`). Fix this in `firestore.rules`.
+- **Authentication & Onboarding:** Managed via `src/utils/onboarding.ts` (`isUserOnboarded`). Academic fields are strictly optional for non-students; legacy accounts automatically bypass onboarding modals.
+- **Administrative Privileges:** Admin endpoints guarded by `src/utils/withAdminGuard.ts`. Verifies against `/platformAdmins/{uid}` document (`active === true`) or valid Firebase custom claims.
+- **Next Immediate Action:** Patch the message creation permission in `firestore.rules` and commit the generator scripts in `scripts/specs/` and `scripts/*-generator/`.
 ```
