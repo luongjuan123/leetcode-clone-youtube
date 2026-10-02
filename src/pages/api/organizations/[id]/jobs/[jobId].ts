@@ -15,7 +15,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 			if (!doc.exists) {
 				return res.status(404).json({ success: false, error: "Job posting not found" });
 			}
-			return res.status(200).json({ success: true, job: doc.data() });
+			const jobData = doc.data() as any;
+			if (jobData?.organizationId !== orgId) {
+				return res.status(404).json({ success: false, error: "Job posting not found in this organization" });
+			}
+			return res.status(200).json({ success: true, job: jobData });
 		} catch (err: any) {
 			return res.status(500).json({ success: false, error: err.message });
 		}
@@ -40,6 +44,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 		const jobDoc = await jobRef.get();
 		if (!jobDoc.exists) {
 			return res.status(404).json({ success: false, error: "Job posting not found" });
+		}
+		const jobData = jobDoc.data() as any;
+		if (jobData?.organizationId !== org.id) {
+			return res.status(404).json({ success: false, error: "Job posting not found in this organization" });
 		}
 
 		if (req.method === "PATCH") {

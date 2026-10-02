@@ -136,6 +136,18 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
 				updateData.roleId = roleId;
 			}
 
+			// Authorization check for profile fields and workspace preferences
+			const isSelf = uid === memberUid;
+			const hasAssignRole = callerRole?.permissions?.includes("organization.assignRole") || org.ownerUid === uid;
+
+			if (!isSelf && !hasAssignRole && (nickname !== undefined || title !== undefined || department !== undefined)) {
+				return res.status(403).json({ success: false, error: "Forbidden: Cannot edit another member's profile" });
+			}
+
+			if (!isSelf && (isHidden !== undefined || isFavorite !== undefined)) {
+				return res.status(403).json({ success: false, error: "Forbidden: Cannot edit another member's preferences" });
+			}
+
 			// Nickname, title, department check (Self can edit, or managers)
 			if (nickname !== undefined) updateData.nickname = nickname.trim();
 			if (title !== undefined) updateData.title = title.trim();

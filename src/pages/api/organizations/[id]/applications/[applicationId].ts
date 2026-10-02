@@ -26,6 +26,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 		}
 
 		const appData = appDoc.data() as any;
+		if (appData.organizationId !== orgId) {
+			return res.status(404).json({ success: false, error: "Application record not found in this organization" });
+		}
 
 		// Security check: Candidate can view their own, Recruiter can view any
 		const isOwner = appData.candidateUid === uid;

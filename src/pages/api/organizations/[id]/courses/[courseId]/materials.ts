@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from "next";
 import { getAdminFirestore, getAdminAuth } from "@/firebase/firebaseAdmin";
-import { checkOrgPermission } from "@/utils/orgEngine";
+import { checkOrgPermission, resolveOrgAndMembership } from "@/utils/orgEngine";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
 	const orgId = req.query.id as string;
@@ -18,7 +18,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 		const decodedToken = await getAdminAuth().verifyIdToken(idToken);
 		const uid = decodedToken.uid;
 
+		const { org, member } = await resolveOrgAndMembership(orgId, uid);
+		if (!org) {
+			return res.status(404).json({ success: false, error: "Organization not found" });
+		}
+
+		// Verify course exists and belongs to this organization
+		const courseDoc = await db.collection("organizationCourses").doc(courseId).get();
+		if (!courseDoc.exists) {
+			return res.status(404).json({ success: false, error: "Course not found" });
+		}
+		const courseData = courseDoc.data() as any;
+		if (courseData.organizationId !== org.id) {
+			return res.status(404).json({ success: false, error: "Course not found in this organization" });
+		}
+
 		if (req.method === "GET") {
+			if (org.visibility !== "public" && !member && org.ownerUid !== uid) {
+				return res.status(403).json({ success: false, error: "Access Denied: Private organization" });
+			}
+
 			const snap = await db
 				.collection("organizationCourseMaterials")
 				.where("courseId", "==", courseId)

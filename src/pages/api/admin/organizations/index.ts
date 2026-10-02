@@ -485,8 +485,8 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
 				const { title, content } = payload;
 				for (const org of resolvedOrgs) {
 					// Add announcement inside the organization
-					const annId = db.collection("organizations").doc(org.id).collection("announcements").doc().id;
-					batch.set(db.collection("organizations").doc(org.id).collection("announcements").doc(annId), {
+					const annId = db.collection("organizationAnnouncements").doc().id;
+					batch.set(db.collection("organizationAnnouncements").doc(annId), {
 						id: annId,
 						organizationId: org.id,
 						title,
@@ -498,6 +498,12 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
 						published: true,
 						publishedAt: Date.now(),
 						createdAt: Date.now(),
+					});
+
+					// Update announcement count on organization
+					batch.update(db.collection("organizations").doc(org.id), {
+						announcementCount: (org.announcementCount || 0) + 1,
+						updatedAt: Date.now(),
 					});
 
 					// Notify all members

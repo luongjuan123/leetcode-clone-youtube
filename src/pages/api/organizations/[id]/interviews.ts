@@ -72,6 +72,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 			}
 
 			const appData = appDoc.data() as any;
+			if (appData.organizationId !== orgId) {
+				return res.status(404).json({ success: false, error: "Candidate application not found in this organization" });
+			}
 			const interviewId = "int-" + Math.random().toString(36).slice(2, 10);
 
 			const newInterview = {
@@ -126,6 +129,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 			}
 
 			const intData = intDoc.data() as any;
+			if (intData.organizationId !== orgId) {
+				return res.status(404).json({ success: false, error: "Interview not found in this organization" });
+			}
 
 			// Verify recruiter or assigned interviewer permissions
 			const { allowed: isRecruiter } = await checkOrgPermission(orgId, uid, "organization.manageRecruitment");

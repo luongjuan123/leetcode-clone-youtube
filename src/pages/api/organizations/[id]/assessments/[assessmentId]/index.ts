@@ -19,7 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 		const uid = decodedToken.uid;
 
 		// Verify organization accessibility
-		const { org } = await resolveOrgAndMembership(orgId, uid);
+		const { org, member } = await resolveOrgAndMembership(orgId, uid);
 		if (!org) {
 			return res.status(404).json({ success: false, error: "Organization not found" });
 		}
@@ -31,6 +31,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 		}
 
 		const assessmentData = assessmentDoc.data() as any;
+		if (assessmentData.organizationId !== org.id) {
+			return res.status(404).json({ success: false, error: "Assessment template not found in this organization" });
+		}
+
+		// Verify caller is member or candidate of the organization
+		if (!member && org.ownerUid !== uid) {
+			const appSnap = await db
+				.collection("organizationApplications")
+				.where("organizationId", "==", org.id)
+				.where("candidateUid", "==", uid)
+				.limit(1)
+				.get();
+			if (appSnap.empty) {
+				return res.status(403).json({ success: false, error: "Access Denied: You are not authorized to access this assessment" });
+			}
+		}
 
 		// 1. GET request: Fetch assessment detail + candidate session details
 		if (req.method === "GET") {

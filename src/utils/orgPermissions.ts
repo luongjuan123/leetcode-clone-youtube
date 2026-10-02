@@ -113,7 +113,7 @@ export async function verifyUserPermission(
 	}
 
 	const org = orgDoc.data();
-	if (org?.state === "deleted" || org?.state === "suspended") {
+	if (org?.status === "deleted" || org?.status === "suspended" || org?.state === "deleted" || org?.state === "suspended") {
 		// Even owners cannot access suspended/deleted orgs via normal API
 		return { allowed: false, role: null, org };
 	}

@@ -91,6 +91,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 				return res.status(404).json({ success: false, error: "University hierarchy node not found" });
 			}
 
+			const nodeData = nodeDoc.data() as any;
+			if (nodeData?.organizationId !== org.id) {
+				return res.status(404).json({ success: false, error: "University hierarchy node not found in this organization" });
+			}
+
 			const updatePayload: any = {};
 			if (name !== undefined) updatePayload.name = name;
 			if (managerUids !== undefined) updatePayload.managerUids = managerUids;

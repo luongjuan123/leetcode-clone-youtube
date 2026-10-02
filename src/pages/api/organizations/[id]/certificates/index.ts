@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from "next";
 import { getAdminFirestore, getAdminAuth } from "@/firebase/firebaseAdmin";
-import { checkOrgPermission, emitOrgEvent } from "@/utils/orgEngine";
+import { checkOrgPermission, emitOrgEvent, resolveOrgAndMembership } from "@/utils/orgEngine";
 import { buildAbsoluteUrl } from "@/utils/siteConfig";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -18,10 +18,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 		const decodedToken = await getAdminAuth().verifyIdToken(idToken);
 		const uid = decodedToken.uid;
 
+		const { org, member } = await resolveOrgAndMembership(orgId, uid);
+		if (!org) {
+			return res.status(404).json({ success: false, error: "Organization not found" });
+		}
+
 		if (req.method === "GET") {
+			if (org.visibility !== "public" && !member && org.ownerUid !== uid) {
+				return res.status(403).json({ success: false, error: "Access Denied: Private organization" });
+			}
+
 			const snap = await db
 				.collection("organizationCertificates")
-				.where("organizationId", "==", orgId)
+				.where("organizationId", "==", org.id)
 				.get();
 
 			const certificates = snap.docs.map((doc) => ({

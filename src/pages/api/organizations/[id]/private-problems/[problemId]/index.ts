@@ -32,6 +32,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 		}
 
 		const currentProblem = problemDoc.data() as any;
+		if (currentProblem.organizationId !== org.id) {
+			return res.status(404).json({ success: false, error: "Private problem not found in this organization" });
+		}
 
 		if (req.method === "GET") {
 			return res.status(200).json({ success: true, problem: currentProblem });
@@ -162,6 +165,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 		}
 
 		if (req.method === "DELETE") {
+			const { allowed: canDelete } = await checkOrgPermission(orgId, uid, "organization.deleteProblem");
+			if (!canDelete) {
+				return res.status(403).json({ success: false, error: "Access Denied: Insufficient permissions to delete problem" });
+			}
+
 			// Delete problem statement and version logs
 			await problemRef.delete();
 

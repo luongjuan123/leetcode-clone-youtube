@@ -28,6 +28,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 		}
 
 		const currentTeam = teamDoc.data() as any;
+		if (currentTeam.organizationId !== org.id) {
+			return res.status(404).json({ success: false, error: "Team not found in this organization" });
+		}
 
 		// Verify if editor is either the Team Captain or an Org Manager/Coach
 		const isCaptain = currentTeam.captainUid === uid;

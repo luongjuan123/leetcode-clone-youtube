@@ -31,8 +31,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 			return res.status(404).json({ success: false, error: "Private problem not found" });
 		}
 
+		const currentProblem = problemDoc.data();
+		if (currentProblem?.organizationId !== org.id) {
+			return res.status(404).json({ success: false, error: "Private problem not found in this organization" });
+		}
+
 		if (req.method === "GET") {
-			const currentProblem = problemDoc.data();
 			return res.status(200).json({
 				success: true,
 				examples: currentProblem?.examples || [],

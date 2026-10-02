@@ -46,6 +46,10 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
 			return res.status(410).json({ success: false, error: "Expired: This invitation has expired" });
 		}
 
+		if (inviteData.uid && inviteData.uid !== uid) {
+			return res.status(403).json({ success: false, error: "Forbidden: This invitation was issued to a different user account" });
+		}
+
 		const orgId = inviteData.organizationId;
 		const memberDocId = `${orgId}_${uid}`;
 

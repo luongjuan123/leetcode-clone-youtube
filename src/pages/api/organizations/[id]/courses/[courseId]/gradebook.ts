@@ -28,6 +28,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 		}
 
 		const courseData = courseDoc.data() as any;
+		if (courseData.organizationId !== orgId) {
+			return res.status(404).json({ success: false, error: "Course not found in this organization" });
+		}
 
 		// 1. GET Request: View gradebook
 		if (req.method === "GET") {

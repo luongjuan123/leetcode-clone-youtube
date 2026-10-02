@@ -129,6 +129,12 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
 				});
 			});
 
+			const canViewEmails = !!callerMember && (
+				org.ownerUid === uid ||
+				callerMember.roleId === "owner" ||
+				callerMember.roleId === "admin"
+			);
+
 			let detailedMembers = membersList.map((m) => {
 				const profile = userProfiles[m.uid] || {};
 				return {
@@ -136,7 +142,7 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
 					displayName: profile.displayName || "Anonymous",
 					username: profile.username || "",
 					avatarUrl: profile.avatarUrl || "",
-					email: profile.email || "",
+					email: (canViewEmails || m.uid === uid) ? (profile.email || "") : undefined,
 				};
 			});
 
